@@ -26,7 +26,6 @@ in highp vec2 attributes2;
 
 out highp vec4 texCoord;
 #ifdef NO_HALF
-// requires 14 varyings in total (w/ residual)
 flat out mediump vec4 layer0coeffs[12];
 #else
 // requires 8 varyings in total (w/ residual)
@@ -37,7 +36,7 @@ flat out highp uvec4 layer0coeffs[6];
 out highp vec2 resCoord;
 #endif
 
-uniform int instancesPerTile;
+uniform int numInputTiles;
 
 void main(void) {
   gl_Position = vec4(attributes0.x,attributes0.y,0.0,1.0);
@@ -47,8 +46,8 @@ void main(void) {
 #else
   int instance = gl_InstanceID;
 #endif
-  int windowindex = instance % instancesPerTile;
-  int intile = instance / instancesPerTile;
+  int windowindex = instance / numInputTiles;
+  int intile = instance % numInputTiles;
   texCoord.xy += texelFetch(inputDisplacements,ivec2(intile,windowindex),0).rg;
 #ifdef NO_HALF
   intile *= 4*KERNEL;
@@ -58,7 +57,7 @@ void main(void) {
   int ybase = windowindex + attributes1.x;
   // fetch weights
 #ifdef NO_HALF
-  for (int i=0; i < 12;i++) {
+  for (int i=0;i<12;i++) {
     layer0coeffs[i] = texelFetch(inputCoeffs,ivec2(intile+i,ybase),0);
   }
 #else

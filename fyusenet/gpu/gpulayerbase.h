@@ -16,9 +16,20 @@
 #include <mutex>
 #include <vector>
 
+#ifdef ANDROID
+#include <GLES3/gl3.h>
+#else
+#ifdef __APPLE__
+#include <OpenGL/gl3.h>
+#include <OpenGL/glext.h>
+#else
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
+#endif
+
 //-------------------------------------- Project  Headers ------------------------------------------
 
-#include "../gl/gl_sys.h"
 #include "../gl/texture.h"
 #include "../gpu/gfxcontextlink.h"
 #include "../gpu/gfxcontexttracker.h"

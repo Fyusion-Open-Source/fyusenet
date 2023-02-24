@@ -116,7 +116,7 @@ fyusion::fyusenet::CompiledLayers StyleNet3x3::buildLayers() {
     std::shared_ptr<LayerFactory> factory = getLayerFactory();
     if (upload_) {
         gpu::UpDownLayerBuilder * up = new gpu::UpDownLayerBuilder(gpu::UpDownLayerBuilder::UPLOAD, "upload");
-        up->shape(3, height_, width_, 3).context(context()).number(UPLOAD);
+        up->shape(3, width_, height_, 3).context(context()).number(UPLOAD);
 #ifdef FYUSENET_MULTITHREADING
         if (async_) up->async().callback(std::bind(&StyleNet3x3::internalULCallback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 #endif
@@ -124,7 +124,7 @@ fyusion::fyusenet::CompiledLayers StyleNet3x3::buildLayers() {
     } else if (oesInput_) {
 #ifdef FYUSENET_USE_EGL
         gpu::GPULayerBuilder * oes = new gpu::GPULayerBuilder("oes");
-        oes->shape(3,height_,width_,3).type(LayerType::OESCONV).context(context()).number(UNPACK);
+        oes->shape(3,width_,height_,3).type(LayerType::OESCONV).context(context()).number(UNPACK);
         oes->push(factory);
 #else
         assert(false);
@@ -132,52 +132,52 @@ fyusion::fyusenet::CompiledLayers StyleNet3x3::buildLayers() {
     }
 
     gpu::ConvLayerBuilder * conv1 = new gpu::ConvLayerBuilder(3,"conv1");
-    conv1->shape(12,height_,width_,3).type(LayerType::CONVOLUTION2D).prefixAct(ActType::RELU).context(context()).number(CONV1);
+    conv1->shape(12,width_,height_,3).type(LayerType::CONVOLUTION2D).prefixAct(ActType::RELU).context(context()).number(CONV1);
     conv1->push(factory);
 
     gpu::ConvLayerBuilder * conv2 = new gpu::ConvLayerBuilder(3,"conv2");
-    conv2->shape(20,height_,width_,12).type(LayerType::CONVOLUTION2D).downsample(2).prefixAct(ActType::RELU).context(context()).number(CONV2);
+    conv2->shape(20,width_,height_,12).type(LayerType::CONVOLUTION2D).downsample(2).prefixAct(ActType::RELU).context(context()).number(CONV2);
     conv2->push(factory);
 
     gpu::ConvLayerBuilder * conv3 = new gpu::ConvLayerBuilder(3,"conv3");
-    conv3->shape(40,height_/2,width_/2,20).type(LayerType::CONVOLUTION2D).downsample(2).prefixAct(ActType::RELU).context(context()).number(CONV3);
+    conv3->shape(40,width_/2,height_/2,20).type(LayerType::CONVOLUTION2D).downsample(2).prefixAct(ActType::RELU).context(context()).number(CONV3);
     conv3->push(factory);
 
     gpu::ConvLayerBuilder * res11 = new gpu::ConvLayerBuilder(3,"res1_1");
-    res11->shape(40,height_/4,width_/4,40).type(LayerType::CONVOLUTION2D).prefixAct(ActType::RELU).context(context()).number(RES1_1);
+    res11->shape(40,width_/4,height_/4,40).type(LayerType::CONVOLUTION2D).prefixAct(ActType::RELU).context(context()).number(RES1_1);
     res11->push(factory);
 
     gpu::ConvLayerBuilder * res12 = new gpu::ConvLayerBuilder(3,"res1_2");
-    res12->shape(40,height_/4,width_/4,40).type(LayerType::CONVOLUTION2D).prefixAct(ActType::RELU).residual(ActType::RELU).context(context()).number(RES1_2);
+    res12->shape(40,width_/4,height_/4,40).type(LayerType::CONVOLUTION2D).prefixAct(ActType::RELU).residual(ActType::RELU).context(context()).number(RES1_2);
     res12->push(factory);
 
     gpu::ConvLayerBuilder * res21 = new gpu::ConvLayerBuilder(3,"res2_1");
-    res21->shape(40,height_/4,width_/4,40).type(LayerType::CONVOLUTION2D).context(context()).number(RES2_1);
+    res21->shape(40,width_/4,height_/4,40).type(LayerType::CONVOLUTION2D).context(context()).number(RES2_1);
     res21->push(factory);
 
     gpu::ConvLayerBuilder * res22 = new gpu::ConvLayerBuilder(3,"res2_2");
-    res22->shape(40,height_/4,width_/4,40).type(LayerType::CONVOLUTION2D).prefixAct(ActType::RELU).residual().context(context()).number(RES2_2);
+    res22->shape(40,width_/4,height_/4,40).type(LayerType::CONVOLUTION2D).prefixAct(ActType::RELU).residual().context(context()).number(RES2_2);
     res22->push(factory);
 
     gpu::ConvLayerBuilder * deconv1 = new gpu::ConvLayerBuilder(3,"deconv1");
-    deconv1->shape(20,height_/4,width_/4,40).type(LayerType::FRACCONVOLUTION2D).downsample(2).sourceStep(0.5f).context(context()).number(DECONV1);
+    deconv1->shape(20,width_/4,height_/4,40).type(LayerType::FRACCONVOLUTION2D).downsample(2).sourceStep(0.5f).context(context()).number(DECONV1);
     deconv1->push(factory);
 
     gpu::ConvLayerBuilder * deconv2 = new gpu::ConvLayerBuilder(3,"deconv2");
-    deconv2->shape(12,height_/4,width_/4,20).type(LayerType::FRACCONVOLUTION2D).sourceStep(0.25f).downsample(2).prefixAct(ActType::RELU).context(context()).number(DECONV2);
+    deconv2->shape(12,width_/4,height_/4,20).type(LayerType::FRACCONVOLUTION2D).sourceStep(0.25f).downsample(2).prefixAct(ActType::RELU).context(context()).number(DECONV2);
     deconv2->push(factory);
 
     gpu::ConvLayerBuilder * deconv3 = new gpu::ConvLayerBuilder(3,"deconv3");
-    deconv3->shape(3,height_/2,width_/2,12).type(LayerType::FRACCONVOLUTION2D).sourceStep(0.5f).prefixAct(ActType::RELU).context(context()).number(DECONV3);
+    deconv3->shape(3,width_/2,height_/2,12).type(LayerType::FRACCONVOLUTION2D).sourceStep(0.5f).prefixAct(ActType::RELU).context(context()).number(DECONV3);
     deconv3->push(factory);
 
     gpu::GPULayerBuilder * sigmoid = new gpu::GPULayerBuilder("sigmoid");
-    sigmoid->shape(3,height_,width_,3).type(LayerType::SIGMOID).context(context()).number(SIGMOID);
+    sigmoid->shape(3,width_,height_,3).type(LayerType::SIGMOID).context(context()).number(SIGMOID);
     sigmoid->push(factory);
 
     if (download_) {
         gpu::UpDownLayerBuilder * down = new gpu::UpDownLayerBuilder(gpu::UpDownLayerBuilder::DOWNLOAD, "download");
-        down->shape(4, height_, width_, 4).context(context()).number(DOWNLOAD);
+        down->shape(4, width_, height_, 4).context(context()).number(DOWNLOAD);
 #ifdef FYUSENET_MULTITHREADING
         if (async_) down->async().callback(std::bind(&StyleNet3x3::internalDLCallback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 #endif
@@ -215,7 +215,7 @@ void StyleNet3x3::connectLayers(fyusion::fyusenet::CompiledLayers& layers, fyusi
             assert(down);
             std::vector<BufferSpec> specs = down->getRequiredOutputBuffers();
             assert(specs.size() == 1);
-            CPUBufferShape shape(specs[0].height_, specs[0].width_, specs[0].channels_, 0,
+            CPUBufferShape shape(specs[0].width_, specs[0].height_, specs[0].channels_, 0,
                                  CPUBufferShape::type::FLOAT32);
             asyncDLBuffers_[0] = shape.createBuffer();
             asyncDLBuffers_[1] = shape.createBuffer();

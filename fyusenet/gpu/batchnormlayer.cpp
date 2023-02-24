@@ -66,13 +66,21 @@ void BatchNormLayer::cleanup() {
 
 
 /**
- * @copydoc BatchNormInterface::loadScaleAndBias()
+ * @brief Load scale and bias values for the batchnorm operator
+ *
+ * @param scaleBias Pointer to 32-bit floating-point data that contains the scale and bias for
+ *                  each channel (see long description for format)
+ * @param sbOffset Optional offset to the supplied \p scaleBias pointer to start reading from
+ *
+ * This function reads the scale and bias data from the supplied pointer. It assumes that the
+ * data is formatted such that all scale values for each output channel come first, followed by
+ * the bias data for each output channel as 2nd block.
  */
-void BatchNormLayer::loadScaleAndBias(const float *scaleBias, size_t sbOffset) {
+void BatchNormLayer::loadScaleAndBias(float *scaleBias, int sbOffset) {
     int rem = outputChannels_;
     int offset = 0;
-    const float *scale = scaleBias + sbOffset;
-    const float *bias = scale + outputChannels_;
+    float *scale = scaleBias + sbOffset;
+    float *bias = scale + outputChannels_;
     while (rem > 0) {
         int remunits = std::min(maxRenderTargets_, (rem + (PIXEL_PACKING - 1)) / PIXEL_PACKING);
         BiasScaleBlock *block = new BiasScaleBlock(remunits * PIXEL_PACKING);
@@ -80,7 +88,6 @@ void BatchNormLayer::loadScaleAndBias(const float *scaleBias, size_t sbOffset) {
         block->fill(bias + offset, scale + offset, remelems);
         blocks_.push_back(block);
         rem -= remunits * PIXEL_PACKING;
-        offset += remunits * PIXEL_PACKING;
     }
 }
 
@@ -112,11 +119,11 @@ void BatchNormLayer::renderChannelBatch(int outPass, int numRenderTargets, int t
         glActiveTexture(GL_TEXTURE0 + tex);
         glBindTexture(GL_TEXTURE_2D, inputTextures_.at(tex + texOffset));
     }
-    if (currentShader_ != shaders_[numRenderTargets-1].get()) {
+    if (currentShader_ != shaders_[numRenderTargets - 1].get()) {
         if (currentShader_)
             currentShader_->unbind(true);
-        currentShader_ = shaders_[numRenderTargets-1].get();
-        currentShader_->bind(shaderStates_[numRenderTargets-1].get());
+        currentShader_ = shaders_[numRenderTargets - 1].get();
+        currentShader_->bind(shaderStates_[numRenderTargets - 1].get());
     }
     BiasScaleBlock *block = blocks_.at(outPass);
     currentShader_->setMappedUniformVec4Array(UNIFORM_BIASSCALE, block->biasScale_, numRenderTargets * 2);
@@ -131,7 +138,7 @@ void BatchNormLayer::setupShaders() {
     char extra[512];
     for (int i = 1; i <= maxRenderTargets_; i++) {
         snprintf(extra, sizeof(extra), "#define NUM_LANES %d\n", i);
-        shaders_[i-1] = compileShaderPair("shaders/default.vert", "shaders/batchnorm.frag", extra, typeid(this));
+        shaders_[i-1] = compileShaderPair("shaders/default.vert", "shaders/normalize.frag", extra, typeid(this));
         try {
             shaders_[i-1]->bindAttributeLocation("attributes0", 0);
             shaders_[i-1]->link();
@@ -140,9 +147,9 @@ void BatchNormLayer::setupShaders() {
             throw;
         }
         shaderStates_[i-1] = UniformState::makeShared(shaders_[i - 1]);
-        for (int j=0; j < i; j++) {
+        for (int j = 0; j < i; j++) {
             snprintf(extra, sizeof(extra), "inputLayer%d", j);
-            shaderStates_[i-1]->setUniformValue(extra, j);
+            shaderStates_[i - 1]->setUniformValue(extra, j);
         }
         shaders_[i-1]->mapUniformLocation("biasscale", UNIFORM_BIASSCALE);
     }

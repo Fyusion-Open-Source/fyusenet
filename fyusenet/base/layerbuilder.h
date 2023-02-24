@@ -279,60 +279,37 @@ struct LayerBuilderTempl {
     /**
      * @brief Mark the layer to be using an additional input as (additive) residual
      *
-     * @param act Optional activation to apply to the residual data prior to adding it to the results,
+     * @param act Optional activation to apply to the residual layer prior to adding it to the results,
      *            defaults to no activation
-     *
-     * @param In case the underlying target layer has a postfix normalization, setting this flag
-     *        will apply the same normalization to the residual data, defaults to \c false
      *
      * @return Reference to builder after update
      */
-    D & residual(ActType act = ActType::NONE, bool postfixNorm=false) {
+    D & residual(ActType act = ActType::NONE) {
         if ((act != ActType::RELU) && (act != ActType::NONE)) THROW_EXCEPTION_ARGS(FynException, "Activation type %d not supported on residual", (int)act);
         flags_ |= LayerFlags::RESIDUAL_INPUT;
         if (act == ActType::RELU) flags_ |= LayerFlags::RELU_ON_RESIDUAL;
         else flags_ &= ~LayerFlags::RELU_ON_RESIDUAL;
-        residualNorm_ = postfixNorm;
         return *( D *)this;
-    }
-
-
-    /**
-     * @brief Set layer shape in builder object for convolution operations
-     *
-     * @param outChannels Number of output channels for the layer
-     * @param height Height of the \b input tensor
-     * @param width Width of the \b input tensor
-     * @param inChannels Number of input channels that the layer should expect
-     *
-     * @return Reference to builder object
-     */
-    D & shape(int outChannels, int height, int width, int inChannels) {
-        width_ = width;
-        height_ = height;
-        inputChannels_ = inChannels;
-        outputChannels_ = outChannels;
-        return *(D *)this;
     }
 
 
     /**
      * @brief Set layer shape in builder object
      *
-     * @param height Height of the \b input tensor
+     * @param outChannels Number of output channels for the layer
      * @param width Width of the \b input tensor
-     * @param channels Number of channels that the layer should expect
+     * @param height Height of the \b input tensor
+     * @param inChannels Number of input channels that the layer should expect
      *
      * @return Reference to builder object
      */
-    D & shape(int height, int width, int channels) {
+    D & shape(int outChannels, int width, int height, int inChannels) {
         width_ = width;
         height_ = height;
-        inputChannels_ = channels;
-        outputChannels_ = channels;
+        inputChannels_ = inChannels;
+        outputChannels_ = outChannels;
         return *(D *)this;
     }
-
 
     /**
      * @brief Set input/output channels in builder object
@@ -487,8 +464,7 @@ struct LayerBuilderTempl {
                 break;
             default:
                 break;
-        }        
-        if (residualNorm_ && LayerFlags::POST_BATCHNORM) full |= LayerFlags::BATCHNORM_ON_RESIDUAL;
+        }
         return full;
     }
 
@@ -521,7 +497,6 @@ struct LayerBuilderTempl {
     float clipHigh_ = 0.0f;                 //!< Max clip value for clipping activation function
     int number_ = -1;                       //!< Layer number
     LayerType type_ = LayerType::ILLEGAL;   //!< Layer type
-    bool residualNorm_ = false;             //!< Apply postfix norm to residual data
 
     /**
      *  Device on which to construct / execute the layer on

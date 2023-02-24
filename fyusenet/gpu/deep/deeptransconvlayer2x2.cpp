@@ -54,41 +54,9 @@ DeepTransConvLayer2x2::DeepTransConvLayer2x2(const ConvLayerBuilder& builder,int
 }
 
 
-/**
- * @copydoc GPULayerBase::cleanup
- */
-void DeepTransConvLayer2x2::cleanup() {
-    shaderState_.reset();
-    noBiasShaderState_.reset();
-    shader_.reset();
-    noBiasShader_.reset();
-    DeepTransConvLayerBase::cleanup();
-}
-
-
 /*##################################################################################################
 #                               N O N -  P U B L I C  F U N C T I O N S                            #
 ##################################################################################################*/
-
-
-/**
- * @copydoc DeepTransConvLayerBase::renderPass()
- */
-void DeepTransConvLayer2x2::renderPass(int pass) {
-    int instances = tiler_->numInputTiles();
-    int tris = tiler_->numOutputTiles();
-    glStencilFuncSeparate(GL_FRONT_AND_BACK, GL_EQUAL, pass+1, 0xFF);
-    shader_->bind(shaderState_.get());
-    shader_->setMappedUniformValue(PASS,pass);
-    glDrawElements(GL_TRIANGLES,tris*6,GL_UNSIGNED_SHORT,(const GLvoid *)0);
-    shader_->unbind((instances > 1) ? true : false);
-    if (instances > 1) {
-        noBiasShader_->bind(noBiasShaderState_.get());
-        noBiasShader_->setMappedUniformValue(PASS,pass);
-        glDrawElementsInstanced(GL_TRIANGLES,tris*6,GL_UNSIGNED_SHORT,(const GLvoid *)0,instances-1);
-        noBiasShader_->unbind();
-    }
-}
 
 
 /**

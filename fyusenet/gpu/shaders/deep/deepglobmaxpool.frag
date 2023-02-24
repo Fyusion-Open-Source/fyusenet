@@ -15,7 +15,7 @@ void main(void) {
   highp vec4 accu = activate(texture(inputLayer0, tc));
   for (int y=0; y < imdim.y; y++) {
     for (int x=0; x < imdim.x; x++) {
-      accu = max(accu, activate(texture(inputLayer0, tc + (vec2(x,y) * texStep.xy))));
+      accu = max(accu, activate(texture(inputLayer0, tc+vec2(x*texStep.x, y*texStep.y))));
     }
   }
   fragmentColor0 = accu;

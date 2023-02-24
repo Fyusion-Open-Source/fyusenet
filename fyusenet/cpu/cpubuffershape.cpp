@@ -14,8 +14,7 @@
 #include <cstring>
 #include <vector>
 #include <limits>
-#include <cstdint>
-#include <algorithm>
+#include <inttypes.h>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
@@ -35,26 +34,6 @@ namespace cpu {
 //-------------------------------------- Local Definitions -----------------------------------------
 
 
-namespace internal {
-
-    /**
-     * @brief Tiling-candidate, for internal computations only
-     *
-     * @see CPUBufferShape::computeDeepTiling()
-     */
-    struct tilecand {
-        tilecand(int x,int y,float cost):x(x),y(y),cost(cost) {
-        }
-        int x;
-        int y;
-        float cost;
-    };
-
-    inline static int padChannels(int channels) {
-        return LayerBase::PIXEL_PACKING * ((channels + LayerBase::PIXEL_PACKING-1)/LayerBase::PIXEL_PACKING);
-    }
-}
-
 /*##################################################################################################
 #                                   P U B L I C  F U N C T I O N S                                 #
 ##################################################################################################*/
@@ -62,8 +41,8 @@ namespace internal {
 /**
  * @brief Constructor
  *
- * @param height Tensor height
  * @param width Tensor width
+ * @param height Tensor height
  * @param channels Number of channels in the tensor
  * @param padding (Spatial) padding for the tensor
  * @param type Data type used in the tensor
@@ -72,18 +51,9 @@ namespace internal {
  *
  * Creates and initializes an object that stores the current buffer shape and data arrangement.
  */
-CPUBufferShape::CPUBufferShape(int height, int width, int channels, int padding, type type, order order) :
-    width_(width + 2*padding), height_(height + 2*padding), channels_(channels), padding_(padding),
+CPUBufferShape::CPUBufferShape(int width, int height, int channels, int padding, type type, order order) :
+    width_(width), height_(height), channels_(channels), padding_(padding),
       dataOrder_(order), dataType_(type) {
-
-    if (order == order::GPU_DEEP) {
-        std::pair<int,int> tiles = computeDeepTiling(channels);
-        tileWidth_ = width;
-        tileHeight_ = height;
-        width_ = (tiles.first * width + padding) + padding;
-        height_ = (tiles.second * height + padding) + padding;
-        channels_ = channels;
-    }
 }
 
 
@@ -94,27 +64,10 @@ CPUBufferShape::~CPUBufferShape() {
 }
 
 
-/**
- * @brief Comparison operator (inequality)
- *
- * @param other Object to compare with
- *
- * @retval true if objects do not store identical data
- * @retval false it objects store identical data
- */
 bool CPUBufferShape::operator!=(const CPUBufferShape& other) const {
     return ! operator==(other);
 }
 
-
-/**
- * @brief Comparison operator (equality)
- *
- * @param other Object to compare with
- *
- * @retval true it objects store identical data
- * @retval false if objects do not store identical data
- */
 bool CPUBufferShape::operator==(const CPUBufferShape& other) const {
     return sameSize(other) && sameType(other) && sameOrder(other);
     return  (width_ == other.width_) &&
@@ -125,51 +78,21 @@ bool CPUBufferShape::operator==(const CPUBufferShape& other) const {
             (padding_ == other.padding_);
 }
 
-
-/**
- * @brief Check if shape objects refer to the same datatype
- *
- * @param other Object to compare with
- *
- * @retval true if objects refer to the same datatype
- * @retval false otherwise
- */
 bool CPUBufferShape::sameType(const CPUBufferShape& other) const {
     return (dataType_ == other.dataType_);
 }
-
-
-/**
- * @brief Check if shape objects refer to the same data ordering
- *
- * @param other Object to compare with
- *
- * @retval true if objects refer to the same data ordering
- * @retval false otherwise
- */
 
 bool CPUBufferShape::sameOrder(const CPUBufferShape& other) const {
     return  (dataOrder_ == other.dataOrder_);
 }
 
 
-
-/**
- * @brief Check if two shape objects (of the same order) have the same size
- *
- * @param other Object to compare with
- *
- * @retval true if shapes encode the same size (including padding)
- * @retval false otherwise
- */
 bool CPUBufferShape::sameSize(const CPUBufferShape &other) const {
-    assert(dataOrder_ == other.dataOrder_);
     return  (width_ == other.width_) &&
             (height_ == other.height_) &&
             (channels_ == other.channels_) &&
             (padding_ == other.padding_);
 }
-
 
 /**
  * @brief Create new CPUBuffer instance
@@ -187,28 +110,8 @@ CPUBuffer * CPUBufferShape::createBuffer() const {
 }
 
 
-
-/**
- * @brief Compute a new shape object in different data order
- *
- * @param newOrder Target data order to be used for the new shape object
- *
- * This function derives a new shape object from the current object in the supplied data order,
- * for example in order to create new buffers that are used for different devices.
- */
 CPUBufferShape CPUBufferShape::asOrder(order newOrder) const {
-    switch (dataOrder_) {
-        case order::CHANNELWISE:
-            return CPUBufferShape(height_ - 2 *padding_, width_ - 2 * padding_, channels_, padding_, dataType_, newOrder);
-        case order::GPU_SHALLOW:
-            return CPUBufferShape(height_ - 2 *padding_, width_ - 2 * padding_, channels_, padding_, dataType_, newOrder);
-        case order::GPU_DEEP: {
-            assert(tileWidth_ > 0);
-            assert(tileHeight_ > 0);
-            return CPUBufferShape(tileHeight_, tileWidth_, channels_, padding_, dataType_, newOrder);
-            }
-    }
-    THROW_EXCEPTION_ARGS(FynException,"Cannot handle shape conversion");
+    return CPUBufferShape(width_, height_, channels_, padding_, dataType_, newOrder);
 }
 
 
@@ -297,15 +200,15 @@ CPUBuffer * CPUBufferShape::fromRawBuffer(const void *src, order inputOrder, int
  */
 size_t CPUBufferShape::bytes() const {
     if ((width_ * height_ * channels_) > 0) {
-        if (dataOrder_ == order::CHANNELWISE) {
-            return width_ * height_ * channels_ * typeSize(dataType_);
-        } else if (dataOrder_ == order::GPU_SHALLOW) {
-            int padchans = internal::padChannels(channels_);
-            return width_ * height_ * padchans * typeSize(dataType_);
-        } else {
-            assert(dataOrder_ == order::GPU_DEEP);
-            return width_ * height_ * LayerBase::PIXEL_PACKING * typeSize(dataType_);
-        }
+        gpu::deep::DeepTiler tiler(LayerType::DOWNLOAD,width_,height_,channels_,channels_,1.0f,1.0f,0,padding_,1,1,1,1);
+        int ewidth = width_;
+        int eheight = height_;
+        if (dataOrder_ == order::GPU_SHALLOW || dataOrder_ == order::CHANNELWISE) ewidth = width_+2*padding_;
+        else ewidth = tiler.getViewportWidth();
+        if (dataOrder_ == order::GPU_SHALLOW || dataOrder_ == order::CHANNELWISE) ewidth = width_+2*padding_;
+        else eheight = tiler.getViewportHeight();
+        int echannels = (dataOrder_ == order::GPU_SHALLOW || dataOrder_ == order::CHANNELWISE) ? channels_ : LayerBase::PIXEL_PACKING;
+        return ewidth * eheight * echannels*typeSize(dataType_);
     }
     return 0;
 }
@@ -313,7 +216,7 @@ size_t CPUBufferShape::bytes() const {
 
 
 /**
- * @brief Retrieve size of the buffer in specified storage order
+ * @brief Retrieve size of the buffer in specified storage order)
  *
  * @param dOrder Storage order to assume
  *
@@ -321,53 +224,27 @@ size_t CPUBufferShape::bytes() const {
  */
 size_t CPUBufferShape::bytes(order dOrder) const {
     if ((width_ * height_ * channels_) > 0) {
-        if (dataOrder_ == order::GPU_DEEP) {
-            assert(tileWidth_ > 0);
-            assert(tileHeight_ > 0);
-            switch (dOrder) {
-                case order::CHANNELWISE:
-                    return (tileWidth_ + 2 * padding_) * (tileHeight_ + 2 * padding_) * channels_ * typeSize(dataType_);
-                case order::GPU_SHALLOW: {
-                    int padchans = internal::padChannels(channels_);
-                    return (tileWidth_ + 2 * padding_) * (tileHeight_ + 2 * padding_) * padchans * typeSize(dataType_);
-                }
-                default:
-                    return bytes();
-            }
-        } else if (dataOrder_ == order::GPU_SHALLOW) {
-            switch (dOrder) {
-                case order::CHANNELWISE:
-                    return width_ * height_ * channels_ * typeSize(dataType_);
-                case order::GPU_DEEP: {
-                    std::pair<int,int> tiles = computeDeepTiling(channels_);
-                    int twidth = width_ - 2 * padding_;
-                    int theight = height_ - 2 * padding_;
-                    int finwidth = tiles.first * (twidth + padding_) + padding_;
-                    int finheight = tiles.second * (theight + padding_) + padding_;
-                    return finwidth * finheight * LayerBase::PIXEL_PACKING * typeSize(dataType_);
-                }
-                default:
-                    return bytes();
-            }
-
-        } else {
-            assert(dataOrder_ == order::CHANNELWISE);
-            switch (dOrder) {
-                case order::GPU_SHALLOW: {
-                    int padchans = internal::padChannels(channels_);
-                    return width_ * height_ * padchans * typeSize(dataType_);
-                }
-                case order::GPU_DEEP: {
-                    std::pair<int,int> tiles = computeDeepTiling(channels_);
-                    int twidth = width_ - 2 * padding_;
-                    int theight = height_ - 2 * padding_;
-                    int finwidth = tiles.first * (twidth + padding_) + padding_;
-                    int finheight = tiles.second * (theight + padding_) + padding_;
-                    return finwidth * finheight * LayerBase::PIXEL_PACKING * typeSize(dataType_);
-                }
-                default:
-                    return bytes();
-            }
+        gpu::deep::DeepTiler tiler(LayerType::DOWNLOAD,width_,height_,channels_,channels_,1.0f,1.0f,0,padding_,1,1,1,1);
+        int ewidth = width_;
+        int eheight = height_;
+        if (dOrder == order::GPU_SHALLOW || dOrder == order::CHANNELWISE) ewidth = width_+2*padding_;
+        else ewidth = tiler.getViewportWidth();
+        if (dOrder == order::GPU_SHALLOW || dOrder == order::CHANNELWISE) ewidth = width_+2*padding_;
+        else eheight = tiler.getViewportHeight();
+        int echannels = (dOrder == order::GPU_SHALLOW || dOrder == order::CHANNELWISE) ? channels_ : LayerBase::PIXEL_PACKING;
+        switch (dataType_) {
+            case FLOAT32:
+            case UINT32:
+            case INT32:
+                return ewidth * eheight * echannels * 4;
+            case UINT16:
+            case INT16:
+                return ewidth * eheight * echannels * 2;
+            case UINT8:
+            case INT8:
+                return ewidth * eheight * echannels;
+            default:
+                assert(false);
         }
     }
     return 0;
@@ -413,38 +290,6 @@ CPUBufferShape::type CPUBufferShape::glToType(GLint fmt) {
         default:
             THROW_EXCEPTION_ARGS(FynException,"Unsupported type 0x%X supplied", fmt);
     }
-}
-
-
-/**
- * @brief Compute tile arrangement for a given channel count
- *
- * @param channels Number of channels in the tensor
- *
- * @return X/Y tiling (width, height)
- *
- * Computes a tile arrangement that has a decent aspect ratio and does not waste too much
- * texture memory.
- */
-// TODO (mw) also factor in spatial dimensions to not break texture size limits
-std::pair<int,int> CPUBufferShape::computeDeepTiling(int channels) {
-    // NOTE (mw) this code could use some optimization
-    std::vector<internal::tilecand> candidates;
-    int tiles = (channels + (LayerBase::PIXEL_PACKING-1))/LayerBase::PIXEL_PACKING;
-    for (int y=1; y <= tiles; y++) {
-        for (int x=y; x <= tiles; x++) {
-            if (x*y >= tiles) {
-                float aspectcost = (float)(((x-y) >= 0) ? (x-y) : (y-x));
-                float unusedcost = (float)(x*y - tiles);
-                candidates.push_back(internal::tilecand(x, y, aspectcost+unusedcost));
-            }
-        }
-    }
-    auto minitem = std::min_element(candidates.begin(),candidates.end(),[](const internal::tilecand& c1, const internal::tilecand& c2) {return c1.cost < c2.cost;});
-    if (minitem == candidates.end()) {
-        THROW_EXCEPTION_ARGS(FynException,"Cannot compute tiling");
-    }
-    return std::pair<int,int>(minitem->x,minitem->y);
 }
 
 

@@ -51,17 +51,6 @@ DeepConvLayer1x1::DeepConvLayer1x1(const ConvLayerBuilder & builder, int layerNu
 
 
 /**
- * @copydoc GPULayerBase::cleanup
- */
-void DeepConvLayer1x1::cleanup() {
-    shaderState_.reset();
-    noBiasShaderState_.reset();
-    shader_.reset();
-    noBiasShader_.reset();
-    DeepConvLayerBase::cleanup();
-}
-
-/**
  * @copydoc LayerBase::forward
  */
 void DeepConvLayer1x1::forward(uint64_t sequence) {
@@ -81,7 +70,7 @@ void DeepConvLayer1x1::forward(uint64_t sequence) {
         glBlendEquationSeparate(GL_FUNC_ADD,GL_FUNC_ADD);
         glBlendFuncSeparate(GL_ONE,GL_ONE,GL_ONE,GL_ONE);
     }
-    glViewport(0, 0, viewport_[0], viewport_[1]);
+    glViewport(0,0,viewport_[0],viewport_[1]);
     vertexArray_->bind();
     framebuffers_.at(0)->bind();
     framebuffers_.at(0)->setWriteMask();
@@ -105,14 +94,14 @@ void DeepConvLayer1x1::forward(uint64_t sequence) {
     shader_->bind(shaderState_.get());
     shader_->setUniformValue("numInputTiles",tiler_->numInputTiles());
     glDrawElements(GL_TRIANGLES,tris*6,GL_UNSIGNED_SHORT,(const GLvoid *)0);
-    shader_->unbind((instances > 1) ? true : false);
+    shader_->unbind(true);
     if (instances > 1) {
         noBiasShader_->bind(noBiasShaderState_.get());
         noBiasShader_->setUniformValue("numInputTiles",tiler_->numInputTiles());
         glDrawElementsInstanced(GL_TRIANGLES,tris*6,GL_UNSIGNED_SHORT,(const GLvoid *)0,instances-1);
-        noBiasShader_->unbind();
     }
     framebuffers_.at(0)->unbind();
+    noBiasShader_->unbind();
     vertexArray_->unbind();
 }
 

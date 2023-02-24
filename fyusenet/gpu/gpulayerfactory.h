@@ -87,8 +87,6 @@ class GPULayerFactoryBackend : public LayerFactoryBackend {
     GPULayerBase * createSingletonArithLayer(SingletonArithLayerBuilder *builder, int layerNumber);
     GPULayerBase * createCastLayer(CastLayerBuilder *builder, int layerNumber);
     GPULayerBase * createTransposeLayer(TransposeLayerBuilder * builder, int layerNumber);
-    GPULayerBase * createBatchNormLayer(GPULayerBuilder * builder, int layerNumber);
-    GPULayerBase * createGEMMLayer(GPULayerBuilder * builder, int layerNumber);
  private:
     static void checkRequirements();
     // ------------------------------------------------------------------------

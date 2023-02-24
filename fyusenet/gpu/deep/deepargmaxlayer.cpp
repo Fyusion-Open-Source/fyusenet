@@ -220,7 +220,7 @@ void DeepArgMaxLayer::setupShaders() {
  * to cover the output area of the image set which make up the output tensor.
  */
 void DeepArgMaxLayer::setupNetworkPolygons() {
-    int offset0 = 0, offset1 = 0;
+    int offset0=0, offset1=0;
     float * attrs0 = new float[tiler_->numInputTiles()*4*4];
     unsigned int * attrs1 = new unsigned int[tiler_->numInputTiles()*4*4];
     unsigned int * attrs2 = new unsigned int[tiler_->numInputTiles()*4*4];

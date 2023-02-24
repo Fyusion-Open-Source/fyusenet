@@ -111,7 +111,7 @@ class TestNet01 : public fyusion::fyusenet::NeuralNetwork {
         ASSERT_EQ(specs.size(), 1u);
         const BufferSpec & inspec = specs[0];
 
-        inputBuffer = new CPUBuffer(CPUBufferShape(inspec.height_, inspec.width_, inspec.channels_, 0, CPUBufferShape::FLOAT32, CPUBufferShape::order::GPU_SHALLOW));
+        inputBuffer = new CPUBuffer(CPUBufferShape(inspec.width_, inspec.height_, inspec.channels_, 0, CPUBufferShape::FLOAT32, CPUBufferShape::order::GPU_SHALLOW));
         float * in = inputBuffer->map<float>();
         ASSERT_NE(nullptr, in);
         for (int i=0; i < inspec.width_*inspec.height_*inspec.channels_; i++) in[i] = 1.0f;
@@ -126,7 +126,7 @@ class TestNet01 : public fyusion::fyusenet::NeuralNetwork {
         ASSERT_EQ(specs.size(), 1ul);
         const BufferSpec & outspec = specs[0];
 
-        outputBuffer = new CPUBuffer(CPUBufferShape(outspec.height_, outspec.width_, outspec.channels_, 0, CPUBufferShape::FLOAT32, CPUBufferShape::order::GPU_SHALLOW));
+        outputBuffer = new CPUBuffer(CPUBufferShape(outspec.width_, outspec.height_, outspec.channels_, 0, CPUBufferShape::FLOAT32, CPUBufferShape::order::GPU_SHALLOW));
         float * out = outputBuffer->map<float>();
         ASSERT_NE(nullptr, in);
         for (int i=0; i < outspec.width_*outspec.height_*outspec.channels_; i++) out[i] = 1.0f;

@@ -14,9 +14,21 @@
 
 #include <vector>
 
+#ifdef ANDROID
+#include <GLES3/gl3.h>
+#else
+#ifdef __APPLE__
+#include <OpenGL/gl3.h>
+#include <OpenGL/glext.h>
+#else
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
+#endif
+
+
 //-------------------------------------- Project  Headers ------------------------------------------
 
-#include "../gl/gl_sys.h"
 #include "../gl/uniformstate.h"
 #include "../gl/fbo.h"
 #include "../gl/vao.h"

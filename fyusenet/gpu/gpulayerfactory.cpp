@@ -26,7 +26,6 @@
 #include "deep/deepdownloadlayer.h"
 #include "deep/deepargmaxlayer.h"
 #include "deep/deepconvlayer1x1.h"
-#include "deep/deepgemmlayer.h"
 #include "deep/deepconvlayerNxN.h"
 #include "deep/deepdwconvlayer3x3.h"
 #include "deep/deepsigmoidlayer.h"
@@ -34,7 +33,6 @@
 #include "deep/deep_singleton_arithlayer.h"
 #include "deep/deepcastlayer.h"
 #include "deep/deeptransposelayer.h"
-#include "deep/deepbatchnormlayer.h"
 #ifdef FYUSENET_USE_EGL
 #include "oesconverter.h"
 #endif
@@ -174,10 +172,6 @@ fyusenet::LayerBase * GPULayerFactoryBackend::createLayer(LayerType type,LayerBu
             return (fyusenet::LayerBase *)createCastLayer((CastLayerBuilder *)builder, layerNumber);
         case LayerType::TRANSPOSE:
             return (fyusenet::LayerBase *)createTransposeLayer((TransposeLayerBuilder *)builder, layerNumber);
-        case LayerType::BATCHNORM:
-            return (fyusenet::LayerBase *)createBatchNormLayer((GPULayerBuilder *)builder, layerNumber);
-        case LayerType::GEMM:
-            return (fyusenet::LayerBase *)createGEMMLayer((GPULayerBuilder *)builder, layerNumber);
         default:
             THROW_EXCEPTION_ARGS(FynException,"Unsupported layer type");
     }
@@ -356,7 +350,6 @@ GPULayerBase * GPULayerFactoryBackend::createAddSubLayer(GPULayerBuilder *builde
  * @see deep::DeepConvLayer9x9, deep::DeepDepthwiseConvLayer3x3
  */
 GPULayerBase * GPULayerFactoryBackend::createConvLayer(ConvLayerBuilder *builder,int layerNumber) {
-    // NOTE (mw) oh boy, this is super-messy, clean it up in the future
     if (builder->isDeep()) {
         switch (builder->kernel_) {
             case 1:
@@ -370,10 +363,7 @@ GPULayerBase * GPULayerFactoryBackend::createConvLayer(ConvLayerBuilder *builder
                 }
                 return new deep::DeepConvLayerNxN(*builder,layerNumber);
             default:
-                if ((builder->groupSize_ != 1) && (builder->groupSize_ == builder->in())) {
-                    THROW_EXCEPTION_ARGS(FynException,"No %dx%d depthwise layer supported", builder->kernel_, builder->kernel_);
-                }
-                return new deep::DeepConvLayerNxN(*builder,layerNumber);
+                THROW_EXCEPTION_ARGS(FynException,"Kernel size %d not supported for deep convolution",builder->kernel_);
         }
     }
     switch (builder->kernel_) {
@@ -777,42 +767,6 @@ GPULayerBase * GPULayerFactoryBackend::createTransposeLayer(TransposeLayerBuilde
 }
 
 
-/**
- * @brief Create a batchnorm layer
- *
- * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
- *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
- *
- * @return Raw pointer to created layer
- *
- * @see BatchNormLayer, deep::DeepBatchNormLayer
- */
-GPULayerBase * GPULayerFactoryBackend::createBatchNormLayer(GPULayerBuilder * builder, int layerNumber) {
-    if (builder->isDeep()) {
-        return new gpu::deep::DeepBatchNormLayer(*builder, layerNumber);
-    }
-    return new BatchNormLayer(*builder, layerNumber);
-}
-
-
-/**
- * @brief Create a GEMM layer
- *
- * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
- *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
- *
- * @return Raw pointer to created layer
- *
- * @see vanilla::ConvLayer1x1, deep::DeepGEMMLayer
- */
-GPULayerBase * GPULayerFactoryBackend::createGEMMLayer(GPULayerBuilder * builder, int layerNumber) {
-    if (builder->isDeep()) {
-        return new gpu::deep::DeepGEMMLayer(*builder, layerNumber);
-    }
-    return new gpu::vanilla::ConvLayer1x1(*builder, layerNumber);
-}
 
 
 } // gpu namespace

@@ -79,6 +79,12 @@ struct GPULayerBuilder : GPULayerBuilderTempl<GPULayerBuilder> {
     GPULayerBuilder(const std::string& name) : GPULayerBuilderTempl<GPULayerBuilder>(name) {
     }
 
+    /**
+     * @brief Copy constructor
+     *
+     * @param src Builder object to copy
+     */
+    GPULayerBuilder(const GPULayerBuilder & src) : GPULayerBuilderTempl<GPULayerBuilder>(src) {}
 };
 
 } // gpu namespace

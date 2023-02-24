@@ -25,13 +25,13 @@ uniform highp float dilationStep;
 
 void main(void) {
 #ifdef LARGE_DILATION
-    fragmentColor0 =  compute(texture(inputLayer0,texCoord.xy - vec2(dilationStep,0)),0);
+    fragmentColor0 =  compute(texture(inputLayer0,texCoord.xy-vec2(dilationStep,0)),0);
     fragmentColor0 += compute(texture(inputLayer0,texCoord.xy),2);
-    fragmentColor0 += compute(texture(inputLayer0,texCoord.xy + vec2(dilationStep,0)),4);
+    fragmentColor0 += compute(texture(inputLayer0,texCoord.xy+vec2(dilationStep,0)),4);
 #else
-    fragmentColor0 =  compute(textureOffset(inputLayer0,texCoord.xy, ivec2(-DILATION,0)),0);
-    fragmentColor0 += compute(textureOffset(inputLayer0,texCoord.xy, ivec2( 0,0)),2);
-    fragmentColor0 += compute(textureOffset(inputLayer0,texCoord.xy, ivec2( DILATION,0)),4);
+    fragmentColor0 =  compute(textureOffset(inputLayer0,texCoord.xy,ivec2(-DILATION,0)),0);
+    fragmentColor0 += compute(textureOffset(inputLayer0,texCoord.xy,ivec2( 0,0)),2);
+    fragmentColor0 += compute(textureOffset(inputLayer0,texCoord.xy,ivec2( DILATION,0)),4);
 #endif
 #if !defined(NO_BIAS) || defined(POST_BATCHNORM)
 #ifdef POST_BATCHNORM
@@ -41,6 +41,6 @@ void main(void) {
 #endif
 #endif
 #ifdef USE_RESIDUAL
-    fragmentColor0 += residual(residualLayer0,resCoord.xy ,biasTexture, texCoord.zw);
+    fragmentColor0 += residual(residualLayer0,resCoord);
 #endif
 }

@@ -26,11 +26,11 @@ typedef unsigned long long int tstamp;
 #ifdef __cplusplus
 extern "C" {
 #endif
-    tstamp fy_get_stamp();
-    unsigned int fy_elapsed_micros(tstamp start,tstamp end);
-    unsigned int fy_elapsed_nanos(tstamp start,tstamp end);
-    unsigned int fy_elapsed_millis(tstamp start,tstamp end);
-    unsigned int fy_elapsed_seconds(tstamp start,tstamp end);
+    tstamp get_stamp();
+    unsigned int elapsed_micros(tstamp start,tstamp end);
+    unsigned int elapsed_nanos(tstamp start,tstamp end);
+    unsigned int elapsed_millis(tstamp start,tstamp end);
+    unsigned int elapsed_seconds(tstamp start,tstamp end);
 #ifdef __cplusplus
 }
 #endif

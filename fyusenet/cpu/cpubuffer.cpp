@@ -111,22 +111,17 @@ CPUBuffer * CPUBuffer::copyTo(CPUBuffer * tgt) const {
  *
  * @param tgt Pointer to target buffer, or \c nullptr in which case the target buffer will be
  *            created
- *
- * @return Target buffer with channel-wise data storage order, or \c nullptr if no conversion was
- *         possible
+ * @return Target buffer with channel-wise data storage order
  *
  * @warning This implementation is incomplete, in its current state it can only copy channel-wise
  *          CPU buffers
  */
 CPUBuffer * CPUBuffer::toChannelWise(CPUBuffer *tgt) const {
-    if (!tgt) {
-        tgt = shape_.createBuffer(CPUBufferShape::order::CHANNELWISE);
-    }
+    if (!tgt) tgt = shape_.createBuffer(CPUBufferShape::order::CHANNELWISE);
     else {
-        auto shape = shape_.asOrder(CPUBufferShape::order::CHANNELWISE);
-        if (!tgt->shape_.sameSize(shape) || !tgt->shape_.sameType(shape) ||
+        if (!tgt->shape_.sameSize(shape_) || !tgt->shape_.sameType(shape_) ||
             tgt->shape_.dataOrder() != CPUBufferShape::order::CHANNELWISE) {
-            THROW_EXCEPTION_ARGS(FynException,"Mismatching shapes");
+            THROW_EXCEPTION_ARGS(FynException,"");
         }
     }
     if ((shape_.dataOrder_ == CPUBufferShape::order::CHANNELWISE) ||
@@ -139,22 +134,10 @@ CPUBuffer * CPUBuffer::toChannelWise(CPUBuffer *tgt) const {
         unmap();
         tgt->unmap();
         return tgt;
-    } else if (shape_.dataOrder_ == CPUBufferShape::order::GPU_DEEP) {
-        const float * srcdata = map<float>();
-        float * tgtdata = tgt->map<float>();
-        deepToChannelWise<float>(srcdata, tgtdata);
-        unmap();
-        tgt->unmap();
-        return tgt;
-    } else if (shape_.dataOrder_ == CPUBufferShape::order::GPU_SHALLOW) {
-        const float * srcdata = map<float>();
-        float * tgtdata = tgt->map<float>();
-        shallowToChannelWise<float>(srcdata, tgtdata);
-        unmap();
-        tgt->unmap();
-        return tgt;
+    } else {
+        // TODO (mw) implement missing conversions
+        THROW_EXCEPTION_ARGS(FynException,"Not supported yet");
     }
-    return nullptr;
 }
 
 
@@ -206,8 +189,7 @@ CPUBuffer * CPUBuffer::toGPUShallow(CPUBuffer *tgt) const {
 CPUBuffer * CPUBuffer::toGPUDeep(CPUBuffer *tgt) const {
     if (!tgt) tgt = shape_.createBuffer(CPUBufferShape::order::GPU_DEEP);
     else {
-        // TODO (mw) complete the implementation here
-        THROW_EXCEPTION_ARGS(FynException, "Incomplete implementation");
+        // check if tgt is compatible
     }
     if (shape_.dataOrder_ == CPUBufferShape::order::GPU_DEEP) {
         const uint8_t * srcdata = map<uint8_t>();
@@ -416,25 +398,30 @@ void CPUBuffer::deepToChannelWise(const T *src, T *tgt) const {
     assert(shape_.padding_ <= 1);
     if (!tiler_) {
         tiler_ = new gpu::deep::DeepTiler(LayerType::DOWNLOAD,
-                                          shape_.tileWidth_, shape_.tileHeight_, shape_.channels_, shape_.channels_,
+                                          shape_.width_, shape_.height_, shape_.channels_, shape_.channels_,
                                           1.0f, 1.0f, 0, shape_.padding_, 1, 1, 1, 1);
     }
-    int pad = shape_.padding_;
-    int lwidth = shape_.tileWidth_ + 2 * pad;
-    int lheight = shape_.tileHeight_ + 2 * pad;
+    int lwidth = shape_.width_ + 2 * shape_.padding_;
+    int lheight = shape_.height_ + 2 * shape_.padding_;
+    int swidth = tiler_->getViewportWidth();
+    int twidth = tiler_->getInputWidth();
+    int theight = tiler_->getInputHeight();
     int channeloffset = 0;
-    int srcstride = shape_.width_ * LayerBase::PIXEL_PACKING;
     for (int ty=0; ty < tiler_->numOutputTiles(gpu::deep::DeepTiler::VERTICAL); ty++) {
         for (int tx=0; tx < tiler_->numOutputTiles(gpu::deep::DeepTiler::HORIZONTAL); tx++) {
             int rem = ((shape_.channels_ - channeloffset) > LayerBase::PIXEL_PACKING) ? LayerBase::PIXEL_PACKING : shape_.channels_ - channeloffset;
-            const T * in = src +  (ty * (shape_.tileHeight_ + pad)) * srcstride + (tx * shape_.tileWidth_ + pad) * LayerBase::PIXEL_PACKING;
+            const T * in = src + ((shape_.padding_ + ty*(theight+shape_.padding_))*swidth + shape_.padding_ + tx*(twidth+shape_.padding_))*LayerBase::PIXEL_PACKING;
             for (int l=0; l < rem; l++) {
                 T * outptr = tgt + channeloffset * (lwidth * lheight);
-                for (int y=0; y < lheight; y++) {
-                    for (int x=0; x < lwidth; x++) {
-                        outptr[x+y*lwidth] = in[(y*srcstride+x)*LayerBase::PIXEL_PACKING+l];
+                if (shape_.padding_ > 0) memset(outptr, 0, sizeof(T)*lwidth);
+                for (int y=shape_.padding_; y < lheight; y++) {
+                    if (shape_.padding_ > 0) outptr[y*lwidth]=0;
+                    for (int x=shape_.padding_; x < lwidth; x++) {
+                        outptr[x+y*lwidth] = in[(y*swidth+x)*LayerBase::PIXEL_PACKING+l];
                     }
+                    if (shape_.padding_ > 0) outptr[y*lwidth+lwidth-1]=0;
                 }
+                if (shape_.padding_ > 0) memset(outptr+lwidth*(lheight-1),0,sizeof(T)*lwidth);
                 channeloffset++;
             }
         }

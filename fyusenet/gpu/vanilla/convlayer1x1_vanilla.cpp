@@ -44,19 +44,8 @@ namespace vanilla {
 /**
  * @copydoc vanilla::ConvLayerBase::ConvLayerBase
  */
-ConvLayer1x1::ConvLayer1x1(const ConvLayerBuilder & builder,int layerNumber) : ConvLayerBase(builder, layerNumber) {
+ConvLayer1x1::ConvLayer1x1(const ConvLayerBuilder & builder,int layerNumber) : ConvLayerBase(builder,layerNumber) {
     assert(builder.kernel_ == CONVSIZE);
-    for (int i=0; i <= maxRenderTargets_; i++) {
-        convolutionShaders_.push_back(programptr());
-        convolutionShaderStates_.push_back(unistateptr());
-    }
-}
-
-
-/**
- * @copydoc vanilla::ConvLayerBase::ConvLayerBase
- */
-ConvLayer1x1::ConvLayer1x1(const GPULayerBuilder & builder,int layerNumber) : ConvLayerBase(builder, layerNumber) {
     for (int i=0; i <= maxRenderTargets_; i++) {
         convolutionShaders_.push_back(programptr());
         convolutionShaderStates_.push_back(unistateptr());

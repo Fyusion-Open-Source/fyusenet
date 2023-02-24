@@ -14,10 +14,6 @@ layout(binding=0) uniform sampler2D inputLayer0;
 uniform sampler2D inputLayer0;
 #endif
 
-#ifdef HIGH_PRECISION
-layout(location=0) out highp vec4 fragmentColor0;
-#else
 layout(location=0) out vec4 fragmentColor0;
-#endif
 
 in highp vec2 texCoord;

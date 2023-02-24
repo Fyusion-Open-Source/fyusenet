@@ -558,8 +558,6 @@ void GPULayerBase::copyResult(float *memory, bool includePadding) {
         }
         delete [] tmp;
     }
-#else
-    THROW_EXCEPTION_ARGS(FynException, "This function is not available in release mode");
 #endif
 }
 
@@ -715,10 +713,6 @@ size_t GPULayerBase::handlePreprocFlags(layerflags flags, char *preproc, size_t 
         mc = maxChars-strlen(preproc);  // ouch
     }
     assert(mc > 0);
-    if (flags & LayerFlags::BATCHNORM_ON_RESIDUAL) {
-        strncat(preproc, "#define BATCHNORM_ON_RESIDUAL\n", mc);
-        mc = maxChars-strlen(preproc); // ouch
-    }
     assert(mc > 0);
     if (flags & LayerFlags::POST_BATCHNORM) {
         strncat(preproc, "#define POST_BATCHNORM\n", mc);
@@ -728,15 +722,7 @@ size_t GPULayerBase::handlePreprocFlags(layerflags flags, char *preproc, size_t 
     strncat(preproc, extra, mc);
     mc -= strlen(extra);
     assert(mc > 0);
-#ifdef HIGH_PRECISION
-    strncat(preproc, "#define NO_HALF\n", mc);
-    mc -= 16;
-#else
-    if (!GLInfo::supportsHalf()) {
-        strncat(preproc, "#define NO_HALF\n", mc);
-        mc -= 16;
-    }
-#endif
+    if (!GLInfo::supportsHalf()) strncat(preproc, "#define NO_HALF\n", mc);
     snprintf(extra, sizeof(extra), "#define PADDING %d\n",inputPadding_);
     strncat(preproc, extra, mc);
     mc -= strlen(extra);

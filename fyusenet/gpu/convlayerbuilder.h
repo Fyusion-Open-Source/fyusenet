@@ -113,7 +113,8 @@ struct ConvLayerBuilderTempl : GPULayerBuilderTempl<D> {
  */
 struct ConvLayerBuilder : ConvLayerBuilderTempl<ConvLayerBuilder> {
 
-  ConvLayerBuilder(short kernel, const std::string& name) : ConvLayerBuilderTempl<ConvLayerBuilder>(kernel, name) {}
+  ConvLayerBuilder(short kernel,const std::string& name) : ConvLayerBuilderTempl<ConvLayerBuilder>(kernel, name) {}
+
 };
 
 } // gpu namespace

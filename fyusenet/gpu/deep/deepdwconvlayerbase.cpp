@@ -214,7 +214,6 @@ void DeepDepthwiseConvLayerBase::createWeightTextureMatrix(const float *srcWeigh
     int texwidth = chanblocks * (kernel_ + (winrem & 1));
     if (texwidth & 1) texwidth++;
     int texheight = winmax * channelMultiplier_;
-#ifndef HIGH_PRECISION
     if (GLInfo::supportsHalf()) {
         if (((texwidth / 2) > GLInfo::getMaximumTextureSize()) || (texheight > GLInfo::getMaximumTextureSize())) {
             THROW_EXCEPTION_ARGS(FynException,"Weights do not fit into GL texture");
@@ -224,11 +223,6 @@ void DeepDepthwiseConvLayerBase::createWeightTextureMatrix(const float *srcWeigh
             THROW_EXCEPTION_ARGS(FynException,"Weights do not fit into GL texture");
         }
     }
-#else
-    if ((texwidth > GLInfo::getMaximumTextureSize()) || (texheight > GLInfo::getMaximumTextureSize())) {
-        THROW_EXCEPTION_ARGS(FynException,"Weights do not fit into GL texture");
-    }
-#endif
     float * weights = new float[texwidth*texheight*PIXEL_PACKING];
     memset(weights,0,texwidth*texheight*PIXEL_PACKING*sizeof(float));
     for (int chan=0 ; chan < channelMultiplier_; chan++) {
@@ -254,10 +248,9 @@ void DeepDepthwiseConvLayerBase::createWeightTextureMatrix(const float *srcWeigh
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-#ifndef HIGH_PRECISION
     if (GLInfo::supportsHalf()) {
         unsigned int * fp16 = FloatConversion::getInstance()->toFP16UI(weights,texwidth*texheight*PIXEL_PACKING);
-#ifdef GL_RGBA32UI
+#ifdef ANDROID
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI,texwidth/2,texheight,0,GL_RGBA_INTEGER,GL_UNSIGNED_INT,fp16);
 #else
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI_EXT,texwidth/2,texheight,0,GL_RGBA_INTEGER_EXT,GL_UNSIGNED_INT,fp16);
@@ -266,9 +259,6 @@ void DeepDepthwiseConvLayerBase::createWeightTextureMatrix(const float *srcWeigh
     } else {
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
     }
-#else
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
-#endif
     delete [] weights;
 }
 

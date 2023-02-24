@@ -246,12 +246,6 @@ void PoolingLayer::setupVBO(VAO *vao) {
     float ttop = ((float) inputPadding_ / (float) (height_ + 2 * inputPadding_));
     float thspan = ((float) width_) / (float) (width_ + 2 * inputPadding_);
     float tvspan = ((float) height_) / (float) (height_ + 2 * inputPadding_);
-    if (downsample_[0] > 1) {
-        tleft -= 0.5f*(float)(downsample_[0]-1) / (float)(width_ + 2*inputPadding_);
-    }
-    if (downsample_[1] > 1) {
-        ttop -= 0.5f*(float)(downsample_[1]-1) / (float)(height_ + 2*inputPadding_);
-    }
     tmp[0 * vertsize + 0] = posleft;        // position
     tmp[0 * vertsize + 1] = postop;
     tmp[0 * vertsize + 2] = tleft;          // texture

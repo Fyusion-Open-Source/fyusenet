@@ -10,7 +10,6 @@
 //--------------------------------------- System Headers -------------------------------------------
 
 #include <cstring>
-#include <cassert>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
@@ -50,9 +49,9 @@ DeepFunctionLayer::DeepFunctionLayer(const GPULayerBuilder & builder, int layerN
  * @copydoc GPULayerBase::cleanup
  */
 void DeepFunctionLayer::cleanup() {
-    delete vertexBuffer_;
-    delete indexBuffer_;
-    delete vertexArray_;
+    if (vertexBuffer_) delete vertexBuffer_;
+    if (indexBuffer_) delete indexBuffer_;
+    if (vertexArray_) delete vertexArray_;
     vertexBuffer_ = nullptr;
     indexBuffer_ = nullptr;
     vertexArray_ = nullptr;
@@ -107,9 +106,7 @@ void DeepFunctionLayer::forward(uint64_t sequence) {
  */
 std::vector<BufferSpec> DeepFunctionLayer::getRequiredInputBuffers() const {
     std::vector<BufferSpec> result;
-    result.push_back(BufferSpec(0,0,tiler_->getInputTextureWidth(),tiler_->getInputTextureHeight(),
-                                TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                BufferSpec::FUNCTION_SOURCE).dataOrder(BufferSpec::order::GPU_DEEP));
+    result.push_back(BufferSpec(0,0,tiler_->getInputTextureWidth(),tiler_->getInputTextureHeight(),TEXTURE_IFORMAT_4,TEXTURE_FORMAT_4,TEXTURE_TYPE_DEFAULT,BufferSpec::FUNCTION_SOURCE));
     if (flags_ & LayerFlags::RESIDUAL_INPUT) {
         result.push_back(BufferSpec(0, 1, residualViewport_[0], residualViewport_[1],
                                     TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
@@ -155,7 +152,6 @@ void DeepFunctionLayer::setupNetworkPolygons(VAO *vao) {
     //---------------------------------------------
     std::vector<DeepTiler::Tile> otiles = tiler_->createOutputTiles();
     std::vector<DeepTiler::Tile> itiles = tiler_->createInputTiles(0, 0);
-    assert(otiles.size() == itiles.size());
     for (int i=0; i < (int)itiles.size(); i++) {
         DeepTiler::Tile ot = otiles.at(i);
         DeepTiler::Tile it = itiles.at(i);

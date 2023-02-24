@@ -6,7 +6,7 @@ import android.view.SurfaceHolder
 
 class GLView(ctx: Context, handler: Handler) : GLSurfaceView(ctx) {
 
-    private var render_ : CameraRender
+    private lateinit var render_ : CameraRender
 
     init {
         setEGLContextClientVersion(3)

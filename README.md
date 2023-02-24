@@ -27,8 +27,8 @@ of different layers that are supported by it.
 In 2017 an early version of FyuseNet made it into the firmware
 of a major smartphone manufacturer as part of the stock camera app. It has also been used to generate FX
 for a [music video](https://www.youtube.com/watch?v=pLqVDCXiwGY&ab_channel=Jiox). Other
-than that, FyuseNet has only been used internally and is part of a set of Android apps that Fyusion maintains. 
-The code has not been significantly changed since 2019 and the version in this repository is a bit stripped down from the internal 
+than that, FyuseNet has only been used internally. The code has not been significantly changed
+since 2019 and the version in this repository is a bit stripped down from the internal 
 version, which contained shader code that was specifically optimized for ARM Mali GPUs prior to the G-series
 (T-880 for example) as well as support for a proprietary NPU. For the public release we chose to exclude that
 code for various reasons. 
@@ -45,7 +45,7 @@ design having to support OpenGL/ES 2.0, FyuseNet does not use compute shaders an
 shaders instead. The layer-centric approach has the drawback that every type of operation
 must be coded into layers, which consists of a bit of C++ code and associated [GLSL](https://www.khronos.org/opengl/wiki/OpenGL_Shading_Language)
 shader code. It is therefore not as flexible as a tensor centric system that executes (elementary) operations on the tensors
-in case there is no specific implementation available for the operation at hand and also offer more flexibility on indexing and reshuffling.
+in case there is no specific implementation available for the operation at hand.
 
 In order to deliver the performance required to run (some) networks in real-time while not consuming too much VRAM and memory bandwidth,
 a number of tweaks have been integrated into the library. The most important one being the ability to _fuse_ operations in a single 
@@ -65,17 +65,16 @@ spans over all channels of a feature-map, which can be a lot. As it is hard/impo
 in a single rendering step using fragment shaders using the chosen data layout, we use the built-in alpha-blending capability of the 
 raster processors to perform the accumulation for us. This has the added benefit of getting some arithmetic
 operations essentially for free, as it does not change execution time within the shader.
-
 The trained observer will notice that FyuseNet does not use the usual [im2col](https://towardsdatascience.com/how-are-convolutions-actually-performed-under-the-hood-226523ce7fbf)
 approach for convolutions, which we opted against for several reasons. The most important reason was that many of our early
 networks had quite wide convolutions and the additional memory overhead posed a problem on the smartphone hardware back in
 2016. A drawback of that particular approach is, that the batch size is currently always limited to 1. 
 However, as the main use-case for FyuseNet was to use it in real-time scenarios on camera streams from smartphones, this is an 
 acceptable compromise.
-Last but not least, to further conserve VRAM, FyuseNet re-uses textures whenever possible for intermediary/temporary buffers
+Last but not least, to conserve VRAM, FyuseNet re-uses textures whenever possible for intermediary/temporary buffers
 along the computational chain.
 
-FyuseNet is a comparably lightweight library. The runtime
+In addition to using a few tricks on the execution side, FyuseNet is a comparably lightweight library. The runtime
 has no notable external dependency aside from OpenGL. Technically, the same library binary can be used
 to run a variety of networks, only the network-specific frontend parts along with the weight data are changed on
 different nets. It can also run on a variety of target architectures, including edge computing devices that use embedded
@@ -116,8 +115,8 @@ The following table lists those build flags, along with their default configurat
 | USE_EGL                  | OFF     | Use [EGL](https://www.khronos.org/egl) instead of [GL](https://www.khronos.org/gl) | [EGL](https://www.khronos.org/egl) | 
 | USE_GLFW                 | OFF     | Use [GLFW](https://glfw.org) instead of [GL](https://www.khronos.org/gl), this is useful when using GL debuggers like [NVIDIA nSight](https://developer.nvidia.com/nsight-graphics) on desktop machines | [GLFW](https://glfw.org) | 
 | USE_MULTITHREADING       | ON      | Depending on the build platform multi-threading may be on or off by default. For Linux and Android builds it is on | |
-| BUILD_SAMPLES            | ON      | Build sample networks | |
-| BUILD_TESTS              | ON     | Build unit tests (not for WebGL) | |
+| BUILD_SAMPLES            | OFF     | Build sample networks | |
+| BUILD_TESTS              | OFF     | Build unit tests | |
 | BUILD_DOCS               | OFF     | Build doxygen documentation | [doxygen](https://www.doxygen.nl/index.html) |
 
 Build flags can be set on the command line as parameters to the `cmake` executable. For example:
@@ -163,27 +162,17 @@ to the destination folders. The default installation prefix, which usually is `/
 be changed using the `--prefix` parameter supplied to the `cmake` command.
 
 #### Desktop Samples
-Currently this repository only ships with two sample applications for desktop:
- - A simple style-transfer tool
- - A ResNet-50 ImageNet classifier
+Currently this repository only ships with a single sample application for desktop, which performs a style-transfer
+operation on a single image and writes out the result.
 
-After building the sample, the applications can be found under
+After building the sample, the application can be found under
 ```
 <build_directory>/samples/desktop/stylenet
-<build_directory>/samples/desktop/resnet
 ```
 To run a 9x9 kernel style-transfer network on an input image, use:
 ```
 stylenet -k 9 -w <weightfile> <input.jpg> <output.jpg>
 ```
-
-To run the ResNet classifier network on an input image, use:
-```
-resnet -w <weightfile> -c <classlabels> <input.jpg>
-```
-
-Weight files and a few example pictures can be found in the data directory.
-
 
 ### Compiling for Android
 Compiling the library for Android should be as straightforward as for desktop Linux. The most important prerequisite for
@@ -211,8 +200,8 @@ must be set:
 
 | Variable              | Description 
 |-----------------------|----------------------------------------------------|
-| ANDROID_ABI           | Defines the [ABI](https://en.wikipedia.org/wiki/Application_binary_interface) for the target CPU, e.g. `arm64-v8a` for most modern Android devices |
-| ANDROID_PLATFORM      | Target Android [API level](https://en.wikipedia.org/wiki/Android_version_history), for example `android-28` for Android 9 and above |
+| ANDROID_ABI           | Defines the [ABI](wikipedia link) for the target CPU, e.g. `arm64-v8a` for most modern Android devices |
+| ANDROID_PLATFORM      | Target Android [API level](link), for example `android-28` for Android 9 and above |
 | ANDROID_NDK           | Base directory of the Android NDK installation (see description above) |
 | CMAKE_TOOLCHAIN_FILE  | Toolchain definition file for `cmake`, which resides in the NDK installation |
 
@@ -286,11 +275,3 @@ The documentation build is fairly easy and only requires [doxygen](https://www.d
 configurations above, simply supplying `-DBUILD_DOCS=ON` to the `cmake` command also flags the documentation to be build.
 The HTML output of the documentation will be stored in a folder named `docs` in the top-level source directory.
 
-For convenience purposes, the [documentation](https://fyusion-open-source.github.io/fyusenet) is also supplied as GitHub page and
-is updated whenever the main branch is updated.
-
-## Future Improvements
-The code in FyuseNet, particularly the CPU parts, is not fully optimized yet. For the GPU part, there are still too many calls
-that perform redundant operations on the GL engine state and cutting a few of those may result in improved runtime.
-By far the most pressing part for future improvements is to support more layer types, as our currently supported subset is
-rather small. There is also a bit of optimization potential in some of the shaders that we may exploit in the future.

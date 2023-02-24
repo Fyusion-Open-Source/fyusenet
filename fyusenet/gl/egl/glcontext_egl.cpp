@@ -22,6 +22,7 @@
 #include "../glexception.h"
 #include "../../common/logging.h"
 #include "../glcontext.h"
+#include "eglhelper.h"
 #include "../../gpu/gfxcontextmanager.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
@@ -185,8 +186,28 @@ bool GLContext::isCurrent() const {
  */
 void GLContext::init() {
     EGLint major, minor, configs;
+    EGLint maxMajor = 0, maxMinor = 0;
 
-    display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    EGLHelper::iterateEGLDisplays([&](EGLDisplay eglDisplay, bool* stop) {
+        if (!eglInitialize(eglDisplay, &major, &minor)){
+            EGLint err = eglGetError();
+            FNLOGW("Cannot init EGL display: %d", err);
+            return;
+        }
+
+        char const* vendor = eglQueryString(eglDisplay, EGL_VENDOR);
+        bool preferredVendor = vendor && (0 == strncmp(vendor, "NVIDIA", 6));
+        if (((major >= maxMajor) && (minor > maxMinor)) ||
+            ((major >= maxMajor) && (minor >= maxMinor) && preferredVendor)) {
+            maxMajor = major;
+            maxMinor = minor;
+            display_ = eglDisplay;
+        }
+        eglTerminate(eglDisplay);
+    });
+
+    if (!display_)
+        display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (!display_) THROW_EXCEPTION_ARGS(GLException,"Cannot get EGL display");
     if (!eglInitialize(display_,&major,&minor)){
         EGLint err = eglGetError();

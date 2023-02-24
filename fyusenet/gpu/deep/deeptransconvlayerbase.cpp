@@ -116,11 +116,23 @@ void DeepTransConvLayerBase::forward(uint64_t sequence) {
     glBindTexture(GL_TEXTURE_2D,biasTexture_);
 
     if (flags_ & LayerFlags::RESIDUAL_INPUT) {
-        // TODO (mw) residual code here
+        // todo residual code here
     }
+    int instances = tiler_->numInputTiles();
+    int tris = tiler_->numOutputTiles();
 
-    for (int pass=0; pass < 4; pass++) {
-        renderPass(pass);
+    for (int pass=0;pass<4;pass++) {
+        glStencilFuncSeparate(GL_FRONT_AND_BACK,GL_EQUAL,pass+1,0xFF);
+        shader_->bind(shaderState_.get());
+        shader_->setMappedUniformValue(PASS,pass);
+        glDrawElements(GL_TRIANGLES,tris*6,GL_UNSIGNED_SHORT,(const GLvoid *)0);
+        shader_->unbind(true);
+        if (instances > 1) {
+            noBiasShader_->bind(noBiasShaderState_.get());
+            noBiasShader_->setMappedUniformValue(PASS,pass);
+            glDrawElementsInstanced(GL_TRIANGLES,tris*6,GL_UNSIGNED_SHORT,(const GLvoid *)0,instances-1);
+            noBiasShader_->unbind();
+        }
     }
 
     framebuffers_.at(0)->unbind();
@@ -175,7 +187,7 @@ void DeepTransConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, s
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-#ifdef GL_RGBA32UI
+#ifdef ANDROID
     glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI,texwidth/2,texheight,0,GL_RGBA_INTEGER,GL_UNSIGNED_INT,fp16);
 #else
     glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI_EXT,texwidth/2,texheight,0,GL_RGBA_INTEGER_EXT,GL_UNSIGNED_INT,fp16);

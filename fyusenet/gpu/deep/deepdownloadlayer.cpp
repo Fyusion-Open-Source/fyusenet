@@ -40,8 +40,6 @@ DeepDownloadLayer::DeepDownloadLayer(const UpDownLayerBuilder& builder, int laye
     DeepLayerBase((const GPULayerBuilder &)builder,layerNumber), CPULayerInterface(), DownloadLayerInterface() {
     assert(builder.direction_ == UpDownLayerBuilder::DOWNLOAD);
     assert(inputPadding_ == outputPadding_);      // NOTE (mw) for now we do not allow padding change in this layer
-    if (flags_ & LayerFlags::PRE_ACT_MASK) THROW_EXCEPTION_ARGS(FynException,"Activation on download not implemented yet");
-    if (flags_ & LayerFlags::RESIDUAL_INPUT) THROW_EXCEPTION_ARGS(FynException,"Residual add on download not implemented yet");
 #ifdef FYUSENET_MULTITHREADING
     if (builder.callback_) userCallback_ = builder.callback_;
     async_ = builder.async_;
@@ -72,9 +70,9 @@ std::vector<BufferSpec> DeepDownloadLayer::getRequiredInputBuffers() const {
  */
 std::vector<BufferSpec> DeepDownloadLayer::getRequiredOutputBuffers() const {
     std::vector<BufferSpec> result;
-    result.push_back(BufferSpec(0, 0, width_, height_,
+    result.push_back(BufferSpec(0,0,tiler_->getViewportWidth(),tiler_->getViewportHeight(),
                                 BufferSpec::SINGLE32F, BufferSpec::SINGLE, BufferSpec::FLOAT,
-                                BufferSpec::CPU_DEST, outputChannels_).device(BufferSpec::COMP_STOR_CPU).dataOrder(BufferSpec::order::GPU_DEEP));
+                                BufferSpec::CPU_DEST).device(BufferSpec::COMP_STOR_CPU).dataOrder(BufferSpec::order::GPU_DEEP));
     return result;
 }
 
@@ -83,11 +81,7 @@ std::vector<BufferSpec> DeepDownloadLayer::getRequiredOutputBuffers() const {
  * @copydoc cpu::CPULayerInterface::addOutputBuffer
  */
 void DeepDownloadLayer::addOutputBuffer(CPUBuffer *buf, int port) {
-    assert(buf);
     if (port != 0) THROW_EXCEPTION_ARGS(FynException, "Ports other than 0 are not supported");
-    if (buf->shape().dataOrder() != CPUBufferShape::order::GPU_DEEP) {
-        THROW_EXCEPTION_ARGS(FynException, "Buffers supplied to this layer must be in GPU_DEEP order");
-    }
     outputs_.push_back(buf);
     assert(outputs_.size() <= 1);   // for now we only support one output buffer
     outputChanged_ = true;
@@ -116,7 +110,6 @@ bool DeepDownloadLayer::hasOutputBuffer(int port) const {
  */
 CPUBuffer * DeepDownloadLayer::getOutputBuffer(int port) const {
     assert(port == 0);
-    if ((int)outputs_.size() <= port) return nullptr;
     return outputs_.at(0);
 }
 
@@ -137,6 +130,8 @@ void DeepDownloadLayer::forward(uint64_t sequence) {
     assert(outputs_.size() == 1);
     assert(numFBOs() == 1);
     // TODO (mw) implement optional rendering step here (for ReLU)
+    if (flags_ & LayerFlags::PRE_ACT_MASK) THROW_EXCEPTION_ARGS(FynException,"Activation on download not implemented yet");
+    if (flags_ & LayerFlags::RESIDUAL_INPUT) THROW_EXCEPTION_ARGS(FynException,"Residual add on download not implemented yet");
     ManagedPBO pbo = pboBlit();
 #ifndef FYUSENET_MULTITHREADING
     if (true) {
@@ -243,9 +238,8 @@ ManagedPBO DeepDownloadLayer::pboBlit() {
     ManagedPBO pbo = pool->getAvailablePBO(paddedwidth, paddedheight, PIXEL_PACKING, bytesPerChan_);
     pbo->prepareForRead(paddedwidth * paddedheight * PIXEL_PACKING * bytesPerChan_);
     FBO *fbo = getFBO(0);
-    fbo->bind();
-    fbo->copyToPBO(*pbo, GL_FLOAT, PIXEL_PACKING, 0, true);
-    fbo->unbind();
+    fbo->copyToPBO(*pbo, GL_FLOAT, PIXEL_PACKING);
+    pbo->unbind(GL_PIXEL_PACK_BUFFER);
     if (async_) pbo.setPending();
     return pbo;
 }

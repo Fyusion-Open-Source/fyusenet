@@ -73,17 +73,6 @@ class DeepTransConvLayerBase : public DeepConvLayerBase {
     virtual void setupNetworkPolygons(VAO *vao) override;
     void setupStencilBuffer();
 
-    /**
-     * @brief Execute a single render pass (4 passes in total)
-     *
-     * @param pass Pass number, starts at 0
-     *
-     * The individual implementations of this function perform the actual rendering of each single
-     * pass (4 of them in total) in order to fill the target tensor with the correct data. Specific
-     * shaders are bound for each pass.
-     */
-    virtual void renderPass(int pass) = 0;
-
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------

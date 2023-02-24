@@ -23,7 +23,7 @@ namespace fyusenet {
 using layerflags = uint32_t;
 
 /**
- * @brief Namespace for covering layer flags (as their bitwise combinations)
+ * Namespace for covering layer flags (as their bitwise combinations)
  *
  * @todo The layer flags are mainly comprised of activations. Listing those as bitmask is
  *       not future-proof at all. The flags should be refactored into actual flags and
@@ -31,19 +31,18 @@ using layerflags = uint32_t;
  */
 // TODO (mw) refactor flags into flags and activation modes
 namespace LayerFlags {
-    constexpr static layerflags NO_LAYER_FLAGS = 0;        //!< This layer has no flags (thus it is 0)
-    constexpr static layerflags RESIDUAL_INPUT = 1;        //!< This layer has residual input (another layer directly added to its results)
+    constexpr static layerflags NO_LAYER_FLAGS = 0;       //!< This layer has no flags (thus it is 0)
+    constexpr static layerflags RESIDUAL_INPUT = 1;       //!< This layer has residual input (another layer directly added to its results)
 // TODO (mw) refactor to ACT_ON_RESIDUAL and add more activation modes to the residual
-    constexpr static layerflags RELU_ON_RESIDUAL = 2;      //!< The residual to this layer should be subject to a ReLU operation (currently only simple ReLU is supported)
-    constexpr static layerflags BATCHNORM_ON_RESIDUAL = 4; //!< Batchnorm (post) should also be applied on the residual
-    constexpr static layerflags POST_BATCHNORM = 8;        //!< This layer is subject to a batchnorm-type rescale/bias operation on \e writing of its output data
-    constexpr static layerflags DEEP = 16;                 //!< This layer is a deep layer for GPU exeuction (uses different memory layout on GPUs)
-    constexpr static layerflags POST_RELU = 32;            //!< This layer is subject to perform a ReLU operation on \e writing of the output data (not supported by GPU layers)
-    constexpr static layerflags PRE_RELU = 64;             //!< This layer is subject to perform a ReLU operation on \e reading of the input data
-    constexpr static layerflags PRE_CLIP = 128;            //!< This layer is subject to a clipping operation on \e reading of the input data (data will be clipped to a given value range)
+    constexpr static layerflags RELU_ON_RESIDUAL = 2;     //!< The residual to this layer should be subject to a ReLU operation (currently only simple ReLU is supported)
+    constexpr static layerflags POST_BATCHNORM = 8;       //!< This layer is subject to a batchnorm-type rescale/bias operation on \e writing of its output data
+    constexpr static layerflags DEEP = 16;                //!< This layer is a deep layer for GPU exeuction (uses different memory layout on GPUs)
+    constexpr static layerflags POST_RELU = 32;           //!< This layer is subject to perform a ReLU operation on \e writing of the output data (not supported by GPU layers)
+    constexpr static layerflags PRE_RELU = 64;            //!< This layer is subject to perform a ReLU operation on \e reading of the input data
+    constexpr static layerflags PRE_CLIP = 128;           //!< This layer is subject to a clipping operation on \e reading of the input data (data will be clipped to a given value range)
 // TODO (mw) implement in shader activation
-    constexpr static layerflags PRE_SIGMOID = 256;         //!< This layer is subject to a sigmoid activation on \e reading of the input data (not implemented yet)
-    constexpr static layerflags PRE_TANH = 512;            //!< This layer is subject to a tanh activation on \e reading of the input data (not implemented yet)
+    constexpr static layerflags PRE_SIGMOID = 256;        //!< This layer is subject to a sigmoid activation on \e reading of the input data (not implemented yet)
+    constexpr static layerflags PRE_TANH = 512;           //!< This layer is subject to a tanh activation on \e reading of the input data (not implemented yet)
     constexpr static layerflags ACT_MASK = (PRE_RELU | PRE_CLIP | PRE_SIGMOID | PRE_TANH | POST_RELU);
     constexpr static layerflags PRE_ACT_MASK = (PRE_RELU | PRE_CLIP | PRE_SIGMOID | PRE_TANH);
 }
@@ -162,8 +161,6 @@ enum class LayerType : uint16_t {
     UPLOAD,                 //!< Upload layer
     RESIDUAL,               //!< Residual pseudo-layer (used internally, don't bother for now)
     OESCONV,                //!< Conversion layer that converts OES textures to "normal" textures (EGL / Android only)
-    BATCHNORM,              //!< Explicit batchnorm layer
-    GEMM,                   //!< Generalized matrix/matrix multiplication, implemented as MV -> 1x1 conv here since we cannot batch anyway
     CUSTOM,                 //!< Custom layer
     LAST_SUPPORTED,         //!< Last supported layer type (+1)
     ILLEGAL = 1000          //!< Placeholder for illegal layer types

@@ -72,7 +72,7 @@ void main(void) {
 #endif
   texCoord.w = float(attributes1.y+1);
 #ifdef USE_RESIDUAL
-  resCoord.xy = attributes2.xy;
+  resCoord = attributes2.xy;
 #endif
 }
 

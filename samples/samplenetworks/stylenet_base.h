@@ -138,7 +138,7 @@ class StyleNetBase : public fyusion::fyusenet::NeuralNetwork {
 
     /**
      * Stores a key/offset map that stores the offsets for the weight/bias data for the individual
-     * layers. The offset is given in number of single-precision floating point values.
+     * layers.
      */
     std::unordered_map<int,size_t> weightOffsets_;
 
@@ -147,7 +147,7 @@ class StyleNetBase : public fyusion::fyusenet::NeuralNetwork {
      *
      * @see setInputBuffer
      */
-    fyusion::fyusenet::cpu::CPUBuffer * inBuffers_[ASYNC_BUFFERS] = {0};
+    fyusion::fyusenet::cpu::CPUBuffer * inBuffers_[ASYNC_BUFFERS];
 
 #ifdef FYUSENET_MULTITHREADING
     std::mutex downloadBufferLock_;                     //!< Lock for use with #usedDownloadBuffers_ and #downloadBufferAvail_

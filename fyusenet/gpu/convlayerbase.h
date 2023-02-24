@@ -45,8 +45,7 @@ class ConvLayerBase : public GPULayerBase, public ConvLayerInterface {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
-    ConvLayerBase(const ConvLayerBuilder & builder, int layerNumber);
-    ConvLayerBase(const GPULayerBuilder & builder, int layerNumber);
+    ConvLayerBase(const ConvLayerBuilder &builder, int layerNumber);
     virtual ~ConvLayerBase();
 
     // ------------------------------------------------------------------------

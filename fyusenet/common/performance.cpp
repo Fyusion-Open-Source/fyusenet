@@ -27,26 +27,26 @@
 ##################################################################################################*/
 
 
-tstamp fy_get_stamp() {
+tstamp get_stamp() {
     struct timespec spec;
-    clock_gettime(CLOCK_MONOTONIC, &spec);
+    clock_gettime(CLOCK_MONOTONIC,&spec);
     return ((unsigned long long int)spec.tv_sec)*1000000000ULL+(unsigned long long int)spec.tv_nsec;
 }
 
-unsigned int fy_elapsed_nanos(tstamp start,tstamp end) {
+unsigned int elapsed_nanos(tstamp start,tstamp end) {
     return (unsigned int)(end-start);
 }
 
-unsigned int fy_elapsed_micros(tstamp start,tstamp end) {
-    return (unsigned int)((end/1000) - (start/1000));
+unsigned int elapsed_micros(tstamp start,tstamp end) {
+    return (unsigned int)((end/1000)-(start/1000));
 }
 
-unsigned int fy_elapsed_millis(tstamp start,tstamp end) {
-    return (unsigned int)(((end/1000) - (start/1000))/1000);
+unsigned int elapsed_millis(tstamp start,tstamp end) {
+    return (unsigned int)(((end/1000)-(start/1000))/1000);
 }
 
-unsigned int fy_elapsed_seconds(tstamp start,tstamp end) {
-    return fy_elapsed_millis(start,end)/1000;
+unsigned int elapsed_seconds(tstamp start,tstamp end) {
+    return elapsed_millis(start,end)/1000;
 }
 
 

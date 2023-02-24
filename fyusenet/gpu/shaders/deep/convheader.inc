@@ -22,6 +22,6 @@ layout(location=0) out vec4 fragmentColor0;
 
 in highp vec4 texCoord;
 
-#if defined(USE_RESIDUAL)
+#ifdef USE_RESIDUAL
 in highp vec2 resCoord;
 #endif

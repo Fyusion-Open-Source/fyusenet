@@ -440,12 +440,12 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
             //-----------------------------------------------------------
             if (layer->getDevice() == compute_device::DEV_CPU) {
                 cpu::CPULayerBase * cpulay = dynamic_cast<cpu::CPULayerBase *>(layer);
-                if (timings_) start = fy_get_stamp();
+                if (timings_) start = get_stamp();
                 cpulay->forward(state.sequenceNo);
                 if (timings_) {
-                    end = fy_get_stamp();
+                    end = get_stamp();
                     if (runs_ == 0) timingData_[idx] = 0;
-                    timingData_[idx] += fy_elapsed_micros(start, end);
+                    timingData_[idx] += elapsed_micros(start, end);
                 }
                 if (writeResults_) {
                     // NOTE (mw) we assume it is floating point data every time
@@ -521,7 +521,7 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
                     //-------------------------------------------------------
                     if (dynamic_cast<DownloadLayer *>(layer)) {
                         DownloadLayer * dl = dynamic_cast<DownloadLayer *>(layer);
-                        if (timings_) start = fy_get_stamp();
+                        if (timings_) start = get_stamp();
                         CPUBuffer * buf = dl->getOutputBuffer(0);
                         if (!buf) THROW_EXCEPTION_ARGS(FynException,"No output buffer in download layer %s", dl->getName().c_str());
                         if (dl->isAsync()) {
@@ -545,9 +545,9 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
 #endif
                         } else dl->forward(state.sequenceNo);
                         if (timings_) {
-                            end = fy_get_stamp();
+                            end = get_stamp();
                             if (runs_ == 0) timingData_[idx] = 0;
-                            timingData_[idx] += fy_elapsed_micros(start, end);
+                            timingData_[idx] += elapsed_micros(start, end);
                         }
                         if ((writeResults_) && (!dl->isAsync())) {
                             // TODO (mw) also handle write-out for asynchronous layers, currently they are ignored
@@ -556,7 +556,7 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
                     } else
                         if (dynamic_cast<deep::DeepDownloadLayer *>(layer)) {
                             deep::DeepDownloadLayer * dl = dynamic_cast<deep::DeepDownloadLayer *>(layer);
-                            if (timings_) start = fy_get_stamp();
+                            if (timings_) start = get_stamp();
                             CPUBuffer * buf = dl->getOutputBuffer(0);
                             if (!buf) THROW_EXCEPTION_ARGS(FynException,"No output buffer in download layer %s", dl->getName().c_str());
                             if (dl->isAsync()) {
@@ -580,9 +580,9 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
 #endif
                             } else dl->forward(state.sequenceNo);
                             if (timings_) {
-                                end = fy_get_stamp();
+                                end = get_stamp();
                                 if (runs_ == 0) timingData_[idx] = 0;
-                                timingData_[idx] += fy_elapsed_micros(start, end);
+                                timingData_[idx] += elapsed_micros(start, end);
                             }
                             if ((writeResults_) && (!dl->isAsync())) {
                                 // TODO (mw) missing handling of asynchronous stuff elsewhere
@@ -592,12 +592,12 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
                             //-------------------------------------------------------
                             // Handle (standard) GPU layers...
                             //-------------------------------------------------------
-                            if (timings_) start = fy_get_stamp();
+                            if (timings_) start = get_stamp();
                             layer->forward(state.sequenceNo);
                             if (timings_) {
-                                end = fy_get_stamp();
+                                end = get_stamp();
                                 if (runs_ == 0) timingData_[idx] = 0;
-                                timingData_[idx] += fy_elapsed_micros(start, end);
+                                timingData_[idx] += elapsed_micros(start, end);
                             }
                             if (writeResults_) {
                                 (dynamic_cast<GPULayerBase *>(layer))->writeResult(fname.c_str());

@@ -36,12 +36,12 @@ class LayerTestBase {
         if (testTextures_.size() > 0) glDeleteTextures(testTextures_.size(), &testTextures_[0]);
     }
 
-    virtual void generateTextures(fyusion::fyusenet::gpu::GPULayerBase * layer, const std::vector<const float *> & inputs, const float * residual=nullptr, bool includesPadding=false);
-    static float * generateConstantData(float content, int channels, int width, int height, int padding=0);
-    static float * generateRandomData(int channels, int width, int height, float low, float high, int padding=0);
-    static float * generateRandomIntegerData(int channels, int width, int height, float low, float high, int padding=0);
-    static float * generateBilinearData(int channels, int width, int height, int padding=0);
-    virtual float * stackConvolution(float bias, const float * channelData, int kernelX, int kernelY, int inputChannels, int outputChannels);
+    virtual void generateTextures(fyusion::fyusenet::gpu::GPULayerBase * layer, const std::vector<const float *> & inputs, const float * residual);
+    static float * generateConstantData(float content, int channels, int width, int height);
+    static float * generateRandomData(int channels, int width, int height, float low, float high);
+    static float * generateRandomIntegerData(int channels, int width, int height, float low, float high);
+    static float * generateBilinearData(int channels, int width, int height);
+    virtual float * stackConvolution(float bias, const float * channelData, int kernel, int inputChannels, int outputChannels);
 
 
     std::vector<GLuint> testTextures_;

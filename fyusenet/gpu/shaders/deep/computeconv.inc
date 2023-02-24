@@ -1,7 +1,7 @@
 #ifndef NO_HALF
 vec4 compute(in vec4 tex,in int offset) {
   mediump mat4 weights;
-  tex = activate(tex);
+  activate(tex);
   highp uvec4 w = layer0coeffs[offset];
   weights[0] = vec4(unpackHalf2x16(w.x),unpackHalf2x16(w.y));
   weights[1] = vec4(unpackHalf2x16(w.z),unpackHalf2x16(w.w));
@@ -13,7 +13,7 @@ vec4 compute(in vec4 tex,in int offset) {
 #else
 vec4 compute(in vec4 tex,in int offset) {
   mediump mat4 weights;
-  tex = activate(tex);
+  activate(tex);
   weights[0] = layer0coeffs[2*offset];
   weights[1] = layer0coeffs[2*offset+1];
   weights[2] = layer0coeffs[2*offset+2];

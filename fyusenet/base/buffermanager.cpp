@@ -92,7 +92,7 @@ void BufferManager::createCPUOutput(LayerBase *outputLayer, bool lock) {
     const std::vector<BufferSpec>& outputs = outputLayer->getRequiredOutputBuffers();
     for (auto it = outputs.begin(); it != outputs.end(); ++it) {
         if (!cpuout->getOutputBuffer((*it).port_)) {
-            Buffer buf = createBuffer((*it).width_, (*it).height_, (*it).channels_, (*it).internalFormat_, (*it).dataOrder_);
+            Buffer buf = createBuffer((*it).width_, (*it).height_, (*it).channels_, (*it).internalFormat_);
             buf.locked_ = lock;
             cpuout->addOutputBuffer(buf.buf_);
             outputLayer->addOutputConnection(0, nullptr, 0);
@@ -623,13 +623,12 @@ void BufferManager::updateLayerUseByTextureID(GLuint id, int layerNumber,bool lo
  * @param height Height of the buffer to create
  * @param channels Number of channel
  * @param internalFormat OpenGL sized format that this buffer should be usable with
- * @param order Optional data order, defaults to CPUBufferShape::order::CHANNELWISE
  *
  * @return BufferManager::Buffer instance that wraps the allocated buffer
  */
-BufferManager::Buffer BufferManager::createBuffer(int width, int height, int channels, GLint internalFormat, CPUBufferShape::order order) {
-    Buffer buf(height,width,channels,internalFormat);
-    CPUBufferShape shape(height, width, channels, 0, CPUBufferShape::glToType(internalFormat), order);
+BufferManager::Buffer BufferManager::createBuffer(int width, int height, int channels, GLint internalFormat) {
+    Buffer buf(width,height,channels,internalFormat);
+    CPUBufferShape shape(width, height, channels, 0, CPUBufferShape::glToType(internalFormat));
     buf.buf_ = new CPUBuffer(shape);
     return buf;
 }

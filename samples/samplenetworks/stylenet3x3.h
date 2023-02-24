@@ -75,4 +75,3 @@ class StyleNet3x3 : public StyleNetBase {
     float * wbData_ = nullptr;              //!< Deep-copy of weight data supplied in #loadWeightsAndBiases_
 };
 
-// vim: set expandtab ts=4 sw=4:

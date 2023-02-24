@@ -108,7 +108,6 @@ FBO::FBO(const fyusenet::GfxContextLink & context,int width,int height,int chann
  */
 FBO::FBO(const fyusenet::GfxContextLink & context, int width, int height, GLuint color0Texture, GLenum target) : GfxContextTracker(),
     width_(width), height_(height) {
-    assert(color0Texture > 0);
     setContext(context);
     glGenFramebuffers(1,&handle_);
     if (!handle_) THROW_EXCEPTION_ARGS(GLException,"Cannot generate framebuffer");
@@ -343,10 +342,6 @@ size_t FBO::copyToPBO(PBO *target, GLenum dataType, int channels, size_t pboOffs
     if ((stride & 7) == 0) align = 8;
     if (bindPBO) target->bind(GL_PIXEL_PACK_BUFFER);
     glPixelStorei(GL_PACK_ALIGNMENT, align);
-#ifdef DEBUG
-    int err = glGetError();
-    if (err) THROW_EXCEPTION_ARGS(GLException, "Copy to PBO (prior buffer read) yielded error 0x%X", err);
-#endif
     size_t attoffset = 0;
     GLenum format = (integral) ? CHANNELS_TO_FMT_INT[channels-1] : CHANNELS_TO_FMT[channels-1];
     for (int i=0; i < (int)attachments_.size(); i++) {
@@ -357,7 +352,7 @@ size_t FBO::copyToPBO(PBO *target, GLenum dataType, int channels, size_t pboOffs
         }
     }
 #ifdef DEBUG
-    err = glGetError();
+    int err = glGetError();
     if (err) THROW_EXCEPTION_ARGS(GLException, "Copy to PBO yielded error 0x%X", err);
 #endif
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
@@ -513,18 +508,15 @@ int FBO::numDrawBuffers() const {
  *
  * @throws GLException on GL errors for debug builds
  *
- * @pre This particular FBO is bound to the framebuffer target
- *
  * This updates the write-mask for the %FBO, such that it writes to all attachments. Use this
  * function prior to write operations if you use more than one attachment on an %FBO .
  */
 void FBO::setWriteMask() const {
-    assert(bound_);
     int db = numDrawBuffers();
 #ifdef DEBUG
     glGetError();
 #endif
-    glDrawBuffers(db, WRITE_BUFFERS);
+    glDrawBuffers(db,WRITE_BUFFERS);
 #ifdef DEBUG
     int err = glGetError();
     if (err != GL_NO_ERROR) THROW_EXCEPTION_ARGS(GLException,"Illegal write mask set (err=0x%X, db=%d)",err,db);
@@ -571,6 +563,8 @@ void FBO::updateColorAttachment(GLenum attachment, const Texture2D& texture) {
  * @param height New height for %FBO
  *
  * @post Framebuffer will be bound
+ *
+ *
  */
 void FBO::updateColorAttachment(GLenum attachment, GLuint texture, int width, int height) {
     width_ = width;

@@ -12,12 +12,23 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
+#ifdef ANDROID
+#include <GLES3/gl3.h>
+#else
+#ifdef __APPLE__
+#include <OpenGL/gl3.h>
+#include <OpenGL/glext.h>
+#else
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
+#endif
+
 #include <mutex>
 #include <memory>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
-#include "../../gl/gl_sys.h"
 #include "../../gl/shaderprogram.h"
 #include "../../gl/uniformstate.h"
 #include "../gfxcontextlink.h"
@@ -63,7 +74,6 @@ class DeepDepthwiseConvLayer3x3 : public DeepDepthwiseConvLayerBase {
     // Public methods
     // ------------------------------------------------------------------------
     virtual void forward(uint64_t sequence) override;
-    virtual void cleanup() override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
@@ -71,14 +81,6 @@ class DeepDepthwiseConvLayer3x3 : public DeepDepthwiseConvLayerBase {
     virtual void setupNetworkPolygons(VAO *vao) override;
     virtual void compileConvolutionShaders(const char *preproc) override;
     unistateptr initShader(programptr shader);
-
-    // ------------------------------------------------------------------------
-    // Member variables
-    // ------------------------------------------------------------------------
-    programptr shader_;                         //!< Convolution shader program
-    programptr noBiasShader_;                   //!< Convolution shader program that does not include the network bias
-    unistateptr shaderState_;                   //!< Uniform-variable state for #shader_
-    unistateptr noBiasShaderState_;             //!< Uniform-variable state for #noBiasShader_
 };
 
 } // deep namespace

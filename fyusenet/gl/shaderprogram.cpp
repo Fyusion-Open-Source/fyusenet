@@ -184,9 +184,7 @@ void ShaderProgram::bind(UniformState *state) {
  */
 void ShaderProgram::unbind(bool compress) {
 #ifdef DEBUG
-    if (!bound_) {
-        FNLOGW("Shader program was not bound, please check your code");
-    }
+    if (!bound_) FNLOGW("Shader program was not bound, please check your code");
 #endif
     bound_ = false;
     if (!compress) glUseProgram(0);
@@ -1438,7 +1436,7 @@ void ShaderProgram::link() {
 #endif
         THROW_EXCEPTION_ARGS(ShaderException,"Unable to link shaders to program, status is 0x%x (expected 0x%X)",status,GL_TRUE);
     }
-    linked_ = true;
+    linked_=true;
 }
 
 

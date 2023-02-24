@@ -24,7 +24,6 @@ option(BUILD_SAMPLES "Build sample networks" ON)
 option(USE_MULTITHREADING "Enable multi-threading" ${MT_DEFAULT})
 option(USE_EGL "Use embedded GL" OFF)
 option(BUILD_DOCS "Build doxygen documentation" OFF)
-option(HIGH_PRECISION "Experimental 32-bit FP computation" OFF)
 
 if (ANDROID_ABI)
   set(BUILD_TARGET "Android")
@@ -74,10 +73,6 @@ set(CMAKE_EXE_LINKER_FLAGS_EMSCRIPTEN_PROFILE "${CMAKE_CXX_FLAGS_EMSCRIPTEN_PROF
 
 add_compile_definitions(FYUSENET_INTERNAL FYUSENET_CPU_FLOAT_ONLY)
 
-if (HIGH_PRECISION)
-  add_compile_definitions(HIGH_PRECISION)
-endif()
-
 if (APPLE)
   add_compile_definitions(GL_SILENCE_DEPRECATION)
 endif()
@@ -104,7 +99,7 @@ endif()
 
 add_subdirectory(fyusenet)
 
-if (BUILD_TESTS AND NOT (BUILD_TARGET STREQUAL "Web"))
+if (BUILD_TESTS AND NOT (BUILD_TARGET STREQUAL "Android" OR BUILD_TARGET STREQUAL "Web"))
   add_subdirectory(unit_tests)
 endif()
 

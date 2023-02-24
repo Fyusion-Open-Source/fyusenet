@@ -55,12 +55,12 @@ class BufferManager : public GfxContextTracker {
         /**
          * @brief Constructor for buffer/tensor representation (does no allocation)
          *
-         * @param height Height of buffer/tensor to represent
          * @param width Width of buffer/tensor to represent
+         * @param height Height of buffer/tensor to represent
          * @param channels Number of channels of buffer/tensor to represent
          * @param intFormat OpenGL-compatible sized format for interfacing with GL code
          */
-        Buffer(int height, int width, int channels, GLuint intFormat) :
+        Buffer(int width, int height, int channels, GLuint intFormat) :
               buf_(nullptr), width_(width), height_(height), channels_(channels), internalFormat_(intFormat) {
         }
 
@@ -150,7 +150,7 @@ class BufferManager : public GfxContextTracker {
     void updateLayerUseByTextureID(GLuint id, int layerNumber, bool lock=false);
     int findBuffer(int inputLayer, int outputLayer, int width, int height, int channels, GLint internalFormat) const;
     int findTexture(int inputLayer,int outputLayer, int width, int height, GLint internalFormat, BufferSpec::interp interpolation) const;
-    Buffer createBuffer(int width, int height, int channels, GLint internalFormat, CPUBufferShape::order order = CPUBufferShape::order::CHANNELWISE);
+    Buffer createBuffer(int width, int height, int channels, GLint internalFormat);
     Texture createTexture(int width, int height, GLint internalFormat, GLuint format, GLuint type,BufferSpec::interp interpolation=BufferSpec::ANY);
 
     // ------------------------------------------------------------------------

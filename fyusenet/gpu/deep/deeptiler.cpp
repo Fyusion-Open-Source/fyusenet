@@ -24,9 +24,29 @@ namespace gpu {
 namespace deep {
 //-------------------------------------- Global Variables ------------------------------------------
 
+// TODO (mw) investigate more into these fuzz coefficients and their platform dependency
+// desktop: EPS 0.01 EPS 0.25
+#define EPS 0.01f
+#ifndef ANDROID
+#define EPS2 0.25f
+#else
+#define EPS2 0.5f
+#endif
 
 //-------------------------------------- Local Definitions -----------------------------------------
 
+/**
+ * @brief Tiling-candidate, for internal computations only
+ *
+ * @see DeepTiler::computeTiles()
+ */
+struct tilecand {
+    tilecand(int x,int y,float cost):x(x),y(y),cost(cost) {
+    }
+    int x;
+    int y;
+    float cost;
+};
 
 /*##################################################################################################
 #                                   P U B L I C  F U N C T I O N S                                 #
@@ -80,11 +100,11 @@ DeepTiler::DeepTiler(LayerType ltype, int width, int height, int inputChannels, 
     outputPadding_ = outputPadding;
     inputTiles_ = (inputChannels + (LayerBase::PIXEL_PACKING-1)) / LayerBase::PIXEL_PACKING;
     outputTiles_ = (outputChannels + (LayerBase::PIXEL_PACKING-1)) / LayerBase::PIXEL_PACKING;
-    std::pair<int,int> intile = CPUBufferShape::computeDeepTiling(inputChannels);
+    std::pair<int,int> intile = computeTiling(inputChannels);
     inputTiling_[0] = intile.first;
     inputTiling_[1] = intile.second;
     inputTiling_[2] = 1;
-    std::pair<int,int> outtile = CPUBufferShape::computeDeepTiling(outputChannels);
+    std::pair<int,int> outtile = computeTiling(outputChannels);
     outputTiling_[0] = outtile.first;
     outputTiling_[1] = outtile.second;
     outputTiling_[2] = 1;
@@ -156,24 +176,32 @@ std::vector<DeepTiler::Tile> DeepTiler::createOutputTiles() const {
  *
  * Creates an array of input tiles, where each tile represent a quadrilateral on the input texture
  * that is to be mapped to an output polygon/tile.
- *
- * @todo Fractional step convolution support
  */
 std::vector<DeepTiler::Tile> DeepTiler::createInputTiles(int xPixelOffset, int yPixelOffset, int texID) const {
     std::vector<Tile> result;
     float tilewidth = (float)width_;
     float tileheight = (float)height_;
+    float epsilonx = -EPS / (float)inputSize_[0];
+    float epsilony = -EPS / (float)inputSize_[1];
     float xextent = tilewidth / (float)inputSize_[0];
     float yextent = tileheight / (float)inputSize_[1];
-    float dx = (globalPooling_) ? 0.0f : 0.5f * (float)(downsample_[0]-1);
-    float dy = (globalPooling_) ? 0.0f : 0.5f * (float)(downsample_[1]-1);
+    if (!globalPooling_) {
+        xextent -= EPS2 / (float)(inputSize_[0] * downsample_[0]);
+        yextent -= EPS2 / (float)(inputSize_[1] * downsample_[1]);
+    }
+    float dx = (float) (globalPooling_) ? 0.f : (downsample_[0] >> 1);
+    float dy = (float) (globalPooling_) ? 0.f : (downsample_[1] >> 1);
     int tilenum=0;
     int remchannels = inputChannels_;
     for (int y=0; y < inputTiling_[1]; y++) {
-        float by = (y * (tileheight + (float)inputPadding_) + (float)(inputPadding_ + yPixelOffset) - dy) / (float) inputSize_[1];
+        // FIXME (mw) super unhappy with this construction, needs more investigation on the texture coordinate interpolation quirks
+        float by = epsilony + (0.5f / (float)upsample_[1] + (y*(tileheight+inputPadding_)) + (float)(inputPadding_ + yPixelOffset)-dy) / (float)inputSize_[1];
+        if (globalPooling_) by = (y*(tileheight+inputPadding_) + (float)(inputPadding_ + yPixelOffset)-dy) / (float)inputSize_[1];
         for (int x=0; x < inputTiling_[0]; x++) {
             Tile t;
-            float bx = (x * (tilewidth + (float)inputPadding_) + (float)(inputPadding_ + xPixelOffset) - dx) / (float) inputSize_[0];
+            // FIXME (mw) super unhappy with this construction, needs more investigation on the texture coordinate interpolation quirks
+            float bx = epsilonx + (0.5f / (float)upsample_[0] + (float)(x*(tilewidth+inputPadding_)) + (float)(inputPadding_+xPixelOffset)-dx) / (float)inputSize_[0];
+            if (globalPooling_) bx = (x*(tilewidth+inputPadding_) + (float)(inputPadding_ + xPixelOffset)-dx) / (float)inputSize_[0];
             t.textureID_ = texID;
             t.quad_[0*2+0] = bx;
             t.quad_[0*2+1] = by;
@@ -246,7 +274,7 @@ int DeepTiler::getViewportHeight() const {
 /**
  * @brief Retrieve total input width of input-tensor texture
  *
- * @return Width of input-tensor texture, including padding
+ * @return Width of input-tensor texture
  *
  * @warning This is \b not necessarily the width of the input tensor, it is the actual width of the
  *          texture where the tiling was performed on
@@ -259,7 +287,7 @@ int DeepTiler::getInputTextureWidth() const {
 /**
  * @brief Retrieve total input height of input-tensor texture
  *
- * @return Height of input-tensor texture, including padding
+ * @return Height of input-tensor texture
  *
  * @warning This is \b not necessarily the height of the input tensor, it is the actual height of the
  *          texture where the tiling was performed on
@@ -272,7 +300,7 @@ int DeepTiler::getInputTextureHeight() const {
 /**
  * @brief Get width of single output tile (spatial tensor width) without any padding
  *
- * @return Output tile width (net tensor width, without padding)
+ * @return Output tile width (net tensor width)
  */
 int DeepTiler::getOutputWidth() const {
     return outputWidth_;
@@ -282,7 +310,7 @@ int DeepTiler::getOutputWidth() const {
 /**
  * @brief Get height of single output tile (spatial tensor height) without any padding
  *
- * @return Output tile height (net tensor height, without padding)
+ * @return Output tile height (net tensor height)
  */
 int DeepTiler::getOutputHeight() const {
     return outputHeight_;
@@ -424,24 +452,6 @@ void DeepTiler::Tile::toFloatVec(float *tgt, int offset, int stride, bool transp
 
 
 /**
- * @brief Retrieve midpoint coordinates for a tile
- *
- * @return Pair of x/y midpoint coordinates
- *
- * This convenience function computes the midpoint of a tile, to be used for point-based rendering
- * on 1x1 data.
- */
-std::pair<float,float> DeepTiler::Tile::midPoint() const {
-    float midx=0.f, midy=0.f;
-    for (int i=0; i < 4; i++) {
-        midx += quad_[i*2];
-        midy += quad_[i*2+1];
-    }
-    return std::pair<float,float>(midx/4.0f, midy/4.0f);
-}
-
-
-/**
  * @brief Create an (input) tile with a unit-texture quadrilateral
  *
  * @return Tile instance that contains a unit-texture quadrilateral
@@ -474,12 +484,14 @@ DeepTiler::Tile DeepTiler::getDefaultTextureExtents() const {
     Tile result;
     float tilewidth = (float)width_;
     float tileheight = (float)height_;
-    float xextent = tilewidth / (float)inputSize_[0];
-    float yextent = tileheight / (float)inputSize_[1];
-    float dx = (globalPooling_) ? 0.0f : 0.5f * (float)(downsample_[0]-1);
-    float dy = (globalPooling_) ? 0.0f : 0.5f * (float)(downsample_[1]-1);
-    float bx = ((float)inputPadding_ - dx) / (float) inputSize_[0];
-    float by = ((float)inputPadding_ - dy) / (float) inputSize_[1];
+    float xextent = tilewidth/inputSize_[0];
+    float yextent = tileheight/inputSize_[1];
+    xextent -= EPS2/(float)(inputSize_[0]*downsample_[0]);
+    yextent -= EPS2/(float)(inputSize_[1]*downsample_[1]);
+    float epsilonx = -EPS/(float)inputSize_[0];
+    float epsilony = -EPS/(float)inputSize_[1];
+    float bx = epsilonx+(0.5f+(float)inputPadding_-(downsample_[0]>>1))/(float)inputSize_[0];
+    float by = epsilony+(0.5f+(float)inputPadding_-(downsample_[1]>>1))/(float)inputSize_[1];
     result.quad_[0*2+0] = bx;
     result.quad_[0*2+1] = by;
     result.quad_[1*2+0] = bx;
@@ -527,6 +539,40 @@ void DeepTiler::Tile::toDisplacement(const Tile& defaultExtents,float *tgt, int 
 /*##################################################################################################
 #                               N O N -  P U B L I C  F U N C T I O N S                            #
 ##################################################################################################*/
+
+
+/**
+ * @brief Compute tile arrangement for a given channel count
+ *
+ * @param channels Number of channels in the tensor
+ *
+ * @return X/Y tiling (width, height)
+ *
+ * Computes a tile arrangement that has a decent aspect ratio and does not waste too much
+ * texture memory.
+ */
+// TODO (mw) also factor in spatial dimensions to not break texture size limits
+std::pair<int,int> DeepTiler::computeTiling(int channels) {
+    // NOTE (mw) this code could use some optimization
+    std::vector<tilecand> candidates;
+    int tiles = (channels + (LayerBase::PIXEL_PACKING-1))/LayerBase::PIXEL_PACKING;
+    for (int y=1; y <= tiles; y++) {
+        for (int x=y; x <= tiles; x++) {
+            if (x*y >= tiles) {
+                float aspectcost = (float)(((x-y) >= 0) ? (x-y) : (y-x));
+                float unusedcost = (float)(x*y - tiles);
+                candidates.push_back(tilecand(x, y, aspectcost+unusedcost));
+            }
+        }
+    }
+    auto minitem = std::min_element(candidates.begin(),candidates.end(),[](const tilecand& c1,const tilecand& c2) {return c1.cost < c2.cost;});
+    if (minitem == candidates.end()) {
+        THROW_EXCEPTION_ARGS(FynException,"Cannot compute tiling");
+    }
+    return std::pair<int,int>(minitem->x,minitem->y);
+}
+
+
 
 
 

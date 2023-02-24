@@ -77,13 +77,13 @@ class AsyncTest : public ::testing::Test, public TestContextManager {
 
     void initNetwork(const char * testImage) {
         int imgwidth, imgheight;
-        std::unique_ptr<uint8_t[]> img8bit(JPEGIO::loadRGBImage(testImage, imgwidth, imgheight));
+        auto * img8bit = JPEGIO::loadRGBImage(testImage, imgwidth, imgheight);
         ASSERT_NE(img8bit, nullptr);
         image_ = new float[imgwidth * imgheight * 3];
-        const uint8_t * imgptr = img8bit.get();
         for (int i=0; i < imgwidth * imgheight * 3 ; i++) {
-            image_[i] = ((float)imgptr[i])/255.f;
+            image_[i] = ((float)img8bit[i])/255.f;
         }
+        delete [] img8bit;
         initNetwork(imgwidth, imgheight);
     }
 
@@ -100,12 +100,12 @@ class AsyncTest : public ::testing::Test, public TestContextManager {
         size_t fsz = ftell(in);
         fseek(in, 0, SEEK_SET);
         ASSERT_EQ(fsz % sizeof(float), 0ul);
-        std::unique_ptr<float[]> weights(new float[fsz / sizeof(float)]);
-        ASSERT_NE(weights, nullptr);
-        fread(weights.get(), 1, fsz, in);
+        float * weights = new float[fsz / sizeof(float)];
+        fread(weights, 1, fsz, in);
         fclose(in);
-        network_->loadWeightsAndBiases(weights.get(), fsz / sizeof(float));
+        network_->loadWeightsAndBiases(weights, fsz / sizeof(float));
         network_->setup();
+        delete [] weights;
     }
 
 
@@ -164,21 +164,20 @@ TEST_F(AsyncTest, AsyncTest02GC) {
     using namespace fyusion::fyusenet;
     NumberRender render(512, 512, 8, 3);
     initNetwork(512, 512);
-    std::unique_ptr<uint8_t[]> rgbout(new uint8_t[512*512*3]);
+    uint8_t * rgbout = new uint8_t[512*512*3];
     auto callback = [&](uint64_t seq, fyusion::fyusenet::cpu::CPUBuffer *buf) {
         char fname[256];
         ASSERT_NE(buf, nullptr);
         const float * src = buf->map<float>();
         ASSERT_NE(src, nullptr);
-        uint8_t *rgbptr = rgbout.get();
         for (int i=0; i < 512*512; i++) {
-            rgbptr[i*3+0] = (uint8_t)std::min(255,std::max(0, (int)(src[i*4+0]*255.f)));
-            rgbptr[i*3+1] = (uint8_t)std::min(255,std::max(0, (int)(src[i*4+1]*255.f)));
-            rgbptr[i*3+2] = (uint8_t)std::min(255,std::max(0, (int)(src[i*4+2]*255.f)));
+            rgbout[i*3+0] = (uint8_t)std::min(255,std::max(0, (int)(src[i*4+0]*255.f)));
+            rgbout[i*3+1] = (uint8_t)std::min(255,std::max(0, (int)(src[i*4+1]*255.f)));
+            rgbout[i*3+2] = (uint8_t)std::min(255,std::max(0, (int)(src[i*4+2]*255.f)));
         }
         buf->unmap();
         sprintf(fname,"/tmp/async_%03d.jpg", (int)seq);
-        JPEGIO::saveRGBImage(rgbout.get(), 512, 512, fname);
+        JPEGIO::saveRGBImage(rgbout, 512, 512, fname);
     };
     dwnlCallback_ = callback;
     for (int i=0; i < 20; i++) {
@@ -187,6 +186,7 @@ TEST_F(AsyncTest, AsyncTest02GC) {
         delete [] img;
     }
     finish();
+    delete [] rgbout;
     // TODO (mw) there is no pass/fail criterion, this test just executes inference
 }
 

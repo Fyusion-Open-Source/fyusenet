@@ -13,12 +13,24 @@
 //--------------------------------------- System Headers -------------------------------------------
 
 #include <cassert>
+
+#ifdef ANDROID
+#include <GLES3/gl3.h>
+#else
+#ifdef __APPLE__
+#include <OpenGL/gl3.h>
+#include <OpenGL/glext.h>
+#else
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
+#endif
+
 #include <mutex>
 #include <memory>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
-#include "../../gl/gl_sys.h"
 #include "deeptransconvlayerbase.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
@@ -48,7 +60,6 @@ class DeepTransConvLayer3x3 : public DeepTransConvLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
 
  protected:
     // ------------------------------------------------------------------------
@@ -56,15 +67,10 @@ class DeepTransConvLayer3x3 : public DeepTransConvLayerBase {
     // ------------------------------------------------------------------------
     virtual void compileConvolutionShaders(const char *preproc) override;
     unistateptr initShader(programptr shader);
-    virtual void renderPass(int pass) override;
 
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
-    programptr shader_;                         //!< Convolution shader program
-    programptr noBiasShader_;                   //!< Convolution shader program that does not include the network bias
-    unistateptr shaderState_;                   //!< Uniform-variable state for #shader_
-    unistateptr noBiasShaderState_;             //!< Uniform-variable state for #noBiasShader_
 };
 
 } // deep namespace

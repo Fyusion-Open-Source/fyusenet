@@ -50,18 +50,6 @@ ConvLayerBase::ConvLayerBase(const ConvLayerBuilder & builder,int layerNumber) :
 
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
- */
-ConvLayerBase::ConvLayerBase(const GPULayerBuilder & builder,int layerNumber) : GPULayerBase(builder, layerNumber) {
-    assert(builder.type_ != LayerType::ILLEGAL);
-    kernel_ = 1;
-    leakyReLU_ = builder.leakyReLU_;
-    viewport_[0] = width_ + 2*outputPadding_;
-    viewport_[1] = height_ + 2*outputPadding_;
-}
-
-
-/**
  * @copydoc GPULayerBase::~GPULayerBase
  */
 ConvLayerBase::~ConvLayerBase() {

@@ -63,7 +63,7 @@ namespace deep {
  *     represent the vertical part of the kernel
  *   - I should really put a picture here
  *
- * An additional tweak to the setup described above is the capability to contract the VRAM
+ * An additional tweak to the setup described above is the capability to contract the RAM
  * requirements by half. In order to do that, we do not use a floating-point texture, but a
  * 32-bit integer (per channel) texture. We then fit two 16-bit floating-point numbers in a
  * single channel and can reduce the texture width by 50%. This has to be decoded by the shader
@@ -76,7 +76,6 @@ class DeepConvLayerBase : public ConvLayerBase {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     DeepConvLayerBase(const ConvLayerBuilder& builder, int layerNumber);
-    DeepConvLayerBase(const GPULayerBuilder& builder, int layerNumber);
     virtual ~DeepConvLayerBase();
 
     // ------------------------------------------------------------------------
@@ -109,9 +108,6 @@ class DeepConvLayerBase : public ConvLayerBase {
     DeepTiler * getResidualTiler() const {
         return residualTiler_;
     }
-
-    virtual void writeResult(const char *fileName, bool includePadding) override;
-    virtual void copyResult(float *memory, bool includePadding=false) override;
 
  protected:
     // ------------------------------------------------------------------------
@@ -151,11 +147,13 @@ class DeepConvLayerBase : public ConvLayerBase {
     IBO * indexBuffer_ = nullptr;               //!< Pointer to index buffer object that defines the connectivity for the #vertexBuffer_
     float * postBNScales_ = nullptr;            //!< Scaling values for post-render batchnorm
     float * postBNBias_ = nullptr;              //!< Bias values for post-render batchnorm
+    programptr shader_;                         //!< Convolution shader program
+    programptr noBiasShader_;                   //!< Convolution hader program that does not include the network bias
+    unistateptr shaderState_;                   //!< Uniform-variable state for #shader_
+    unistateptr noBiasShaderState_;             //!< Uniform-variable state for #noBiasShader_
 
     bool mali_ = false;                         //!< Indicator flag for ARM Mali GPUs
     bool preG71_ = false;                       //!< Indicator flat for (old) ARM Mali GPUs prior to G71
-    bool largeDilation_ = false;                //!< Indicator if dilation is outside of the GLSL textureOffset operation
-    bool halfSupport_ = false;                  //!< Indicator if 16-bit FP is supported on the platform
 
     constexpr const static int DISP_TEXTURE = 4;
     constexpr const static int WEIGHT_TEXTURE = 5;

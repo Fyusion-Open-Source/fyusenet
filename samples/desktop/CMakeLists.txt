@@ -18,12 +18,10 @@ include_directories(${JPEG_INCLUDE_DIR})
 # Add sources..
 #----------------------------------------------------------------------------------
 
-set(STYLE_SOURCES stylenet.cpp ../samplenetworks/stylenet_base.cpp ../samplenetworks/stylenet_base.h
-                  ../samplenetworks/stylenet3x3.cpp ../samplenetworks/stylenet3x3.h
-                  ../samplenetworks/stylenet9x9.cpp ../samplenetworks/stylenet9x9.h
-                  ../helpers/jpegio.cpp ../helpers/jpegio.h)
-
-set(RESNET_SOURCES resnet.cpp ../samplenetworks/resnet50.cpp ../samplenetworks/resnet50.h ../helpers/jpegio.cpp ../helpers/jpegio.h)
+set(SOURCES stylenet.cpp ../samplenetworks/stylenet_base.cpp ../samplenetworks/stylenet_base.h
+            ../samplenetworks/stylenet3x3.cpp ../samplenetworks/stylenet3x3.h
+            ../samplenetworks/stylenet9x9.cpp ../samplenetworks/stylenet9x9.h
+            ../helpers/jpegio.cpp ../helpers/jpegio.h)
 
 #----------------------------------------------------------------------------------
 # Set FyuseNet libraries...
@@ -37,11 +35,8 @@ set(FYUSENET_LIBS $<TARGET_OBJECTS:cpu> $<TARGET_OBJECTS:gpu>
 # Actual test executables
 #----------------------------------------------------------------------------------
 
-add_executable(stylenet ${STYLE_SOURCES} ${SHADERMETA} ${SHADERRSRC})
+add_executable(stylenet ${SOURCES} ${SHADERMETA} ${SHADERRSRC})
 add_dependencies(stylenet shader-meta)
-
-add_executable(resnet ${RESNET_SOURCES} ${SHADERMETA} ${SHADERRSRC})
-add_dependencies(resnet shader-meta)
 
 if (APPLE)
   # apple stuff
@@ -58,7 +53,6 @@ else(APPLE)
 endif()
 
 target_link_libraries(stylenet ${FYUSENET_LIBS} ${DEFAULT_LIBS} ${OPENGL_LIBRARIES} ${JPEG_LIBRARIES} ${GL_SYS_DEPS})
-target_link_libraries(resnet ${FYUSENET_LIBS} ${DEFAULT_LIBS} ${OPENGL_LIBRARIES} ${JPEG_LIBRARIES} ${GL_SYS_DEPS})
 
 
 # vim: set expandtab ts=2 sw=2:

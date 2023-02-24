@@ -62,9 +62,6 @@ StyleNetBase::~StyleNetBase() {
 
 
 
-/**
- * @copydoc fyusion::fyusenet::NeuralNetwork::forward()
- */
 fyusion::fyusenet::NeuralNetwork::execstate StyleNetBase::forward() {
 #ifdef FYUSENET_MULTITHREADING
     if (async_) {
@@ -121,7 +118,7 @@ void StyleNetBase::setInputBuffer(const float *data) {
     // -------------------------------------------------------
     for (int i=0; i < numbuffers; i++) {
         if (!inBuffers_[i]) {
-            inBuffers_[i] = new cpu::CPUBuffer(cpu::CPUBufferShape(height_, width_, 3, 0, cpu::CPUBufferShape::type::FLOAT32, BufferSpec::order::GPU_SHALLOW));
+            inBuffers_[i] = new cpu::CPUBuffer(cpu::CPUBufferShape(width_, height_, 3, 0, cpu::CPUBufferShape::type::FLOAT32, BufferSpec::order::GPU_SHALLOW));
         }
     }
     gpu::UploadLayer * upload = static_cast<gpu::UploadLayer *>(engine_->getLayers()["upload"]);
@@ -148,8 +145,7 @@ void StyleNetBase::setInputBuffer(const float *data) {
     // one deep-copy operation too many
     float * tgt = buf->map<float>();
     assert(tgt);
-    // NOTE (mw) it would be cleaner to perform a RGB -> RGBA conversion here and upload 4-channel data
-    memcpy(tgt, data, buf->shape().bytes(CPUBufferShape::order::CHANNELWISE));
+    memcpy(tgt, data, buf->shape().bytes());
     buf->unmap();
     upload->setInputBuffer(buf, 0);
 }

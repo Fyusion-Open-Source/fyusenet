@@ -45,20 +45,12 @@ namespace deep {
 DeepDepthwiseConvLayer3x3::DeepDepthwiseConvLayer3x3(const ConvLayerBuilder& builder,int layerNumber):DeepDepthwiseConvLayerBase(builder, layerNumber) {
     assert(inputChannels_ == outputChannels_);
     assert(builder.kernel_ == 3);
+    shader_ = nullptr;
 }
 
 
 
-/**
- * @copydoc GPULayerBase::cleanup
- */
-void DeepDepthwiseConvLayer3x3::cleanup() {
-    shaderState_.reset();
-    noBiasShaderState_.reset();
-    shader_.reset();
-    noBiasShader_.reset();
-    DeepDepthwiseConvLayerBase::cleanup();
-}
+
 
 
 /**

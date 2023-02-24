@@ -97,18 +97,17 @@ class ParamSingletonLayerTest: public ArithLayerTest, public ::testing::WithPara
 TEST_P(ParamSingletonLayerTest, SingletonTestShallow) {
     auto param = GetParam();
     gpu::SingletonArithLayerBuilder bld("single", param.oper);
-    bld.context(context()).shape(param.channels, param.height, param.width, param.channels).type(LayerType::SINGLETON_ARITH);
+    bld.context(context()).shape(param.channels, param.width, param.height, param.channels).type(LayerType::SINGLETON_ARITH);
     bld.operand(param.operand2);
     gpu::SingletonArithmeticLayer layer(bld, 1);
-    std::unique_ptr<float[]> input(generateConstantData(param.operand1, param.channels, param.width, param.height));
+    float * input = generateConstantData(param.operand1, param.channels, param.width, param.height);
     ASSERT_NE(input, nullptr);
-    std::vector<const float *> inputs{input.get()};
+    std::vector<const float *> inputs{input};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
     layer.forward(1);
-    std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
-    layer.cleanup();
+    float * result = new float[param.channels * param.width * param.height];
+    layer.copyResult(result);
     float expect = 0.f;
     switch (param.oper) {
         case ArithType::ADD:
@@ -126,27 +125,27 @@ TEST_P(ParamSingletonLayerTest, SingletonTestShallow) {
         default:
             FAIL();
     }
-    const float * rptr = result.get();
     for (int i=0; i < param.channels * param.width * param.height; i++) {
-        ASSERT_NEAR(rptr[i], expect, 0.5f);
+        ASSERT_NEAR(result[i], expect, 0.5f);
     }
+    layer.cleanup();
+    delete [] input;
 }
 
 TEST_P(ParamSingletonLayerTest, SingletonTestDeep) {
     auto param = GetParam();
     gpu::SingletonArithLayerBuilder bld("single", param.oper);
-    bld.context(context()).shape(param.channels, param.height, param.width, param.channels).type(LayerType::SINGLETON_ARITH);
+    bld.context(context()).shape(param.channels, param.width, param.height, param.channels).type(LayerType::SINGLETON_ARITH);
     bld.deep().operand(param.operand2);
     gpu::SingletonArithmeticLayer layer(bld, 1);
-    std::unique_ptr<float[]> input(generateConstantData(param.operand1, param.channels, param.width, param.height));
+    float * input = generateConstantData(param.operand1, param.channels, param.width, param.height);
     ASSERT_NE(input, nullptr);
-    std::vector<const float *> inputs{input.get()};
+    std::vector<const float *> inputs{input};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
     layer.forward(1);
-    std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
-    layer.cleanup();
+    float * result = new float[param.channels * param.width * param.height];
+    layer.copyResult(result);
     float expect = 0.f;
     switch (param.oper) {
         case ArithType::ADD:
@@ -164,27 +163,28 @@ TEST_P(ParamSingletonLayerTest, SingletonTestDeep) {
         default:
             FAIL();
     }
-    const float * rptr = result.get();
     for (int i=0; i < param.channels * param.width * param.height; i++) {
-        ASSERT_NEAR(rptr[i], expect, 0.5f);
+        ASSERT_NEAR(result[i], expect, 0.5f);
     }
+    layer.cleanup();
+    delete [] input;
 }
 
 TEST_P(ParamArithLayerTest, ArithTestShallow) {
     auto param = GetParam();
     gpu::GPULayerBuilder bld("arith");
-    bld.context(context()).shape(param.channels, param.height, param.width, param.channels).type(param.oper);
+    bld.context(context()).shape(param.channels, param.width, param.height, param.channels).type(param.oper);
     gpu::AddSubLayer layer(bld, 1);
-    std::unique_ptr<float[]> input1(generateConstantData(param.operand1, param.channels, param.width, param.height));
-    std::unique_ptr<float[]> input2(generateConstantData(param.operand2, param.channels, param.width, param.height));
+    float * input1 = generateConstantData(param.operand1, param.channels, param.width, param.height);
+    float * input2 = generateConstantData(param.operand2, param.channels, param.width, param.height);
     ASSERT_NE(input1, nullptr);
     ASSERT_NE(input2, nullptr);
-    std::vector<const float *> inputs{input1.get(), input2.get()};
+    std::vector<const float *> inputs{input1, input2};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
     layer.forward(1);
-    std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    float * result = new float[param.channels * param.width * param.height];
+    layer.copyResult(result);
     layer.cleanup();
     float expect = 0.f;
     switch (param.oper) {
@@ -197,10 +197,11 @@ TEST_P(ParamArithLayerTest, ArithTestShallow) {
         default:
             FAIL();
     }
-    const float * rptr = result.get();
     for (int i=0; i < param.channels * param.width * param.height; i++) {
-        ASSERT_NEAR(rptr[i], expect, 0.5f);
+        ASSERT_NEAR(result[i], expect, 0.5f);
     }
+    delete [] input1;
+    delete [] input2;
 }
 
 // TODO (mw) more test patterns, maybe fuzz-testing with randomization

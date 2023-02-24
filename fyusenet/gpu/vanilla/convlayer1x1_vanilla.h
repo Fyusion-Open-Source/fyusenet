@@ -12,11 +12,22 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
+#ifdef ANDROID
+#include <GLES3/gl3.h>
+#else
+#ifdef __APPLE__
+#include <OpenGL/gl3.h>
+#include <OpenGL/glext.h>
+#else
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
+#endif
+
 #include <mutex>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
-#include "../../gl/gl_sys.h"
 #include "../../gl/shaderprogram.h"
 #include "../../gl/uniformstate.h"
 #include "../../gl/fbo.h"
@@ -60,7 +71,6 @@ class ConvLayer1x1 : public ConvLayerBase {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     ConvLayer1x1(const ConvLayerBuilder & builder,int layerNumber);
-    ConvLayer1x1(const GPULayerBuilder & builder,int layerNumber);
 
     // ------------------------------------------------------------------------
     // Public methods

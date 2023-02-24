@@ -46,6 +46,6 @@ void main(void) {
   fragmentColor0 += texelFetch(biasTexture,ivec2(int(texCoord.z),0),0);
 #endif
 #ifdef USE_RESIDUAL
-  fragmentColor0 += residual(residualLayer0,clampAndRes.zw, biasTexture, texCoord.zw);
+  fragmentColor0 += residual(residualLayer0,clampAndRes.zw);
 #endif
 }

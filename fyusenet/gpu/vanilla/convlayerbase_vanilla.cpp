@@ -82,53 +82,6 @@ ConvLayerBase::ConvLayerBase(const ConvLayerBuilder & builder,int layerNumber) :
 
 
 /**
- * @brief Constructor
- *
- * @param builder convolution-specific layer builder that contains parameterization for the layer
- *
- * @param layerNumber Layer number that defines sequence position in execution
- *
- * @throws FynException in case the layer is initialized with invalid/unsupported parameters
- *
- * @pre The constructor must be called with the GL context supplied in \p builder as the active
- *      context
- *
- * This constructor parses basic information from the supplied \p builder and initializes the
- * layer with the parsed data.
- */
-ConvLayerBase::ConvLayerBase(const GPULayerBuilder & builder,int layerNumber) : gpu::ConvLayerBase(builder, layerNumber) {
-    assert(builder.type_ != LayerType::ILLEGAL);
-    // -------------------------------------------------------------------
-    // Determine maximum number of render targets based on GPU capability
-    // on the drawing side and capacity on the number of uniforms for a
-    // fragment shader...
-    // -------------------------------------------------------------------
-    maxRenderTargets_ = GLInfo::getMaximumRecommendedDrawBuffers();
-    int maxvecs = GLInfo::getMaxUniformVectors(GLInfo::FRAGMENT);
-    maxvecs -= (flags_ & LayerFlags::POST_BATCHNORM) ? maxRenderTargets_ : 0;  // very conservative estimate here
-    int biasvec = (outputPadding_) ? 1 : 0;
-    int maxrt = std::max(1, (maxvecs - VEC_OVERHEAD) / (4*kernel_ + biasvec));
-    maxRenderTargets_ = std::min(maxRenderTargets_, maxrt);
-    // -------------------------------------------------------------------
-    // Initialize default/fallback parameters
-    // -------------------------------------------------------------------
-    zeroBias_ = new float[maxRenderTargets_ * PIXEL_PACKING + PIXEL_PACKING];
-    memset(zeroBias_, 0, (maxRenderTargets_ * PIXEL_PACKING + PIXEL_PACKING) * sizeof(float));
-    // -------------------------------------------------------------------
-    // Check for GPU types that might require special treatment...
-    // -------------------------------------------------------------------
-    if (GLInfo::getGPUType() == GLInfo::ARM_MALI) {
-        mali_ = true;
-        std::string renderer = GLInfo::getRendererString();
-        if (!renderer.empty()) {
-            if (strstr(renderer.c_str(),"-T")) preG71_ = true;
-            // (code removed) if preG71_ is set, we should better use the Mali specific convolution layer
-        }
-    }
-}
-
-
-/**
  * @copydoc GPULayerBase::~GPULayerBase
  */
 ConvLayerBase::~ConvLayerBase() {
@@ -363,11 +316,13 @@ void ConvLayerBase::setupNetworkPolygons(VAO *vao, int kernel) {
         float tvspan = (float)(height_) / (float)(height_ + 2*inputPadding_);
         tleft = (float)inputPadding_ / (float)(width_ + 2*inputPadding_);
         ttop = ((float)inputPadding_ + sourceStep_*(float)(conv-((kernel-1)/2)))/(float)(height_ + 2*inputPadding_);
+        // TODO (mw) find a more general rule
         if (downsample_[0] > 1) {
-            tleft -= sourceStep_ * 0.5f*(float)(downsample_[0]-1) / (float)(width_ + 2*inputPadding_);
+            tleft -= (sourceStep_*(-0.5f+((float)downsample_[0])/2.0f)) / (float)(width_+2*inputPadding_);
         }
+        // TODO (mw) find a more general rule
         if (downsample_[1] > 1) {
-            ttop -= sourceStep_ * 0.5f*(float)(downsample_[1]-1) / (float)(height_ + 2*inputPadding_);
+            ttop -= (sourceStep_*(-0.5f+((float)downsample_[1])/2.0f)) / (float)(height_+2*inputPadding_);
         }
         //-----------------------------------------------------
         // Positions first (output layers)

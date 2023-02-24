@@ -4,21 +4,19 @@
 
 # FIXME (mw) find something that works better under MacOS
 if (NOT APPLE)
-  if (NOT ANDROID)
-    find_package(JPEG REQUIRED)
-  endif()
+  find_package(JPEG REQUIRED)
 else()
-  set(JPEG_INCLUDE_DIR /opt/homebrew/include)
-  set(JPEG_LIBRARIES /opt/homebrew/lib/libturbjpeg)
+    set(JPEG_INCLUDE_DIR /opt/homebrew/include)
+    set(JPEG_LIBRARIES /opt/homebrew/lib/libturbjpeg)
 endif()
+#find_package(libjpeg-turbo REQUIRED HINTS /opt/homebrew/lib)
+
 
 #----------------------------------------------------------------------------------
 # Misc compiler flags and default link libraries
 #----------------------------------------------------------------------------------
 
-if (NOT ANDROID)
-  set(CXX_LIBS stdc++ m)
-endif()
+set(CXX_LIBS stdc++ m)
 
 set_source_files_properties(${SHADERMETA} PROPERTIES GENERATED 1)
 
@@ -77,11 +75,7 @@ else(APPLE)
   endif()
 endif()
 
-if (ANDROID)
-  set(DEFAULT_LIBS ${CXX_LIBS} gtest log)
-else()
-  set(DEFAULT_LIBS ${CXX_LIBS} gtest)
-endif()
+set(DEFAULT_LIBS ${CXX_LIBS} gtest)
 
 #----------------------------------------------------------------------------------
 # Misc include directories 
@@ -93,17 +87,9 @@ include_directories(${CMAKE_SOURCE_DIR} ${JPEG_INCLUDE_DIR})
 # Actual test executables
 #----------------------------------------------------------------------------------
 
-if (NOT ANDROID)
-  add_executable(networktests networktests.cpp ${BASE_SOURCES} ${HELPERS} ${SHADERMETA} ${SHADERRSRC})
-  target_link_libraries(networktests ${FYUSENET_LIBS} ${DEFAULT_LIBS} ${OPENGL_LIBRARIES} ${GL_SYS_DEPS})
-  add_dependencies(networktests shader-meta)
-endif()
-
-if (USE_MULTITHREADING AND NOT ANDROID)
-  add_executable(asynctests asynctests.cpp ../samples/samplenetworks/stylenet_base.cpp ../samples/samplenetworks/stylenet3x3.cpp ${BASE_SOURCES} ${HELPERS} ${IO_HELPERS} ${SHADERMETA} ${SHADERRSRC})
-  target_link_libraries(asynctests ${FYUSENET_LIBS} ${DEFAULT_LIBS} ${OPENGL_LIBRARIES} ${JPEG_LIBRARIES} ${GL_SYS_DEPS})
-  add_dependencies(asynctests shader-meta)
-endif()
+add_executable(networktests networktests.cpp ${BASE_SOURCES} ${HELPERS} ${SHADERMETA} ${SHADERRSRC})
+target_link_libraries(networktests ${FYUSENET_LIBS} ${DEFAULT_LIBS} ${OPENGL_LIBRARIES} ${GL_SYS_DEPS})
+add_dependencies(networktests shader-meta)
 
 add_executable(arithtests arithtests.cpp ${BASE_SOURCES} ${HELPERS} ${SHADERMETA} ${SHADERRSRC})
 target_link_libraries(arithtests ${FYUSENET_LIBS} ${DEFAULT_LIBS} ${OPENGL_LIBRARIES} ${GL_SYS_DEPS})
@@ -120,5 +106,11 @@ add_dependencies(convlayertests shader-meta)
 add_executable(misctests misctests.cpp ${BASE_SOURCES} ${HELPERS} ${SHADERMETA} ${SHADERRSRC})
 target_link_libraries(misctests ${FYUSENET_LIBS} ${DEFAULT_LIBS} ${OPENGL_LIBRARIES} ${GL_SYS_DEPS})
 add_dependencies(misctests shader-meta)
+
+if (USE_MULTITHREADING)
+  add_executable(asynctests asynctests.cpp ../samples/samplenetworks/stylenet_base.cpp ../samples/samplenetworks/stylenet3x3.cpp ${BASE_SOURCES} ${HELPERS} ${IO_HELPERS} ${SHADERMETA} ${SHADERRSRC})
+  target_link_libraries(asynctests ${FYUSENET_LIBS} ${DEFAULT_LIBS} ${OPENGL_LIBRARIES} ${JPEG_LIBRARIES} ${GL_SYS_DEPS})
+  add_dependencies(asynctests shader-meta)
+endif()
 
 # vim: set expandtab ts=2 sw=2:

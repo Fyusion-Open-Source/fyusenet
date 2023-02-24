@@ -35,8 +35,6 @@ namespace deep {
  *
  * Tiles are laid out based on the number of total channels and the tiler tries to maintain a
  * decent aspect ratio of the resulting texture while fitting the tiles.
- *
- * @todo Support fractional-step convolution
  */
 class DeepTiler {
  public:
@@ -66,7 +64,6 @@ class DeepTiler {
         void toFloatVec(float *tgt, int offset, int stride=2, bool transpose=false) const;
         void lowClamp(float *tgt, int offset) const;
         void toDisplacement(const Tile& defaultExtents, float *tgt, int offset) const;
-        std::pair<float,float> midPoint() const;
 
         int renderTarget_ = 0;       //!< For later expansion
         int textureID_ = 0;          //!< For texture tagging
@@ -74,7 +71,7 @@ class DeepTiler {
         float quad_[4*2];            //!< Device coordinates for drawing a quad for this tile (for output tiles) / texture coordinates for reading a tile from the input texture (for input tiles)
         float lowClamp_[2];          //!< Clamping values for the tile (left/top) such that the access does not bleed into a neighboring tile, used on input tiles
         float hiClamp_[2];           //!< Clamping values for the tile (right/bottom) such that access does not bleed into a neighboring tile, use in input files
-        int imageCoords_[2];         //!< Top/left corner of tile in pixel coordinates (including padding)
+        int imageCoords_[2];         //!< Top/left corner of tile in pixel coordinates (excluding padding)
         int imageExtents_[2];        //!< Width/Height of tile in pixel coordinates (excluding padding)
     };
 

@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
     net->loadWeightsAndBiases(weights, weightfloats);
     net->setup();
 #ifdef DEBUG
-    if (opts.count("log")) ((StyleNetBase *)net)->enableDebugOutput(opts["log"].as<std::string>());
+    if (opts.count("log")) ((StyleNet3x3 *)net)->enableDebugOutput(opts["log"].as<std::string>());
 #endif
     net->setInputBuffer(rgb);
     auto state = net->forward();

@@ -20,7 +20,6 @@
 #include "../gl/uniformstate.h"
 #include "../gl/fbo.h"
 #include "../gl/shaderprogram.h"
-#include "../base/batchnorminterface.h"
 #include "gfxcontextlink.h"
 #include "functionlayer.h"
 
@@ -35,15 +34,12 @@ namespace gpu {
  * This layer implements the batch-norm operator which basically scales and shifts the input
  * data using channel-individual scale + bias values.
  *
- * This layer should only be used in exceptional circumstances, since most layer types support
+ * This layer should only be used in exceptional circumstances, since all layer types support
  * a fused/implicit batchnorm which is more efficient than doing it explicitly.
- *
- * @note This layer does not track any batches (our batch size is always 1 anyway), but uses
- *       fixed values obtained and stored during training (running means and variances)
  *
  * @see https://en.wikipedia.org/wiki/Batch_normalization
  */
-class BatchNormLayer : public FunctionLayer, public BatchNormInterface {
+class BatchNormLayer : public FunctionLayer {
  public:
     // ------------------------------------------------------------------------
     // Constructor / Destructor
@@ -55,7 +51,7 @@ class BatchNormLayer : public FunctionLayer, public BatchNormInterface {
     // Public methods
     // ------------------------------------------------------------------------
     virtual void cleanup() override;
-    virtual void loadScaleAndBias(const float *scaleBias, size_t sbOffset=0) override;
+    virtual void loadScaleAndBias(float *scaleBias, int sbOffset=0);
 
  protected:
     /**
@@ -71,8 +67,8 @@ class BatchNormLayer : public FunctionLayer, public BatchNormInterface {
             delete [] biasScale_;
             biasScale_ = nullptr;
         }
-        void fill(const float *bias, const float *scale,int channels) {
-            for (int i=0; i < channels; i += PIXEL_PACKING) {
+        void fill(float *bias,float *scale,int channels) {
+            for (int i=0; i<channels; i += PIXEL_PACKING) {
                 int lim = PIXEL_PACKING;
                 if (i+PIXEL_PACKING > channels) lim = channels-i;
                 for (int j=0; j < lim; j++) {

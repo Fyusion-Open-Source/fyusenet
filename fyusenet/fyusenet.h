@@ -27,25 +27,17 @@
 #include "base/compiledlayers.h"
 #include "base/neuralnetwork.h"
 #include "base/engine.h"
-#include "base/layerflags.h"
-#include "base/layerbuilder.h"
 #include "base/layerbase.h"
 #include "base/convlayerinterface.h"
-#include "base/batchnorminterface.h"
 #include "base/asynclayerinterface.h"
-#include "gpu/gpulayerbase.h"
-#include "gpu/uploadlayer.h"
-#include "gpu/downloadlayer.h"
-#include "gpu/convlayerbase.h"
-#include "gpu/deep/deepconvlayerbase.h"
-#include "gpu/deep/deepdownloadlayer.h"
-#include "gpu/deep/deepgemmlayer.h"
 #include "cpu/cpubuffershape.h"
 #include "cpu/cpubuffer.h"
 #include "cpu/cpulayerbase.h"
 #include "cpu/cpulayerinterface.h"
-#include "cpu/convlayer.h"
+#include "gpu/gpulayerbase.h"
 
+#include "base/layerflags.h"
+#include "base/layerbuilder.h"
 #include "gpu/argmaxlayerbuilder.h"
 #include "gpu/blurlayerbuilder.h"
 #include "gpu/castlayerbuilder.h"
@@ -59,6 +51,12 @@
 #include "gpu/updownlayerbuilder.h"
 #include "gpu/transposelayerbuilder.h"
 
+#include "gpu/uploadlayer.h"
+#include "gpu/downloadlayer.h"
+// FIXME (mw) check
+//#include "gpu/convlayerbase.h"
+//#include "gpu/deep/deepconvlayerbase.h"
+//#include "cpu/convlayer.h"
 
 // vim: set expandtab ts=4 sw=4:
 

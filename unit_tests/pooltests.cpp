@@ -176,7 +176,7 @@ TEST_P(ParamAvgPoolTest, AvgTestShallow) {
     float * input = generateRandomData(param.channels, param.width, param.height, -100.0f, 100.0f);
     float * ref = referencePool(input, param);
     gpu::PoolLayerBuilder bld(gpu::PoolLayerBuilder::POOL_AVG, "pool");
-    bld.context(context()).shape(param.channels, param.height, param.width, param.channels);
+    bld.context(context()).shape(param.channels, param.width, param.height, param.channels);
     bld.poolSize(param.pool).downsample(param.stride);
     gpu::AvgPoolLayer layer(bld, 1);
     std::vector<const float *> inputs{input};
@@ -199,122 +199,127 @@ TEST_P(ParamAvgPoolTest, AvgTestShallow) {
 
 TEST_P(ParamMaxPoolTest, MaxTestShallow) {
     auto param = GetParam();
-    std::unique_ptr<float[]> input(generateRandomData(param.channels, param.width, param.height, -100.f, 100.0f));
-    std::unique_ptr<float[]> ref(referencePool(input.get(), param));
+    float * input = generateRandomData(param.channels, param.width, param.height, -100.f, 100.0f);
+    float * ref = referencePool(input, param);
     gpu::PoolLayerBuilder bld(gpu::PoolLayerBuilder::POOL_AVG, "pool");
-    bld.context(context()).shape(param.channels, param.height, param.width, param.channels);
+    bld.context(context()).shape(param.channels, param.width, param.height, param.channels);
     bld.poolSize(param.pool).downsample(param.stride);
     gpu::MaxPoolLayer layer(bld, 1);
-    std::vector<const float *> inputs{input.get()};
+    std::vector<const float *> inputs{input};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
     layer.forward(1);
-    std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    float * result = new float[param.channels * param.width * param.height];
+    layer.copyResult(result);
     layer.cleanup();
     int twidth = param.width / param.stride;
     int theight = param.height / param.stride;
-    const float * resptr = result.get();
-    const float * refptr = ref.get();
     for (int i=0; i < param.channels * twidth * theight; i++) {
-        ASSERT_NEAR(resptr[i], refptr[i], 0.5f);
+        ASSERT_NEAR(result[i], ref[i], 0.5f);
     }
+    delete [] result;
+    delete [] input;
+    delete [] ref;
 }
 
 
 TEST_P(ParamAvgPoolTest, AvgTestDeep) {
     auto param = GetParam();
-    std::unique_ptr<float[]> input(generateRandomData(param.channels, param.width, param.height, -100.0f, 100.0f));
-    std::unique_ptr<float[]> ref(referencePool(input.get(), param));
+    float * input = generateRandomData(param.channels, param.width, param.height, -100.0f, 100.0f);
+    float * ref = referencePool(input, param);
     gpu::PoolLayerBuilder bld(gpu::PoolLayerBuilder::POOL_AVG, "pool");
-    bld.context(context()).shape(param.channels, param.height, param.width, param.channels);
+    bld.context(context()).shape(param.channels, param.width, param.height, param.channels);
     bld.poolSize(param.pool).downsample(param.stride).deep();
     gpu::deep::DeepAvgPoolLayer layer(bld, 1);
-    std::vector<const float *> inputs{input.get()};
+    std::vector<const float *> inputs{input};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
     layer.forward(1);
-    std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    float * result = new float[param.channels * param.width * param.height];
+    layer.copyResult(result);
     layer.cleanup();
     int twidth = param.width / param.stride;
     int theight = param.height / param.stride;
-    const float * resptr = result.get();
-    const float * refptr = ref.get();
     for (int i=0; i < param.channels * twidth * theight; i++) {
-        ASSERT_NEAR(resptr[i], refptr[i], 0.5f);
+        ASSERT_NEAR(result[i], ref[i], 0.5f);
     }
+    delete [] result;
+    delete [] input;
+    delete [] ref;
 }
 
 
 TEST_P(ParamMaxPoolTest, MaxTestDeep) {
     auto param = GetParam();
-    std::unique_ptr<float[]> input(generateRandomData(param.channels, param.width, param.height, -100.f, 100.0f));
-    std::unique_ptr<float[]> ref(referencePool(input.get(), param));
+    float * input = generateRandomData(param.channels, param.width, param.height, -100.f, 100.0f);
+    float * ref = referencePool(input, param);
     gpu::PoolLayerBuilder bld(gpu::PoolLayerBuilder::POOL_MAX, "pool");
-    bld.context(context()).shape(param.channels, param.height, param.width, param.channels);
+    bld.context(context()).shape(param.channels, param.width, param.height, param.channels);
     bld.poolSize(param.pool).downsample(param.stride).deep();
     gpu::deep::DeepMaxPoolLayer layer(bld, 1);
-    std::vector<const float *> inputs{input.get()};
+    std::vector<const float *> inputs{input};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
     layer.forward(1);
-    std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    float * result = new float[param.channels * param.width * param.height];
+    layer.copyResult(result);
     layer.cleanup();
     int twidth = param.width / param.stride;
     int theight = param.height / param.stride;
-    const float * resptr = result.get();
-    const float * refptr = ref.get();
     for (int i=0; i < param.channels * twidth * theight; i++) {
-        ASSERT_NEAR(resptr[i], refptr[i], 0.5f);
+        ASSERT_NEAR(result[i], ref[i], 0.5f);
     }
+    delete [] result;
+    delete [] input;
+    delete [] ref;
 }
 
 
 TEST_P(ParamGlobalAvgPoolTest, GlobAvgTestDeep) {
     auto param = GetParam();
-    std::unique_ptr<float[]> input(generateRandomData(param.channels, param.width, param.height, -100.f, 100.0f));
-    std::unique_ptr<float[]> ref(referencePool(input.get(), param));
+    float * input = generateRandomData(param.channels, param.width, param.height, -100.f, 100.0f);
+    float * ref = referencePool(input, param);
     gpu::PoolLayerBuilder bld(gpu::PoolLayerBuilder::POOL_AVG, "pool");
-    bld.context(context()).shape(param.channels, param.height, param.width, param.channels);
+    bld.context(context()).shape(param.channels, param.width, param.height, param.channels);
     bld.global().deep();
     gpu::deep::DeepGlobalPoolLayer layer(bld, 1);
-    std::vector<const float *> inputs{input.get()};
+    std::vector<const float *> inputs{input};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
     layer.forward(1);
-    std::unique_ptr<float[]> result(new float[param.channels]);
-    layer.copyResult(result.get());
+    float * result = new float[param.channels];
+    layer.copyResult(result);
     layer.cleanup();
-    const float * resptr = result.get();
-    const float * refptr = ref.get();
     for (int i=0; i < param.channels; i++) {
-        ASSERT_NEAR(resptr[i], refptr[i], 1.0f);
+        ASSERT_NEAR(result[i], ref[i], 1.0f);
     }
+    delete [] result;
+    delete [] input;
+    delete [] ref;
 }
 
 
 TEST_P(ParamGlobalMaxPoolTest, GlobMaxTestDeep) {
     auto param = GetParam();
-    std::unique_ptr<float[]> input(generateRandomData(param.channels, param.width, param.height, -100.f, 100.0f));
-    std::unique_ptr<float[]> ref(referencePool(input.get(), param));
+    float * input = generateRandomData(param.channels, param.width, param.height, -100.f, 100.0f);
+    float * ref = referencePool(input, param);
     gpu::PoolLayerBuilder bld(gpu::PoolLayerBuilder::POOL_MAX, "pool");
-    bld.context(context()).shape(param.channels, param.height, param.width, param.channels);
+    bld.context(context()).shape(param.channels, param.width, param.height, param.channels);
     bld.global().deep();
     gpu::deep::DeepGlobalPoolLayer layer(bld, 1);
-    std::vector<const float *> inputs{input.get()};
+    std::vector<const float *> inputs{input};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
     layer.forward(1);
-    std::unique_ptr<float[]> result(new float[param.channels]);
-    layer.copyResult(result.get());
+    float * result = new float[param.channels];
+    layer.copyResult(result);
     layer.cleanup();
-    const float * resptr = result.get();
-    const float * refptr = ref.get();
     for (int i=0; i < param.channels; i++) {
-        ASSERT_NEAR(resptr[i], refptr[i], 1.0f);
+        ASSERT_NEAR(result[i], ref[i], 1.0f);
     }
+    delete [] result;
+    delete [] input;
+    delete [] ref;
 }
 
 

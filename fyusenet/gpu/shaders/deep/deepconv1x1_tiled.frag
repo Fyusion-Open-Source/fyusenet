@@ -30,6 +30,6 @@ void main(void) {
 #endif
 #endif
 #ifdef USE_RESIDUAL
-  fragmentColor0 += residual(residualLayer0, resCoord.xy,  biasTexture, texCoord.zw);
+  fragmentColor0 += residual(residualLayer0,resCoord);
 #endif
 }

@@ -4,10 +4,6 @@
  * SPDX-License-Identifier: MIT
  * ------------------------------------------------------------------------- */
 
-#ifndef HIGH_PRECISION
-#define HIGH_PRECISION
-#endif
-
 #include "shaders/deep/fragpreamble.inc"
 
 uniform highp int bitmask;

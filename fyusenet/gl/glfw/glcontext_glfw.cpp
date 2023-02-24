@@ -142,7 +142,6 @@ uint64_t GLContext::hash() const {
 }
 
 
-#ifdef FYUSENET_MULTITHREADING
 /**
  * @brief Prepare X11 for multi-threaded use
  *
@@ -159,7 +158,6 @@ void GLContext::initMultiThreading() {
         assert(s != 0);
     }
 }
-#endif
 
 
 /**
