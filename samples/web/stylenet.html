@@ -1,0 +1,73 @@
+<html>
+  <head>
+    <script type="text/javascript">
+      var Module = {
+
+        /**
+         * @brief Callback once wasm module has been initialized
+         *
+         * Initializes GL context in the target canvas and triggers loading the network
+         * weights (asynchronously)
+         */
+        onRuntimeInitialized: function() {
+            let id = "#mycanvas";
+            let cv = document.getElementById("mycanvas");
+            Module.target = cv;
+            const idBuffer = Module._malloc(Module.lengthBytesUTF8(id)+1);
+            Module.stringToUTF8(id, idBuffer, Module.lengthBytesUTF8(id)+1);
+            if (Module._initContext(idBuffer, Number(cv.clientWidth), Number(cv.clientHeight))) {
+                let tid = Module._createInputTexture();
+                Module.camera = startWebcam(Module.target.getContext('webgl2'), initNetwork, cameraFrame, tid);
+            } else {
+                console.log("Unable to initialize network");
+            }
+        },
+        netOK : false
+    }
+
+    /**
+     * @brief Callback function executed for camera frame updates
+     *
+     * @param texture WebGL texture that contains the camera frame
+     * @param gl WebGL context
+     *
+     * Applies style-transfer network to incoming camera frame
+     */
+    function cameraFrame(texture, gl) {
+        if (Module.netOK) {
+            Module._forward(Number(texture.name));
+        }
+    }
+
+
+    /**
+     * @brief Load network weights and start camera stream
+     *
+     * @target ID of target canvas to use
+     *
+     * This transfers the network weight data from the host, marshalls that data into the network
+     * and then starts the camera video stream.
+     */
+    async function initNetwork(camera) {
+        let weights = await window.fetch('stylenet.dat');
+        if (weights.ok === true) {
+            const bytes = weights.headers.get('Content-Length');
+            let ptr = Module._malloc(bytes);
+            let heapBytes = new Uint8Array(Module.HEAPU8.buffer, ptr, bytes);
+            let buf = await weights.arrayBuffer();
+            heapBytes.set(new Uint8Array(buf));
+            Module._createNetwork(camera.width(), camera.height(), heapBytes.byteOffset, heapBytes.length);
+            Module.netOK = true;
+        }
+    }
+
+    </script>
+
+    <script type="text/javascript" src="stylenet.js"></script>
+    <script type="text/javascript" src="webcam.js"></script>
+  </head>
+
+  <body>
+  <canvas tabindex=0 id="mycanvas" width="640" height="480"></canvas>
+  </body>
+</html>

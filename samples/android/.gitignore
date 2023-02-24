@@ -1,0 +1,14 @@
+*.iml
+.gradle
+/local.properties
+/.idea/workspace.xml
+/.idea/libraries
+/.idea/gradle.xml
+/.idea/tasks.xml
+/.idea/dictionaries
+/.idea/assetWizardSettings.xml
+/build
+/captures
+.cxx
+.externalNativeBuild
+*.so
