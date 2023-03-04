@@ -276,6 +276,9 @@ The documentation build is fairly easy and only requires [doxygen](https://www.d
 configurations above, simply supplying `-DBUILD_DOCS=ON` to the `cmake` command also flags the documentation to be build.
 The HTML output of the documentation will be stored in a folder named `docs` in the top-level source directory.
 
+For convenience purposes, the [documentation](https://fyusion-open-source.github.io/fyusenet) is also supplied as GitHub page and
+is updated whenever the main branch is updated.
+
 ## Future Improvements
 The code in FyuseNet, particularly the CPU parts, is not fully optimized yet. For the GPU part, there are still too many calls
 that perform redundant operations on the GL engine state and cutting a few of those may result in improved runtime.
