@@ -1,0 +1,7 @@
+/*.cpp
+vanilla/*.cpp
+ubo/*.cpp
+deep/*.cpp
+deep/vanilla/*.cpp
+!shaderresource.cpp
+test

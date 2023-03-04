@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Preprocessor to convert GLSL shaders into a C++ compileable representation
+#
+# Copyright (c) 2016-2022 Fyusion Inc.
+
+"""
+Shader preprocessor that converts GLSL shaders into a format usable for
+the FyuseNet resource system.
+"""
+
+__author__ = "Martin Wawro"
+
+
+import sys,datetime,platform
+from optparse import OptionParser
+
+VERBOSE=False
+PREFIX=None
+NAMESPACE=None
+HEADERPREFIX=None
+
+def readShader(fileName):
+  try:
+    if VERBOSE:
+      print("Reading %s ..." % fileName)
+    f=open(fileName,"r")
+    data=f.read()
+    f.close()
+    if VERBOSE:
+      print("Shader read:\n%s\n\n" % data)
+    return data
+  except IOError as ex:
+    print("Unable to open file %s" % fileName)
+    return None
+
+
+
+def generateSymbol(fileName):
+  stripped = fileName
+  if PREFIX:
+    if fileName.startswith(PREFIX):
+      stripped=fileName[len(PREFIX):]
+  return stripped
+
+
+
+def writePreamble(outFile,origFile):
+  line1="// AUTOMATICALLY GENERATED FILE, DO NOT EDIT\n"
+  line2="// Compiled by shader preprocessor from %s\n" % origFile
+  line3="// on %s (%s)\n\n" % (str(datetime.datetime.now()),platform.node())
+  if HEADERPREFIX:
+    line4="#include <%s/shaderresource.h>\n\n" % HEADERPREFIX
+  else:
+    line4="#include <shaderresource.h>\n\n"
+  outFile.writelines([line1,line2,line3,line4])
+  if VERBOSE:
+    print("Writing output:\n%s\n%s\n%s\n%s\n\n" % (line1,line2,line3,line4))
+
+
+def formatShader(shader):
+  fmtshader=""
+  for i in range(0,len(shader)):
+    c=shader[i]
+    fmtshader+=hex(ord(c))
+    fmtshader+=','
+    if ((i+1) % 16) == 0:
+      fmtshader+="\n"
+  return fmtshader
+
+
+def writeShader(outFile,shader,symbol):
+  ref="static %s::ShaderResource LINK(code,\"%s\");\n\n" % (NAMESPACE,symbol)
+  startline="static const char code[%d] = {\n" % (len(shader)+1)
+  endline="0x00 };\n\n"
+  fmtshader = formatShader(shader)
+  if VERBOSE:
+    print("%s" % (startline))
+  outFile.write(startline)
+  if VERBOSE:
+    print("%s",fmtshader)
+  outFile.write(fmtshader)
+  if VERBOSE:
+    print("%s%s" % (endline,ref))
+  outFile.writelines([endline,ref])
+
+
+def preprocess(inFileName,outFileName):
+  shader = readShader(inFileName)
+  if not shader:
+    return False
+  try:
+    if VERBOSE:
+      print("Writing file %s ..." % outFileName)
+    out = open(outFileName,"w")
+    writePreamble(out,inFileName)
+    symbol = generateSymbol(inFileName);
+    writeShader(out,shader,symbol)
+    out.close()
+    return True
+  except IOError as ex:
+    print("Unable to open file %s for writing" % fileName)
+    return False
+
+
+
+if __name__ == "__main__":
+
+  parser = OptionParser(usage = "%prog [options] <inputshader> <outputfile>",
+                        description = "Preprocessor for GLSL shaders to be included in a C/C++ binary")
+
+  parser.add_option("-v","--verbose",action = "store_true", dest="verbose", help="Verbose output")
+  parser.add_option("-p","--prefix",action = "store", dest="prefix", help="Set shader path prefix (will be stripped from symbols)")
+  parser.add_option("-n","--namespace",action = "store", dest="prefix", help="Set namespace of ShaderResource object")
+  parser.add_option("-i","--includedir",action = "store", dest="headerprefix", help="Add include directory prefix to include statement for shaderresource.h")
+  parser.set_defaults(verbose=False)
+  parser.set_defaults(prefix=None)
+  parser.set_defaults(namespace="fyusion::opengl")
+  parser.set_defaults(headerprefix=None)
+
+  options, args = parser.parse_args()
+
+  if len(args) < 2:
+    parser.error("Insufficient arguments") 
+    sys.exit(1)
+
+  VERBOSE = options.verbose
+  PREFIX = options.prefix.strip()
+  NAMESPACE = options.namespace.strip()
+  HEADERPREFIX = options.headerprefix.strip()
+
+  if not preprocess(args[0],args[1]):
+    print("*** Shader preprocessing of %s failed" % args[0])
+    sys.exit(1)
+  sys.exit(0)
+    
+# vim: set ts=2 sw=2 :
+
