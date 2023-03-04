@@ -19,21 +19,12 @@ set(SOURCES stylenet.cpp ../samplenetworks/stylenet_base.cpp ../samplenetworks/s
             ../samplenetworks/stylenet3x3.cpp ../samplenetworks/stylenet3x3.h)
 
 #----------------------------------------------------------------------------------
-# Set FyuseNet libraries...
-#----------------------------------------------------------------------------------
-
-set(FYUSENET_LIBS $<TARGET_OBJECTS:cpu> $<TARGET_OBJECTS:gpu>
-                  $<TARGET_OBJECTS:opengl> $<TARGET_OBJECTS:base>
-                  $<TARGET_OBJECTS:common>)
-
-set(FYUSENET_LIB ${CMAKE_BINARY_DIR}/fyusenet/libfyusenet.a)
-
-#----------------------------------------------------------------------------------
 # Sample executable
 #----------------------------------------------------------------------------------
 
 add_executable(stylenet ${SOURCES} ${SHADERMETA} ${SHADERRSRC})
 add_dependencies(stylenet shader-meta)
+add_dependencies(stylenet fyusenet)
 target_link_libraries(stylenet ${FYUSENET_LIB})
 
 

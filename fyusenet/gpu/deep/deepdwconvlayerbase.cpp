@@ -215,7 +215,7 @@ void DeepDepthwiseConvLayerBase::createWeightTextureMatrix(const float *srcWeigh
     if (texwidth & 1) texwidth++;
     int texheight = winmax * channelMultiplier_;
 #ifndef HIGH_PRECISION
-    if (GLInfo::supportsHalf()) {
+    if (halfSupport_) {
         if (((texwidth / 2) > GLInfo::getMaximumTextureSize()) || (texheight > GLInfo::getMaximumTextureSize())) {
             THROW_EXCEPTION_ARGS(FynException,"Weights do not fit into GL texture");
         }
@@ -255,7 +255,7 @@ void DeepDepthwiseConvLayerBase::createWeightTextureMatrix(const float *srcWeigh
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 #ifndef HIGH_PRECISION
-    if (GLInfo::supportsHalf()) {
+    if (halfSupport_) {
         unsigned int * fp16 = FloatConversion::getInstance()->toFP16UI(weights,texwidth*texheight*PIXEL_PACKING);
 #ifdef GL_RGBA32UI
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI,texwidth/2,texheight,0,GL_RGBA_INTEGER,GL_UNSIGNED_INT,fp16);
@@ -264,7 +264,7 @@ void DeepDepthwiseConvLayerBase::createWeightTextureMatrix(const float *srcWeigh
 #endif
         delete [] fp16;
     } else {
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
     }
 #else
     glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);

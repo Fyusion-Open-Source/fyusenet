@@ -290,7 +290,14 @@ For convenience purposes, the [documentation](https://fyusion-open-source.github
 is updated whenever the main branch is updated.
 
 ## Future Improvements
-The code in FyuseNet, particularly the CPU parts, is not fully optimized yet. For the GPU part, there are still too many calls
+The code in FyuseNet, particularly the CPU part, is not fully optimized yet. For the GPU part, there are still too many calls
 that perform redundant operations on the GL engine state and cutting a few of those may result in improved runtime.
 By far the most pressing part for future improvements is to support more layer types, as our currently supported subset is
 rather small. There is also a bit of optimization potential in some of the shaders that we may exploit in the future.
+
+# Fyusion is Hiring
+If you're as excited as we are about making AI/ML products that are blazing fast and accessible, you might be a great fit at Fyusion!
+We're a diverse team from all around the globe, who are changing how people see and interact with the world in their everyday lives.
+
+Want to learn more? Check out our [job openings](https://fyusion.com/jobs) and apply today!
+

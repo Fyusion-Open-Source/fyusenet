@@ -300,7 +300,7 @@ void DeepConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, size_t
 #ifdef HIGH_PRECISION
     int checkwidth = texwidth;
 #else
-    int checkwidth = (GLInfo::supportsHalf()) ? texwidth/2 : texwidth;
+    int checkwidth = (halfSupport_) ? texwidth/2 : texwidth;
 #endif
     if ((checkwidth > GLInfo::getMaximumTextureSize()) || (texheight > GLInfo::getMaximumTextureSize())) {
         THROW_EXCEPTION_ARGS(FynException, "Weights do not fit into GL texture");
@@ -336,7 +336,7 @@ void DeepConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, size_t
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 #ifndef HIGH_PRECISION
-    if (GLInfo::supportsHalf()) {
+    if (halfSupport_) {
         unsigned int * fp16 = FloatConversion::getInstance()->toFP16UI(weights,texwidth*texheight*PIXEL_PACKING);
 #ifdef GL_RGBA32UI
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI,texwidth/2,texheight,0,GL_RGBA_INTEGER,GL_UNSIGNED_INT,fp16);
@@ -345,7 +345,7 @@ void DeepConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, size_t
 #endif
         delete [] fp16;
     } else {
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
     }
 #else
     glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
@@ -371,8 +371,8 @@ void DeepConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, size_t
     int bs = PIXEL_PACKING*(1+(outputChannels_+PIXEL_PACKING-1)/PIXEL_PACKING);
     if (flags_ & LayerFlags::POST_BATCHNORM) bs *= 2;
     float * bias = new float[bs];
-    memset(bias,0,bs*sizeof(float));
-    memcpy(bias+PIXEL_PACKING,biasAndWeights+offset,outputChannels_*sizeof(float));
+    memset(bias, 0, bs*sizeof(float));
+    memcpy(bias + PIXEL_PACKING,biasAndWeights+offset,outputChannels_*sizeof(float));
     // load batchnorm scale and bias if necessary
     if (flags_ & LayerFlags::POST_BATCHNORM) {
         for (int i=0; i < outputChannels_; i++) {

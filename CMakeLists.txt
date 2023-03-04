@@ -32,6 +32,7 @@ endif()
 
 if (BUILD_TARGET STREQUAL "Android")
   set(USE_EGL ON)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 if (BUILD_TARGET STREQUAL "Desktop")
@@ -49,6 +50,10 @@ endif()
 
 if (NOT USE_MULTITHREADING)
   message(STATUS "Disabling multithreading")
+endif()
+
+if (BUILD_LIBRARY)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 # C++ standard to use

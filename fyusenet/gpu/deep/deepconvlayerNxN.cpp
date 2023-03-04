@@ -369,7 +369,7 @@ void DeepConvLayerNxN::compileConvolutionShaders(const char *preproc) {
         for (int part=0; part <= numSplits_; part++) {
             bool odd = ((horizSplits_.at(part) & 1) == 1);
             int varyings = horizSplits_.at(part) * ((halfSupport_) ? 2 : 4);
-            sprintf(extra, "#define COEFF_VARYINGS %d\n#define NET_KERNEL %d\n", varyings, horizSplits_.at(part));
+            snprintf(extra, sizeof(extra), "#define COEFF_VARYINGS %d\n#define NET_KERNEL %d\n", varyings, horizSplits_.at(part));
             appendOffsetDefs(extra, horizSplits_.at(part), sizeof(extra) - strlen(extra) -1);
             strncpy(finalpreproc, preproc, sizeof(finalpreproc)-1);
             // NOTE (mw) only add residual on the first pass (the shader preprocessing masks out the residual flag for the deepconv layers)

@@ -6,10 +6,18 @@
 
 #ifdef BINDING_SUPPORT
 layout(binding=4) uniform highp sampler2D inputDisplacements;
+#ifdef NO_HALF
+layout(binding=5) uniform sampler2D inputCoeffs;
+#else
 layout(binding=5) uniform highp usampler2D inputCoeffs;
+#endif
 #else
 uniform highp sampler2D inputDisplacements;
+#ifdef NO_HALF
+uniform sampler2D inputCoeffs;
+#else
 uniform highp usampler2D inputCoeffs;
+#endif
 #endif
 
 in highp vec4 attributes0;

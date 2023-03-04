@@ -139,7 +139,7 @@ void DeepTransConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, s
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
     int texwidth = ((inputChannels_ % PIXEL_PACKING)==0) ? inputChannels_ : inputChannels_ + (PIXEL_PACKING - (inputChannels_ % PIXEL_PACKING));
     texwidth *= kernel_;
-    if (texwidth&1) texwidth++;
+    if (texwidth & 1) texwidth++;
     int texheight = ((outputChannels_+(PIXEL_PACKING-1)) / PIXEL_PACKING)*kernel_;  // 4 pixels per matrix
     if (((texwidth/2) > GLInfo::getMaximumTextureSize()) || (texheight > GLInfo::getMaximumTextureSize())) {
         THROW_EXCEPTION_ARGS(FynException,"Weights do not fit into GL texture");
@@ -168,19 +168,27 @@ void DeepTransConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, s
             }
         }
     }
-    unsigned int * fp16 = FloatConversion::getInstance()->toFP16UI(weights,texwidth*texheight*PIXEL_PACKING);
-    glGenTextures(1,&weightTexture_);
+    if (!weightTexture_) glGenTextures(1,&weightTexture_);
     glBindTexture(GL_TEXTURE_2D,weightTexture_);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+#ifndef HIGH_PRECISION
+    if (halfSupport_) {
+        unsigned int * fp16 = FloatConversion::getInstance()->toFP16UI(weights,texwidth*texheight*PIXEL_PACKING);
 #ifdef GL_RGBA32UI
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI,texwidth/2,texheight,0,GL_RGBA_INTEGER,GL_UNSIGNED_INT,fp16);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI,texwidth/2,texheight,0,GL_RGBA_INTEGER,GL_UNSIGNED_INT,fp16);
 #else
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI_EXT,texwidth/2,texheight,0,GL_RGBA_INTEGER_EXT,GL_UNSIGNED_INT,fp16);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI_EXT,texwidth/2,texheight,0,GL_RGBA_INTEGER_EXT,GL_UNSIGNED_INT,fp16);
 #endif
-    delete [] fp16;
+        delete [] fp16;
+    } else {
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
+    }
+#else
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
+#endif
     delete [] weights;
     //------------------------------------------------------
     // If we have the post-BN flag set, store the batchnorm
