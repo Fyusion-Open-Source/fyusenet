@@ -38,9 +38,9 @@ class CPUBuffer;
 
 
 /**
- * @brief Adapter class that stores buffer shapes and offers re-shaping functionality
+ * @brief Representation of tensor/buffer shapes plus some re-shaping functionality
  *
- * Because FyuseNet is GPU-centric and tensors are usually represented as textures with even two
+ * Because FyuseNet is GPU-centric and tensors are usually represented as textures with two
  * different general formats (deep vs. shallow), interfacing this representation with a plain and
  * simple linear CPU buffer layout requires some adaptation work, which is done by this class.
  *
@@ -171,11 +171,11 @@ class CPUBufferShape {
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
-    int width_ = 0;             //!< Width of the tensor (w/o padding)
-    int height_ = 0;            //!< Height of the tensor (w/o padding)
+    int width_ = 0;             //!< Width of the tensor (w/ padding)
+    int height_ = 0;            //!< Height of the tensor (w/ padding)
     short channels_ = 0;        //!< Number of channels in the tensor
     short padding_ = 0;         //!< Spatial padding in the tensor
-    order dataOrder_;           //!< General data order (packed GPU shallow/deep or simple layerwise representation)
+    order dataOrder_;           //!< General data order (packed GPU shallow/deep or simple channelwise representation)
     type dataType_;             //!< Data type of the tensor data (e.g. 32-bit float, 8-bit int etc.)
     int tileWidth_ = 0;         //!< For tile-based formats, stores the width of each tile (excluding padding)
     int tileHeight_ = 0;        //1< For tile-based formats, stores the height of each tile (excluding padding)

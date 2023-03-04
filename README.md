@@ -163,17 +163,27 @@ to the destination folders. The default installation prefix, which usually is `/
 be changed using the `--prefix` parameter supplied to the `cmake` command.
 
 #### Desktop Samples
-Currently this repository only ships with a single sample application for desktop, which performs a style-transfer
-operation on a single image and writes out the result.
+Currently this repository only ships with two sample applications for desktop:
+ - A simple style-transfer tool
+ - A ResNet-50 ImageNet classifier
 
-After building the sample, the application can be found under
+After building the sample, the applications can be found under
 ```
 <build_directory>/samples/desktop/stylenet
+<build_directory>/samples/desktop/resnet
 ```
 To run a 9x9 kernel style-transfer network on an input image, use:
 ```
 stylenet -k 9 -w <weightfile> <input.jpg> <output.jpg>
 ```
+
+To run the ResNet classifier network on an input image, use:
+```
+resnet -w <weightfile> -c <classlabels> <input.jpg>
+```
+
+Weight files and a few example pictures can be found in the data directory.
+
 
 ### Compiling for Android
 Compiling the library for Android should be as straightforward as for desktop Linux. The most important prerequisite for
@@ -275,6 +285,9 @@ that directory, for example: `python -m http.server <port>` and point the browse
 The documentation build is fairly easy and only requires [doxygen](https://www.doxygen.nl/) to be installed. In any of the build
 configurations above, simply supplying `-DBUILD_DOCS=ON` to the `cmake` command also flags the documentation to be build.
 The HTML output of the documentation will be stored in a folder named `docs` in the top-level source directory.
+
+For convenience purposes, the [documentation](https://fyusion-open-source.github.io/fyusenet) is also supplied as GitHub page and
+is updated whenever the main branch is updated.
 
 ## Future Improvements
 The code in FyuseNet, particularly the CPU parts, is not fully optimized yet. For the GPU part, there are still too many calls

@@ -185,7 +185,6 @@ bool GLContext::isCurrent() const {
  */
 void GLContext::init() {
     EGLint major, minor, configs;
-    EGLint maxMajor = 0, maxMinor = 0;
 
     display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (!display_) THROW_EXCEPTION_ARGS(GLException,"Cannot get EGL display");
