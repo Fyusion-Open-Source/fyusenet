@@ -13,12 +13,12 @@ RUN if [ "${REINSTALL_CMAKE_VERSION_FROM_SOURCE}" != "none" ]; then \
 # [Optional] Uncomment this section to install additional vcpkg ports.
 # RUN su vscode -c "${VCPKG_ROOT}/vcpkg install <your-port-name-here>"
 
-# [Optional] Uncomment this section to install additional packages.
-# RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-#     && apt-get -y install --no-install-recommends <your-package-list-here>
-
 # Install apt dependencies
 # - doxygen
+# - OpenGL/EGL (libopengl-dev libglx-dev libgl1-mesa-dev libegl1-mesa-dev)
+# - libjpeg
+
 RUN apt-get update \
- && apt-get install --no-install-recommends -y doxygen
+ && export DEBIAN_FRONTEND=noninteractive \
+ && apt-get install --no-install-recommends -y doxygen libopengl-dev libglx-dev libjpeg-dev libgl1-mesa-dev libegl1-mesa-dev
 
