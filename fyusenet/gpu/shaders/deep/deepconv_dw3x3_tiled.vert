@@ -15,7 +15,11 @@ layout(binding=WEIGHT_UNIT) uniform sampler2D inputCoeffs;
 layout(binding=WEIGHT_UNIT) uniform highp usampler2D inputCoeffs;
 #endif
 #else
+#ifdef NO_HALF
+uniform sampler2D inputCoeffs;
+#else
 uniform highp usampler2D inputCoeffs;
+#endif
 #endif
 
 in highp vec4 attributes0;

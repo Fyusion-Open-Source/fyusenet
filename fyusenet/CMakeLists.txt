@@ -43,17 +43,23 @@ if (BUILD_TARGET STREQUAL "Web")
               $<TARGET_OBJECTS:cpu> $<TARGET_OBJECTS:gpu>
               $<TARGET_OBJECTS:opengl> $<TARGET_OBJECTS:base>
               $<TARGET_OBJECTS:common>)
-else()
+  add_dependencies(${LIBNAME} shader-meta)
+  target_link_libraries(${LIBNAME} ${OPENGL_LIBRARIES} ${GL_SYS_DEPS})
+  set(FYUSENET_LIB ${CMAKE_CURRENT_BINARY_DIR}/lib${LIBNAME}.a PARENT_SCOPE)
+endif()
+
+if (BUILD_LIBRARY OR BUILD_TARGET STREQUAL "Android")
   add_library(${LIBNAME} SHARED ${SHADERMETA} ${SHADERRSRC}
               $<TARGET_OBJECTS:cpu> $<TARGET_OBJECTS:gpu>
               $<TARGET_OBJECTS:opengl> $<TARGET_OBJECTS:base>
               $<TARGET_OBJECTS:common>)
   set_target_properties(${LIBNAME} PROPERTIES SOVERSION 1)
   set_property(TARGET ${LIBNAME} PROPERTY POSITION_INDEPENDENT_CODE 1)
+  add_dependencies(${LIBNAME} shader-meta)
+  target_link_libraries(${LIBNAME} ${OPENGL_LIBRARIES} ${GL_SYS_DEPS})
+  install(TARGETS ${LIBNAME} DESTINATION lib)
 endif()
 
-add_dependencies(${LIBNAME} shader-meta)
-target_link_libraries(${LIBNAME} ${OPENGL_LIBRARIES} ${GL_SYS_DEPS})
 
 
 if (BUILD_TARGET STREQUAL "Android")
@@ -65,7 +71,6 @@ if (BUILD_TARGET STREQUAL "Android")
   endif()
 endif()
 
-install(TARGETS ${LIBNAME} DESTINATION lib)
 
 #----------------------------------------------------------------------------
 # Misc installation files (headers etc.)

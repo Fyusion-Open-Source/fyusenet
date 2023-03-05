@@ -32,6 +32,7 @@ endif()
 
 if (BUILD_TARGET STREQUAL "Android")
   set(USE_EGL ON)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 if (BUILD_TARGET STREQUAL "Desktop")
@@ -49,6 +50,10 @@ endif()
 
 if (NOT USE_MULTITHREADING)
   message(STATUS "Disabling multithreading")
+endif()
+
+if (BUILD_LIBRARY)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 # C++ standard to use
@@ -73,6 +78,15 @@ set(CMAKE_EXE_LINKER_FLAGS_EMSCRIPTEN_PROFILE "${CMAKE_CXX_FLAGS_EMSCRIPTEN_PROF
 
 
 add_compile_definitions(FYUSENET_INTERNAL FYUSENET_CPU_FLOAT_ONLY)
+
+if (BUILD_TESTS)
+  if (NOT CMAKE_BUILD_TYPE MATCHES "Debug")
+    message(WARNING "Explicitly setting the DEBUG preprocessor definition for unit-testing.\
+                     You should not use the results of this build as release binaries.\
+                     Disable the unit tests for release builds")
+    add_compile_definitions(DEBUG)
+  endif()
+endif()
 
 if (HIGH_PRECISION)
   add_compile_definitions(HIGH_PRECISION)
