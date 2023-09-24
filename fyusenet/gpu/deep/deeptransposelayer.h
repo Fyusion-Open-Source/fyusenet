@@ -48,11 +48,11 @@ class DeepTransposeLayer : public DeepLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void forward(uint64_t sequence) override;
-    virtual void setup() override;
-    virtual void cleanup() override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void forward(uint64_t sequence, StateToken * token) override;
+    void setup() override;
+    void cleanup() override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
 
  protected:
 

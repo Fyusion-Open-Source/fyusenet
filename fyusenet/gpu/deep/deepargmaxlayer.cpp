@@ -16,16 +16,12 @@
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
+#include "../../common/miscdefs.h"
 #include "deepargmaxlayer.h"
-#include "../../gl/glexception.h"
-#include "../../gl/glinfo.h"
-#include "../../common/logging.h"
 #include "deeptiler.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -37,7 +33,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepArgMaxLayer::DeepArgMaxLayer(const ArgMaxLayerBuilder & builder, int layerNumber) :
     DeepLayerBase((const GPULayerBuilder &)builder, layerNumber) {
@@ -46,14 +42,6 @@ DeepArgMaxLayer::DeepArgMaxLayer(const ArgMaxLayerBuilder & builder, int layerNu
 #ifndef HIGH_PRECISION
     if (inputChannels_ > 2048) THROW_EXCEPTION_ARGS(FynException, "Due to the final output in 16-bit FP textures, this layer does not support more than 2048 input channels");
 #endif
-    pass1VBOA_ = nullptr;
-    pass1VBOB_ = nullptr;
-    pass1IBO_ = nullptr;
-    pass1VAO_ = nullptr;
-    pass2VAO_ = nullptr;
-    pass2VBO_ = nullptr;
-    pass2IBO_ = nullptr;
-    pass1FBO_ = nullptr;
     channelBits_ = std::max(1, (int)ceil(log2((double)inputChannels_)));
     pass2Mask_ = ((1<<channelBits_)-1) << (EXPONENT_BITS + GUARD_BITS);
     pass1Mask_ = ~pass2Mask_;
@@ -63,25 +51,16 @@ DeepArgMaxLayer::DeepArgMaxLayer(const ArgMaxLayerBuilder & builder, int layerNu
 /**
  * @copydoc LayerBase::cleanup
  */
-void DeepArgMaxLayer::cleanup() {  
-    if (pass1VBOA_) delete pass1VBOA_;
-    if (pass1VBOB_) delete pass1VBOB_;
-    if (pass1VBOC_) delete pass1VBOC_;
-    if (pass1IBO_) delete pass1IBO_;
-    if (pass1VAO_) delete pass1VAO_;
-    if (pass2VAO_) delete pass2VAO_;
-    if (pass2VBO_) delete pass2VBO_;
-    if (pass2IBO_) delete pass2IBO_;
-    if (pass1FBO_) delete pass1FBO_;
-    pass1VBOA_ = nullptr;
-    pass1VBOB_ = nullptr;
-    pass1VBOC_ = nullptr;
-    pass1IBO_ = nullptr;
-    pass1VAO_ = nullptr;
-    pass2VAO_ = nullptr;
-    pass2VBO_ = nullptr;
-    pass2IBO_ = nullptr;
-    pass1FBO_ = nullptr;
+void DeepArgMaxLayer::cleanup() {
+    FNET_DEL_AND_CLEAR(pass1VBOA_);
+    FNET_DEL_AND_CLEAR(pass1VBOB_);
+    FNET_DEL_AND_CLEAR(pass1VBOC_);
+    FNET_DEL_AND_CLEAR(pass1IBO_);
+    FNET_DEL_AND_CLEAR(pass1VAO_);
+    FNET_DEL_AND_CLEAR(pass2VAO_);
+    FNET_DEL_AND_CLEAR(pass2VBO_);
+    FNET_DEL_AND_CLEAR(pass2IBO_);
+    FNET_DEL_AND_CLEAR(pass1FBO_);
     DeepLayerBase::cleanup();
 }
 
@@ -100,23 +79,23 @@ void DeepArgMaxLayer::setup() {
 /**
  * @brief Execute layer
  *
- * @param sequence Sequence number (\b must be stricly increasing)
+ * @param sequenceNo Sequence number (\b must be strictly increasing)
+ * @param state Pointer to optional StateToken object that encapsulates per-run state information
  *
  * This function performs the actual computation that maps the input data to the output data
- * for this layer. The supplied \p sequence number \b must be strictly increasing per network run
+ * for this layer. The supplied \p sequenceNo number \b must be strictly increasing per network run
  * and may also be used for debugging purposes, in case errors only manifests themselves after a
  * certain number of computation cycles. It can also be used to keep track of the total number of
  * inference runs. Internally, it is used to make sure that asynchronously transmitted data is
  * up-to-date (on PBO reads for example).
- *
  */
-void DeepArgMaxLayer::forward(uint64_t sequence) {
+void DeepArgMaxLayer::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -133,7 +112,7 @@ void DeepArgMaxLayer::forward(uint64_t sequence) {
     pass1Shader_->bind(pass1State_.get());
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D,inputTextures_.at(0));
-    glDrawElements(GL_TRIANGLES,tiler_->numInputTiles()*6,GL_UNSIGNED_SHORT,(const GLvoid *)0);
+    glDrawElements(GL_TRIANGLES,tiler_->numInputTiles()*6,GL_UNSIGNED_SHORT,(const GLvoid *)nullptr);
     pass1Shader_->unbind(true);
     pass1VAO_->unbind();
     pass1FBO_->unbind();
@@ -146,7 +125,7 @@ void DeepArgMaxLayer::forward(uint64_t sequence) {
     pass2Shader_->bind(pass2State_.get());
     glClear(GL_COLOR_BUFFER_BIT);
     glBindTexture(GL_TEXTURE_2D,pass1FBO_->getAttachment());
-    glDrawElements(GL_TRIANGLES,tiler_->numOutputTiles()*6,GL_UNSIGNED_SHORT,(const GLvoid *)0);
+    glDrawElements(GL_TRIANGLES,tiler_->numOutputTiles()*6,GL_UNSIGNED_SHORT,(const GLvoid *)nullptr);
     pass2VAO_->unbind();
     pass2Shader_->unbind();
 }
@@ -187,6 +166,9 @@ std::vector<BufferSpec> DeepArgMaxLayer::getRequiredOutputBuffers() const {
  * and performs base initializations on them.
  */
 void DeepArgMaxLayer::setupShaders() {
+#if defined(WIN32) || defined(WIN64)
+        using ssize_t = int64_t;
+#endif
     char preproc[1024] = {0}, line[512];
     ssize_t mc = (ssize_t)shaderPreprocessing(preproc, sizeof(preproc)-1);
     assert(mc > 0);
@@ -250,19 +232,19 @@ void DeepArgMaxLayer::setupNetworkPolygons() {
     }
     pass1VBOA_ = new VBO(context_);
     pass1VAO_->enableArray(0);
-    pass1VBOA_->setBufferData(attrs0,tiler_->numInputTiles()*4*4*sizeof(float),GL_STATIC_DRAW);
+    pass1VBOA_->setBufferData(attrs0, (int)(tiler_->numInputTiles()*4*4*sizeof(float)),GL_STATIC_DRAW);
     pass1VBOA_->bind();
     pass1VAO_->setVertexAttributeBuffer(0,4,GL_FLOAT,GL_FALSE,0,0);
 
     pass1VBOB_ = new VBO(context_);
     pass1VAO_->enableArray(1);
-    pass1VBOB_->setBufferData(attrs1,tiler_->numInputTiles()*4*4*sizeof(unsigned int),GL_STATIC_DRAW);
+    pass1VBOB_->setBufferData(attrs1, (int)(tiler_->numInputTiles()*4*4*sizeof(unsigned int)),GL_STATIC_DRAW);
     pass1VBOB_->bind();
     pass1VAO_->setVertexAttributeBuffer(1,4,GL_UNSIGNED_INT,0,0);
 
     pass1VBOC_ = new VBO(context_);
     pass1VAO_->enableArray(2);
-    pass1VBOC_->setBufferData(attrs2,tiler_->numInputTiles()*4*4*sizeof(unsigned int),GL_STATIC_DRAW);
+    pass1VBOC_->setBufferData(attrs2, (int)(tiler_->numInputTiles()*4*4*sizeof(unsigned int)),GL_STATIC_DRAW);
     pass1VBOC_->bind();
     pass1VAO_->setVertexAttributeBuffer(2,4,GL_UNSIGNED_INT,0,0);
 
@@ -276,14 +258,14 @@ void DeepArgMaxLayer::setupNetworkPolygons() {
     pass1IBO_ = new IBO(context_);
     for (int i=0; i < tiler_->numInputTiles(); i++) {
         int offset = i*4;
-        indices[i*6+0] = offset+0;
-        indices[i*6+1] = offset+1;
-        indices[i*6+2] = offset+2;
-        indices[i*6+3] = offset+0;
-        indices[i*6+4] = offset+2;
-        indices[i*6+5] = offset+3;
+        indices[i*6+0] = (GLshort)(offset+0);
+        indices[i*6+1] = (GLshort)(offset+1);
+        indices[i*6+2] = (GLshort)(offset+2);
+        indices[i*6+3] = (GLshort)(offset+0);
+        indices[i*6+4] = (GLshort)(offset+2);
+        indices[i*6+5] = (GLshort)(offset+3);
     }
-    pass1IBO_->setBufferData(indices,6*tiler_->numInputTiles()*sizeof(GLshort),GL_STATIC_DRAW);
+    pass1IBO_->setBufferData(indices, (int)(6 * tiler_->numInputTiles() * sizeof(GLshort)),GL_STATIC_DRAW);
     pass1IBO_->bind();
     delete [] indices;
     pass1VAO_->unbind();
@@ -304,7 +286,7 @@ void DeepArgMaxLayer::setupNetworkPolygons() {
     }
     pass2VBO_ = new VBO(context_);
     pass2VAO_->enableArray(0);
-    pass2VBO_->setBufferData(attrs0,tiler_->numOutputTiles()*4*4*sizeof(float),GL_STATIC_DRAW);
+    pass2VBO_->setBufferData(attrs0, (int)(tiler_->numOutputTiles() * 4 * 4 * sizeof(float)),GL_STATIC_DRAW);
     pass2VBO_->bind();
     pass2VAO_->setVertexAttributeBuffer(0,4,GL_FLOAT,GL_FALSE,0,0);
     delete [] attrs0;
@@ -312,14 +294,14 @@ void DeepArgMaxLayer::setupNetworkPolygons() {
     pass2IBO_ = new IBO(context_);
     for (int i=0; i < tiler_->numOutputTiles(); i++) {
         int offset = i*4;
-        indices[i*6+0] = offset+0;
-        indices[i*6+1] = offset+1;
-        indices[i*6+2] = offset+2;
-        indices[i*6+3] = offset+0;
-        indices[i*6+4] = offset+2;
-        indices[i*6+5] = offset+3;
+        indices[i*6+0] = (GLshort)(offset+0);
+        indices[i*6+1] = (GLshort)(offset+1);
+        indices[i*6+2] = (GLshort)(offset+2);
+        indices[i*6+3] = (GLshort)(offset+0);
+        indices[i*6+4] = (GLshort)(offset+2);
+        indices[i*6+5] = (GLshort)(offset+3);
     }
-    pass2IBO_->setBufferData(indices,6*tiler_->numOutputTiles()*sizeof(GLshort),GL_STATIC_DRAW);
+    pass2IBO_->setBufferData(indices, (int)(6 * tiler_->numOutputTiles() * sizeof(GLshort)),GL_STATIC_DRAW);
     pass2IBO_->bind();
     delete [] indices;
     pass2VAO_->unbind();
@@ -335,9 +317,6 @@ void DeepArgMaxLayer::setupFBOs() {
     pass1FBO_ = new FBO(context_,viewport_[0], viewport_[1], 2, opengl::Texture::FLOAT32);
 }
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

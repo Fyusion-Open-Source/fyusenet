@@ -60,17 +60,17 @@ class DeepTransConvLayerBase : public DeepConvLayerBase {
     // ------------------------------------------------------------------------
     DeepTransConvLayerBase(const ConvLayerBuilder & builder, int layerNumber);
 
-    virtual void setup() override;
-    virtual void cleanup() override;
-    virtual void forward(uint64_t sequence) override;
-    virtual void loadWeightsAndBiases(const float *biasAndWeights, size_t offset) override;
+    void setup() override;
+    void cleanup() override;
+    void forward(uint64_t sequenceNo, StateToken *state) override;
+    void loadParameters(const ParameterProvider *weightSource) override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual size_t shaderPreprocessing(char *preproc,size_t maxChars) override;
-    virtual void setupNetworkPolygons(VAO *vao) override;
+    size_t shaderPreprocessing(char *preproc,size_t maxChars) override;
+    void setupNetworkPolygons(VAO *vao) override;
     void setupStencilBuffer();
 
     /**

@@ -31,10 +31,13 @@
 #include "customlayerbuilder.h"
 #include "transposelayerbuilder.h"
 #include "updownlayerbuilder.h"
+#include "embeddinglayerbuilder.h"
+#include "attentionlayerbuilder.h"
+#include "linearlayerbuilder.h"
+#include "tokenscoringlayerbuilder.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 /**
@@ -50,45 +53,52 @@ class GPULayerFactoryBackend : public LayerFactoryBackend {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
-    GPULayerFactoryBackend(GfxContextLink context);
+    explicit GPULayerFactoryBackend(GfxContextLink context);
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual std::string getName() const override;
-    virtual fyusenet::LayerBase * createLayer(LayerType type, LayerBuilder * builder, int layerNumber) override;
+    [[nodiscard]] std::string getName() const override;
+    fyusenet::LayerBase * createLayer(LayerType type, LayerBuilder * builder, int layerNumber) override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    GPULayerBase * createAddSubLayer(GPULayerBuilder *builder, int layerNumber);
-    GPULayerBase * createOESLayer(GPULayerBuilder *builder,int layerNumber);
-    GPULayerBase * createPaddingLayer(GPULayerBuilder *builder,int layerNumber);
-    GPULayerBase * createConvLayer(ConvLayerBuilder *builder,int layerNumber);
-    GPULayerBase * createTransConvLayer(ConvLayerBuilder *builder,int layerNumber);
-    GPULayerBase * createFracConvLayer(ConvLayerBuilder *builder,int layerNumber);
-    GPULayerBase * createScaleLayer(ScaleLayerBuilder *builder,int layerNumber);
-    GPULayerBase * createConcatLayer(ConcatLayerBuilder *builder,int layerNumber);
-    GPULayerBase * createS2DLayer(GPULayerBuilder *builder,int layerNumber);
-    GPULayerBase * createD2SLayer(GPULayerBuilder *builder,int layerNumber);
-    GPULayerBase * createMaxPoolLayer(PoolLayerBuilder *builder,int layerNumber);
-    GPULayerBase * createAvgPoolLayer(PoolLayerBuilder *builder,int layerNumber);
-    GPULayerBase * createArgMaxLayer(ArgMaxLayerBuilder *builder,int layerNumber);
-    GPULayerBase * createCustomLayer(CustomLayerBuilder *builder,int layerNumber);
-    GPULayerBase * createDownloadLayer(UpDownLayerBuilder * builder, int layerNumber);
-    GPULayerBase * createUploadLayer(UpDownLayerBuilder * builder, int layerNumber);
-    GPULayerBase * createSigmoidLayer(GPULayerBuilder * builder, int layerNumber);
-    GPULayerBase * createTanhLayer(GPULayerBuilder * builder, int layerNumber);
-    GPULayerBase * createImgExtractLayer(ImgExtractLayerBuilder * builder, int layerNumber);
-    GPULayerBase * createNonMax2DLayer(GPULayerBuilder *builder, int layerNumber);
-    GPULayerBase * createBlur2DLayer(BlurLayerBuilder *builder, int layerNumber);
-    GPULayerBase * createRGB2BGRLayer(GPULayerBuilder *builder, int layerNumber);
-    GPULayerBase * createSingletonArithLayer(SingletonArithLayerBuilder *builder, int layerNumber);
-    GPULayerBase * createCastLayer(CastLayerBuilder *builder, int layerNumber);
-    GPULayerBase * createTransposeLayer(TransposeLayerBuilder * builder, int layerNumber);
-    GPULayerBase * createBatchNormLayer(GPULayerBuilder * builder, int layerNumber);
-    GPULayerBase * createGEMMLayer(GPULayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createAddSubLayer(GPULayerBuilder *builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createOESLayer(GPULayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createPaddingLayer(GPULayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createConvLayer(ConvLayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createTransConvLayer(ConvLayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createFracConvLayer(ConvLayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createScaleLayer(ScaleLayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createConcatLayer(ConcatLayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createS2DLayer(GPULayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createD2SLayer(GPULayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createMaxPoolLayer(PoolLayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createAvgPoolLayer(PoolLayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createArgMaxLayer(ArgMaxLayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createCustomLayer(CustomLayerBuilder *builder,int layerNumber);
+    [[nodiscard]] GPULayerBase * createDownloadLayer(UpDownLayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createUploadLayer(UpDownLayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createSigmoidLayer(GPULayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createTanhLayer(GPULayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createImgExtractLayer(ImgExtractLayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createNonMax2DLayer(GPULayerBuilder *builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createBlur2DLayer(BlurLayerBuilder *builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createRGB2BGRLayer(GPULayerBuilder *builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createSingletonArithLayer(SingletonArithLayerBuilder *builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createCastLayer(CastLayerBuilder *builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createTransposeLayer(TransposeLayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createBatchNormLayer(GPULayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createGEMMLayer(GPULayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createSiLULayer(GPULayerBuilder *builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createGeLULayer(GPULayerBuilder *builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createRMSNormLayer(GPULayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createEmbeddingLayer(EmbeddingLayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createAttentionLayer(AttentionLayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createLinearLayer(LinearLayerBuilder * builder, int layerNumber);
+    [[nodiscard]] GPULayerBase * createTokenScoringLayer(TokenScoringLayerBuilder * builder, int layerNumber);
  private:
     static void checkRequirements();
     // ------------------------------------------------------------------------
@@ -98,8 +108,6 @@ class GPULayerFactoryBackend : public LayerFactoryBackend {
 };
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

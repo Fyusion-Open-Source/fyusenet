@@ -30,10 +30,8 @@
 #include "convlayerbase_vanilla.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+
+namespace fyusion::fyusenet::gpu::vanilla {
 
 /**
  * @brief Convolution layer using odd NxN convolution kernels for shallow tensors on GPU
@@ -63,13 +61,13 @@ class ConvLayerNxN : public ConvLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
-    virtual void forward(uint64_t sequence = 0) override;
+    void cleanup() override;
+    void forward(uint64_t sequenceNo, StateToken *state) override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupShaders() override;
+    void setupShaders() override;
     virtual void compileConvolutionShaders(const char *preproc);
 
     // ------------------------------------------------------------------------
@@ -79,9 +77,6 @@ class ConvLayerNxN : public ConvLayerBase {
     std::vector<unistateptr> convolutionShaderStates_;
 };
 
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

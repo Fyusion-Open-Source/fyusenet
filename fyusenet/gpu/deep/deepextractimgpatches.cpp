@@ -34,7 +34,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepExtractImagePatches::DeepExtractImagePatches(const gpu::ImgExtractLayerBuilder & builder, int layerNumber) : DeepLayerBase((const GPULayerBuilder &)builder, layerNumber) {
     if (flags_ & LayerFlags::RESIDUAL_INPUT) THROW_EXCEPTION_ARGS(FynException,"This layer does not support residual input");
@@ -84,13 +84,13 @@ void DeepExtractImagePatches::cleanup() {
 /**
  * @copydoc LayerBase::forward
  */
-void DeepExtractImagePatches::forward(uint64_t sequence) {
+void DeepExtractImagePatches::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -148,7 +148,7 @@ std::vector<BufferSpec> DeepExtractImagePatches::getRequiredOutputBuffers() cons
  */
 void DeepExtractImagePatches::setupShaders() {
     char preproc[1024] = {0};
-    handlePreprocFlags(flags_, preproc, sizeof(preproc)-1);
+    preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-1);
     shader_ = compileShaderPair("shaders/deep/deepimgpatch.vert","shaders/deep/deepimgpatch.frag",preproc,typeid(this));
     try {
         shader_->bindAttributeLocation("attributes0",0);

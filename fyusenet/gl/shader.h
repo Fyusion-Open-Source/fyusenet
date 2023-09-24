@@ -22,8 +22,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
 
 /**
  * @brief Wrapper class for OpenGL shaders
@@ -171,8 +170,8 @@ class Shader : public fyusenet::GfxContextTracker {
 
 typedef std::shared_ptr<Shader> shaderptr;
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 
 // vim: set expandtab ts=4 sw=4:

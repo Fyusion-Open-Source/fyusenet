@@ -25,10 +25,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 /**
  * @brief Average-pooling layer for deep tensor data
@@ -46,15 +43,15 @@ class DeepAvgPoolLayer : public DeepPoolingLayer {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     DeepAvgPoolLayer(const PoolLayerBuilder &builder, int layerNumber);
-    virtual void cleanup() override;
+    void cleanup() override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void renderChannelBatch() override;
-    virtual void beforeRender() override;
-    virtual void setupShaders() override;
-    virtual void afterRender() override;
+    void renderChannelBatch() override;
+    void beforeRender() override;
+    void setupShaders() override;
+    void afterRender() override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -63,9 +60,6 @@ class DeepAvgPoolLayer : public DeepPoolingLayer {
     unistateptr shaderState_;     //!< UniformState object for the #shader_
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

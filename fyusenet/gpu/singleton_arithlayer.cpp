@@ -32,7 +32,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 SingletonArithmeticLayer::SingletonArithmeticLayer(const SingletonArithLayerBuilder & builder, int layerNumber):FunctionLayer((GPULayerBuilder &)builder, layerNumber) {
     assert(builder.type_ != LayerType::ILLEGAL);
@@ -113,7 +113,7 @@ void SingletonArithmeticLayer::setupShaders() {
     }
     for (int i=1; i<=maxRenderTargets_; i++) {
         snprintf(preproc, sizeof(preproc), "#define NUM_LANES %d\n#define ARITH_OP_%s\n", i, opname);
-        handlePreprocFlags(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
+        preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
         shaders_[i-1] = compileShader(preproc);
         shaderStates_[i-1] = initShader(shaders_[i-1],i);
     }

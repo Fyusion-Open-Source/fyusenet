@@ -110,7 +110,6 @@ class UniformWeightArray {
      * @brief Extract bias data from raw input data
      *
      * @param input Pointer to raw input data
-     * @param offset Offset (in 32-bit floats) to \p input where to start reading the bias data
      *
      * @todo Support 16-bit FP and perhaps 8/16 bit integer raw data in the future
      *
@@ -119,14 +118,12 @@ class UniformWeightArray {
      *
      * @note Please note the input format description in the class documentation
      */
-    virtual void extractBiasData(const float *input, size_t offset)=0;
+    virtual void extractBiasData(const float *input)=0;
 
     /**
      * @brief Extract weight data from raw input data
      *
      * @param input Pointer to raw input data
-     * @param offset Offset (in 32-bit floats) to \p input where to start reading the weights,
-     *               <i>pointing to the start of the weight data</i>
      *
      * This function extracts the convolution weights from the supplied raw \p input pointer,
      * assuming that it points to the start of the actual weight data.
@@ -142,21 +139,19 @@ class UniformWeightArray {
      *  [outchannel][fy][fx][inchannel]
      *  @endcode
      */
-    virtual void extractWeightData(const float *input, size_t offset)=0;
+    virtual void extractWeightData(const float *input)=0;
 
     /**
      * @brief Extract batchnorm data from raw input data
      *
      * @param input Pointer to raw input data
-     * @param offset Offset (in 32-bit floats) to \p input where to start reading the batchnorm
-     *               data
      *
      * This function assumes that the batchnorm data in the \p input pointer is arranged in the
      * following way:
      *   1. scales (one 32-bit FP per output channel)
      *   2. offsets (one 32-bit FP per output channel)
      */
-    virtual void extractBatchnormData(const float *input, size_t offset)=0;
+    virtual void extractBatchnormData(const float *input)=0;
 
     /**
      * @brief Retrieve the number of required input render passes for one input batch

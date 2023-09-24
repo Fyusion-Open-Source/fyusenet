@@ -130,8 +130,8 @@ int TransConvWeightArray3x3xNxM::outputTextureOffset(int outputPass) const {
  * @return Pointer to consecutive float data which can be loaded as uniform float data to a
  *         OpenGL shader
  *
- * @note An input layer batch has a depth of 16. Supplying \c 1 as \p inputPass will therefore
- *       fetch data for input-layers #16..#31. Accordingly, an output layer batch has a depth of 4.
+ * @note Assume an input layer batch has a depth of 16. Supplying \c 1 as \p inputPass will therefore
+ *       fetch data for input-layers #16..#31. Accordingly, assume an output layer batch has a depth of 4.
  *       Supplying \c 1 as \p outputPass will therefore fetch data for output-layers #4..#7 .
  */
 const float * TransConvWeightArray3x3xNxM::getPackageWeights(int inputPass, int outputPass, int xIndex, int yIndex) const {
@@ -165,11 +165,11 @@ const float * TransConvWeightArray3x3xNxM::getPackageBNScale(int outputPass) con
 /**
  * @copydoc UniformWeightArray::extractBiasData
  */
-void TransConvWeightArray3x3xNxM::extractBiasData(const float *input,size_t offset) {
+void TransConvWeightArray3x3xNxM::extractBiasData(const float *input) {
     if (!biasData_) biasData_ = new float[paddedOutputChannels_];
     memset(biasData_, 0, paddedOutputChannels_ * sizeof(float));
     for (int i=0; i < outputChannels_; i++) {
-        biasData_[i] = input[i+offset];
+        biasData_[i] = input[i];
     }
     if (bnBias_ && bnScale_) {
         for (int i=0; i < outputChannels_; i++) {
@@ -182,14 +182,14 @@ void TransConvWeightArray3x3xNxM::extractBiasData(const float *input,size_t offs
 /**
  * @copydoc UniformWeightArray::extractBatchnormData
  */
-void TransConvWeightArray3x3xNxM::extractBatchnormData(const float *input,size_t offset) {
+void TransConvWeightArray3x3xNxM::extractBatchnormData(const float *input) {
     if (!bnBias_) bnBias_ = new float[paddedOutputChannels_];
     if (!bnScale_) bnScale_ = new float[paddedOutputChannels_];
     memset(bnBias_, 0, paddedOutputChannels_ * sizeof(float));
     memset(bnScale_, 0, paddedOutputChannels_ * sizeof(float));
     for (int i=0; i < outputChannels_;i++) {
-        bnBias_[i] = input[i+offset];
-        bnScale_[i] = input[i+offset+outputChannels_];
+        bnBias_[i] = input[i];
+        bnScale_[i] = input[i+outputChannels_];
     }
     if (biasData_) {
         for (int i=0; i < outputChannels_; i++) {
@@ -215,23 +215,23 @@ int TransConvWeightArray3x3xNxM::getPackageSize(int inputPass, int outputPass, i
 /**
  * @copydoc UniformWeightArray::extractWeightData
  */
-void TransConvWeightArray3x3xNxM::extractWeightData(const float *input, size_t offset) {
+void TransConvWeightArray3x3xNxM::extractWeightData(const float *input) {
     int fullsize = kernel_ * (kernel_ * paddedOutputChannels_) * paddedInputChannels_;
     if (!weightData_) weightData_ = new float[fullsize];
     memset(weightData_, 0, fullsize * sizeof(float));
-    int dstoffs = extractStratum1(input, offset, 0);
+    int dstoffs = extractStratum1(input, 0, 0);
     if (dstoffs >= fullsize) {
         THROW_EXCEPTION_ARGS(FynException,"Overflow (%d) at weight array computation (max=%d)",dstoffs,fullsize);
     }
-    dstoffs = extractStratum2(input, offset, dstoffs);
+    dstoffs = extractStratum2(input, 0, dstoffs);
     if (dstoffs >= fullsize) {
         THROW_EXCEPTION_ARGS(FynException,"Overflow (%d) at weight array computation (max=%d)",dstoffs,fullsize);
     }
-    dstoffs = extractStratum3(input, offset, dstoffs);
+    dstoffs = extractStratum3(input, 0, dstoffs);
     if (dstoffs >= fullsize) {
         THROW_EXCEPTION_ARGS(FynException,"Overflow (%d) at weight array computation (max=%d)",dstoffs,fullsize);
     }
-    dstoffs = extractStratum4(input, offset, dstoffs);
+    dstoffs = extractStratum4(input, 0, dstoffs);
     if (dstoffs > fullsize) {
         THROW_EXCEPTION_ARGS(FynException,"Overflow (%d) at weight array computation (max=%d)",dstoffs,fullsize);
     }
@@ -271,7 +271,7 @@ int TransConvWeightArray3x3xNxM::extractStratum1(const float *input, size_t inpu
 
                 for (int l=0; l < ilimit; l++) {
                     for (int o=0; o < olimit; o++) {
-                        int srcoffset = inputOffset + (olayer + o) * ostride + (kernel_ + 1) * inputChannels_ + ilayer + l;
+                        size_t srcoffset = inputOffset + (olayer + o) * ostride + (kernel_ + 1) * inputChannels_ + ilayer + l;
                         weightData_[dstOffset++] = input[srcoffset];
                     }
                     if (olimit < PIXEL_PACKING) dstOffset += (PIXEL_PACKING-olimit);
@@ -304,7 +304,7 @@ int TransConvWeightArray3x3xNxM::extractStratum1(const float *input, size_t inpu
  *
  * @see TransConvLayerBase
  */
-int TransConvWeightArray3x3xNxM::extractStratum2(const float *input,size_t inputOffset,int dstOffset) {
+int TransConvWeightArray3x3xNxM::extractStratum2(const float *input, size_t inputOffset, int dstOffset) {
     int offsets[2] = {kernel_,kernel_+2};
     int ostride = kernel_*kernel_*inputChannels_;
     for (int opass = 0 ; opass < outputRenderPasses_ ; opass++) {
@@ -318,7 +318,7 @@ int TransConvWeightArray3x3xNxM::extractStratum2(const float *input,size_t input
                     int ilimit = ((inputChannels_-ilayer) >= PIXEL_PACKING) ? PIXEL_PACKING : (inputChannels_-ilayer);
                     for (int l=0; l < ilimit; l++) {
                         for (int o=0; o < olimit; o++) {
-                            int srcoffset = inputOffset + (olayer+o)*ostride + offsets[s]*inputChannels_ + ilayer + l;
+                            size_t srcoffset = inputOffset + (olayer+o)*ostride + offsets[s]*inputChannels_ + ilayer + l;
                             weightData_[dstOffset++] = input[srcoffset];
                         }
                         if (olimit < PIXEL_PACKING) dstOffset += (PIXEL_PACKING-olimit);
@@ -351,7 +351,7 @@ int TransConvWeightArray3x3xNxM::extractStratum2(const float *input,size_t input
  *
  * @see TransConvLayerBase
  */
-int TransConvWeightArray3x3xNxM::extractStratum3(const float *input,size_t inputOffset,int dstOffset) {
+int TransConvWeightArray3x3xNxM::extractStratum3(const float *input, size_t inputOffset, int dstOffset) {
     int offsets[2]={1,2*kernel_+1};
     int ostride = kernel_*kernel_*inputChannels_;
     for (int opass = 0 ; opass < outputRenderPasses_ ; opass++) {
@@ -366,7 +366,7 @@ int TransConvWeightArray3x3xNxM::extractStratum3(const float *input,size_t input
 
                     for (int l=0;l < ilimit; l++) {
                         for (int o=0; o < olimit; o++) {
-                            int srcoffset = inputOffset + (olayer+o)*ostride + offsets[s]*inputChannels_ + ilayer + l;
+                            size_t srcoffset = inputOffset + (olayer+o)*ostride + offsets[s]*inputChannels_ + ilayer + l;
                             weightData_[dstOffset++] = input[srcoffset];
                         }
                         if (olimit < PIXEL_PACKING) dstOffset += (PIXEL_PACKING-olimit);
@@ -400,7 +400,7 @@ int TransConvWeightArray3x3xNxM::extractStratum3(const float *input,size_t input
  *
  * @see TransConvLayerBase
  */
-int TransConvWeightArray3x3xNxM::extractStratum4(const float *input, size_t inputOffset,int dstOffset) {
+int TransConvWeightArray3x3xNxM::extractStratum4(const float *input, size_t inputOffset, int dstOffset) {
     int offsets[4] = {0,2,2*kernel_,2*kernel_+2};
     int ostride = kernel_*kernel_*inputChannels_;
     for (int opass = 0 ; opass < outputRenderPasses_ ; opass++) {
@@ -415,7 +415,7 @@ int TransConvWeightArray3x3xNxM::extractStratum4(const float *input, size_t inpu
 
                     for (int l=0; l < ilimit; l++) {
                         for (int o=0; o < olimit; o++) {
-                            int srcoffset = inputOffset + (olayer+o)*ostride + offsets[s]*inputChannels_ + ilayer + l;
+                            size_t srcoffset = inputOffset + (olayer+o)*ostride + offsets[s]*inputChannels_ + ilayer + l;
                             weightData_[dstOffset++] = input[srcoffset];
                         }
                         if (olimit < PIXEL_PACKING) dstOffset += (PIXEL_PACKING-olimit);

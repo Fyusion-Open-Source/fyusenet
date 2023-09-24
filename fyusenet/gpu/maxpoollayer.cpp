@@ -31,7 +31,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&,int)
  */
 MaxPoolLayer::MaxPoolLayer(const PoolLayerBuilder & builder, int layerNumber) : PoolingLayer(builder, layerNumber) {
 }

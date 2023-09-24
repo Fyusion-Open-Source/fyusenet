@@ -39,7 +39,7 @@ namespace deep {
 
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepTransConvLayer2x2::DeepTransConvLayer2x2(const ConvLayerBuilder& builder,int layerNumber) :
     DeepTransConvLayerBase(builder, layerNumber) {
@@ -92,9 +92,16 @@ void DeepTransConvLayer2x2::renderPass(int pass) {
 
 
 /**
- * @copydoc DeepConvLayerBase::compileConvolutionShaders
+ * @brief Compile convolution-specific shaders
+ *
+ * @param preproc Existing preprocessor macros for the shader
+ *
+ * This function compiles and links the convolution-specific shader(s) and stores the shader
+ * programs in the appropriate locations at #shader_ and #noBiasShader_ . In addition, the
+ * shader state objects at #shaderState_ and #noBiasShaderState_ are initialized with the
+ * implementation-specific values.
  */
-void DeepTransConvLayer2x2::compileConvolutionShaders(const char *preproc) {
+ void DeepTransConvLayer2x2::compileConvolutionShaders(const char *preproc) {
     char finalpreproc[1024] = {0};
     strncpy(finalpreproc, preproc, sizeof(finalpreproc)-1);
     shader_ = compileShaderPair("shaders/deep/deeptransconv2x2_stride2.vert","shaders/deep/deeptransconv2x2_stride2.frag",finalpreproc,typeid(this));

@@ -65,6 +65,7 @@ class TestContextManager {
 
     static void setupGLContext(int derived=1);
     static void tearDownGLContext();
+    static void waitMouse();
 
     static fyusion::fyusenet::GfxContextLink context_;
 };

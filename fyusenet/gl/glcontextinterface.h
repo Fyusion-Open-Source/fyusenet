@@ -23,6 +23,7 @@ namespace fyusenet {
 namespace opengl {
 
 class PBOPool;
+class ScopedTexturePool;
 
 /**
  * @brief Interface class for a slightly abstracted GL context
@@ -95,6 +96,14 @@ class GLContextInterface {
 
 
     /**
+     * @brief Obtain pointer to texture pool that is valid for this context
+     *
+     * @return Pointer to texture pool or \c nullptr if there was no texture pool allocated
+     */
+    virtual ScopedTexturePool * texturePool() const = 0;
+
+
+    /**
      * @brief Release current GL context from the calling thread
      *
      * @retval true if context was released
@@ -126,6 +135,8 @@ class GLContextInterface {
      *
      * GL contexts can be attached to different surfaces. This function instructs the context to
      * use the default surface.
+     *
+     * @note This concept is not necessarily existing on all platforms
      */
     virtual void useDefaultSurface() = 0;
 

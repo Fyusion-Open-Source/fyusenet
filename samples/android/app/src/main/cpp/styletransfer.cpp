@@ -19,7 +19,9 @@
 
 #include <samplenetworks/stylenet3x3.h>
 #include <samplenetworks/stylenet9x9.h>
+#include <helpers/stylenet_provider.h>
 #include <fyusenet/gpu/gfxcontextmanager.h>
+#include <fyusenet/gpu/gpubuffer.h>
 
 //-------------------------------------- Global Variables ------------------------------------------
 
@@ -56,21 +58,24 @@ Java_com_fyusion_fyusenetsample_CameraRender_initNetwork(JNIEnv *env, jobject th
     if ((!bufptr) || (bufsize == 0)) return 0;
     auto context = mgr->createMainContextFromCurrent();
     StyleNetBase * net = nullptr;
+    StyleNetProvider * params = nullptr;
     switch (kernel_size) {
       case 9:
           net = new StyleNet9x9(proc_width, proc_height, false, false, context);
+          params = new StyleNet9x9Provider(bufptr, bufsize);
           break;
       default:
           net = new StyleNet3x3(proc_width, proc_height, false, false, context);
+          params = new StyleNet3x3Provider(bufptr, bufsize);
           break;
     }
     net->enableOESInput();
+    net->setParameters(params);
     net->setup();
-    net->loadWeightsAndBiases((float *)bufptr, bufsize/4);
-
     jlong rc = (jlong)net;
     __android_log_print(ANDROID_LOG_DEBUG, "JNI", "allocated %p", net);
     contexts_[rc] = context;
+    delete params;
     return rc;
 }
 
@@ -105,12 +110,16 @@ Java_com_fyusion_fyusenetsample_CameraRender_getOutputTexture(JNIEnv *env, jobje
  */
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_fyusion_fyusenetsample_CameraRender_processOESTexture(JNIEnv *env, jobject thiz,
-                                                               jint texture, jlong network) {    
+Java_com_fyusion_fyusenetsample_CameraRender_processOESTexture(JNIEnv *env, jobject thiz, jint texture, jlong network) {
+    using namespace fyusion::fyusenet;
     StyleNetBase * net = reinterpret_cast<StyleNetBase *>(network);
     __android_log_print(ANDROID_LOG_DEBUG, "JNI", "passed network: %p", net);
     if (net) {
-        net->setInputTexture(texture);
+        // FIXME (mw) use of low-level interface
+        std::vector<gpu::GPUBuffer::slice> slices{fyusion::opengl::Texture2DRef(texture, net->width(), net->height(),
+                                                  fyusion::opengl::Texture::pixtype::UINT8, 4)};
+        gpu::GPUBuffer * buffer = gpu::GPUBuffer::createShallowBuffer(BufferShape(net->height(), net->width(), 4, 0, BufferShape::type::UBYTE), slices);
+        net->setInputGPUBuffer(buffer);
         net->forward();
     }
 }

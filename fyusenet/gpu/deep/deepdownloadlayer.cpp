@@ -34,7 +34,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc LayerBase::LayerBase()
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepDownloadLayer::DeepDownloadLayer(const UpDownLayerBuilder& builder, int layerNumber) :
     DeepLayerBase((const GPULayerBuilder &)builder,layerNumber), CPULayerInterface(), DownloadLayerInterface() {
@@ -46,12 +46,6 @@ DeepDownloadLayer::DeepDownloadLayer(const UpDownLayerBuilder& builder, int laye
     if (builder.callback_) userCallback_ = builder.callback_;
     async_ = builder.async_;
 #endif
-}
-
-/**
- * @copydoc LayerBase::~LayerBase()
- */
-DeepDownloadLayer::~DeepDownloadLayer() {
 }
 
 
@@ -73,19 +67,19 @@ std::vector<BufferSpec> DeepDownloadLayer::getRequiredInputBuffers() const {
 std::vector<BufferSpec> DeepDownloadLayer::getRequiredOutputBuffers() const {
     std::vector<BufferSpec> result;
     result.push_back(BufferSpec(0, 0, width_, height_,
-                                BufferSpec::SINGLE32F, BufferSpec::SINGLE, BufferSpec::FLOAT,
-                                BufferSpec::CPU_DEST, outputChannels_).device(BufferSpec::COMP_STOR_CPU).dataOrder(BufferSpec::order::GPU_DEEP));
+                                BufferSpec::sizedformat::SINGLE32F, BufferSpec::genericformat::SINGLE, BufferSpec::dtype::FLOAT,
+                                BufferSpec::CPU_DEST, outputChannels_).device(BufferSpec::csdevice::COMP_STOR_CPU).dataOrder(BufferSpec::order::GPU_DEEP));
     return result;
 }
 
 
 /**
- * @copydoc cpu::CPULayerInterface::addOutputBuffer
+ * @copydoc cpu::CPULayerInterface::addCPUOutputBuffer
  */
-void DeepDownloadLayer::addOutputBuffer(CPUBuffer *buf, int port) {
+void DeepDownloadLayer::addCPUOutputBuffer(CPUBuffer *buf, int port) {
     assert(buf);
     if (port != 0) THROW_EXCEPTION_ARGS(FynException, "Ports other than 0 are not supported");
-    if (buf->shape().dataOrder() != CPUBufferShape::order::GPU_DEEP) {
+    if (buf->shape().dataOrder() != BufferShape::order::GPU_DEEP) {
         THROW_EXCEPTION_ARGS(FynException, "Buffers supplied to this layer must be in GPU_DEEP order");
     }
     outputs_.push_back(buf);
@@ -95,31 +89,37 @@ void DeepDownloadLayer::addOutputBuffer(CPUBuffer *buf, int port) {
 
 
 /**
- * @copydoc cpu::CPULayerInterface::clearOutputBuffers
+ * @copydoc cpu::CPULayerInterface::clearCPUOutputBuffers
  */
-void DeepDownloadLayer::clearOutputBuffers(int port) {
+void DeepDownloadLayer::clearCPUOutputBuffers(int port) {
     assert(port == 0);
     outputs_.clear();
 }
 
 
 /**
- * @copydoc cpu::CPULayerInterface::hasOutputBuffer
+ * @copydoc cpu::CPULayerInterface::hasCPUOutputBuffer
  */
-bool DeepDownloadLayer::hasOutputBuffer(int port) const {
+bool DeepDownloadLayer::hasCPUOutputBuffer(int port) const {
     return (outputs_.size() > 0);
 }
 
 
 /**
- * @copydoc cpu::CPULayerInterface::getOutputBuffer
+ * @copydoc cpu::CPULayerInterface::getCPUOutputBuffer
  */
-CPUBuffer * DeepDownloadLayer::getOutputBuffer(int port) const {
+CPUBuffer * DeepDownloadLayer::getCPUOutputBuffer(int port) const {
     assert(port == 0);
     if ((int)outputs_.size() <= port) return nullptr;
     return outputs_.at(0);
 }
 
+/**
+ * @copydoc DownloadLayerInterface::getOutputShape
+ */
+BufferShape DeepDownloadLayer::getOutputShape(int port) const {
+    return {width_, height_, outputChannels_, outputPadding_, BufferShape::type::FLOAT32, BufferShape::order::GPU_DEEP};
+}
 
 /**
  * @copydoc LayerBase::setup
@@ -133,7 +133,8 @@ void DeepDownloadLayer::setup() {
 /**
  * @copydoc LayerBase::forward
  */
-void DeepDownloadLayer::forward(uint64_t sequence) {
+void DeepDownloadLayer::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     assert(outputs_.size() == 1);
     assert(numFBOs() == 1);
     // TODO (mw) implement optional rendering step here (for ReLU)
@@ -147,7 +148,7 @@ void DeepDownloadLayer::forward(uint64_t sequence) {
         // Synchronous part, we still use a PBO here though there is no
         // advantage doing that. It just makes the code easier.
         //-------------------------------------------------------------
-        outputs_[0]->readFromPBO(*pbo, CPUBufferShape::type::FLOAT32, sequence);
+        outputs_[0]->readFromPBO(*pbo, BufferShape::type::FLOAT32, sequenceNo);
     } else {
 #ifdef FYUSENET_MULTITHREADING
         THROW_EXCEPTION_ARGS(FynException, "Layer is not synchronous");
@@ -160,7 +161,7 @@ void DeepDownloadLayer::forward(uint64_t sequence) {
 /**
  * @copydoc DownloadLayerInterface::asyncForward
  */
-void DeepDownloadLayer::asyncForward(uint64_t sequenceNo, const std::function<void(uint64_t)>& callback) {
+void DeepDownloadLayer::asyncForward(uint64_t sequenceNo, StateToken * token, const std::function<void(uint64_t)>& callback) {
     // TODO (mw) implement optional rendering step here (for ReLU)
     if (flags_ & LayerFlags::PRE_ACT_MASK) THROW_EXCEPTION_ARGS(FynException,"Activation on download not implemented yet");
     if (flags_ & LayerFlags::RESIDUAL_INPUT) THROW_EXCEPTION_ARGS(FynException,"Residual add on download not implemented yet");
@@ -244,11 +245,12 @@ ManagedPBO DeepDownloadLayer::pboBlit() {
     pbo->prepareForRead(paddedwidth * paddedheight * PIXEL_PACKING * bytesPerChan_);
     FBO *fbo = getFBO(0);
     fbo->bind();
-    fbo->copyToPBO(*pbo, GL_FLOAT, PIXEL_PACKING, 0, true);
+    fbo->copyToPBO(*pbo, (GLenum)GL_FLOAT, PIXEL_PACKING, 0, true);
     fbo->unbind();
     if (async_) pbo.setPending();
     return pbo;
 }
+
 
 #ifdef FYUSENET_MULTITHREADING
 /**
@@ -280,7 +282,7 @@ void DeepDownloadLayer::readoutPBO(AsyncPool::GLThread& myThread, opengl::Manage
     bool rc = ctx.waitClientSync(sync, 5000000000);        // wait 5s max  (TODO (mw) configurable timeout)
     if (!rc) THROW_EXCEPTION_ARGS(FynException, "Cannot read out texture within 5s for sequence %ld", sequence);
     ctx.removeSync(sync);
-    target->readFromPBO(*pbo, CPUBufferShape::type::FLOAT32, sequence);
+    target->readFromPBO(*pbo, BufferShape::type::FLOAT32, sequence);
     pbo.clearPending();
     if (callback) callback(sequence);
     if (userCallback_) userCallback_(sequence, target, AsyncLayer::DOWNLOAD_DONE);

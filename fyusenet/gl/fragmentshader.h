@@ -17,11 +17,12 @@
 
 #include "gl_sys.h"
 #include "shader.h"
+#include "shaderresource.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 
 /**
  * @brief Class wrapper for fragment shaders
@@ -98,8 +99,8 @@ class FragmentShader : public Shader {
     }
 };
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 
 // vim: set expandtab ts=4 sw=4:

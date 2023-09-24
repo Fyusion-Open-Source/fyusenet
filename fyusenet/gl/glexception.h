@@ -17,14 +17,12 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace opengl {
-
+namespace fyusion::opengl {
 
 CUSTOM_EXCEPTION(GLException,fyusion::FynException);
 CUSTOM_EXCEPTION(GLNotImplException, GLException);
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 // vim: set expandtab ts=4 sw=4:

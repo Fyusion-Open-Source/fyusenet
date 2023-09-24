@@ -26,8 +26,8 @@
 
 
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 //-------------------------------------- Local Definitions -----------------------------------------
 
 
@@ -38,20 +38,26 @@ typedef Bool (*glXMakeContextCurrentARBProc)(Display*, GLXDrawable, GLXDrawable,
 #define GLV_MINOR 3
 
 int context_attribs[] = {
-  GLX_CONTEXT_MAJOR_VERSION_ARB ,GLV_MAJOR,
-  GLX_CONTEXT_MINOR_VERSION_ARB, GLV_MINOR,
-  GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_DEBUG_BIT_ARB,
-  GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
-  None
+    GLX_CONTEXT_MAJOR_VERSION_ARB ,GLV_MAJOR,
+    GLX_CONTEXT_MINOR_VERSION_ARB, GLV_MINOR,
+    GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_DEBUG_BIT_ARB,
+    GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+    None
 };
 
 
-int visualAttribs[] = {None};
+int visualAttribs[] = {
+    GLX_X_RENDERABLE, GLX_RGBA_BIT,
+    GLX_DEPTH_SIZE, 24, GLX_STENCIL_SIZE, 8,
+    None
+};
 
 int pBufferAttribs[] = {
-  GLX_PBUFFER_WIDTH,  GLContext::DEFAULT_WIDTH,
-  GLX_PBUFFER_HEIGHT, GLContext::DEFAULT_HEIGHT,
-  None
+    GLX_PBUFFER_WIDTH,  GLContext::DEFAULT_WIDTH,
+    GLX_PBUFFER_HEIGHT, GLContext::DEFAULT_HEIGHT,
+    GLX_X_RENDERABLE, GLX_RGBA_BIT,
+    GLX_DEPTH_SIZE, 24, GLX_STENCIL_SIZE, 8,
+    None
 };
 
 glXCreateContextAttribsARBProc glXCreateContextAttribsARB = nullptr;
@@ -241,6 +247,15 @@ GLContextInterface * GLContext::getMain() const {
 }
 
 
+/**
+ * @copydoc GLContextInterface::texturePool()
+ */
+ScopedTexturePool * GLContext::texturePool() const {
+    assert(manager_);
+    return manager_->texturePool();
+}
+
+
 /*##################################################################################################
 #                               N O N -  P U B L I C  F U N C T I O N S                            #
 ##################################################################################################*/
@@ -321,8 +336,8 @@ GLContext::GLContext(GLXContext ctx, int idx, fyusenet::GfxContextManager * mgr)
 }
 
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 #endif
 

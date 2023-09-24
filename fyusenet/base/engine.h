@@ -36,8 +36,8 @@
 
 
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 namespace gpu {
@@ -81,13 +81,13 @@ class Engine : public fyusenet::GfxContextTracker {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
-    Engine(const GfxContextLink& context = GfxContextLink(), bool async=false);
-    virtual ~Engine();
+    explicit Engine(const GfxContextLink& context = GfxContextLink(), bool async=false);
+    ~Engine() override = default;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    execstate forwardLayers();
+    execstate forwardLayers(StateToken * state  = nullptr);
     void finish();
     void resetTimings();
     void enableIntermediateOutput(const std::string& outputDir);
@@ -133,7 +133,7 @@ class Engine : public fyusenet::GfxContextTracker {
      * @param layers Set of layers returned by the LayerFactory instance
      *
      */
-    void setLayers(CompiledLayers layers) {
+    void setLayers(const CompiledLayers& layers) {
         layers_ = layers;
     }
 
@@ -186,7 +186,7 @@ class Engine : public fyusenet::GfxContextTracker {
          DONE = 0,        //!< Network was fully executed (async ops may still be pending, but the net did a full run)
          UPLOADING,       //!< Network was not fully executed and is performing an asynchronous upload
          DOWNLOADING,     //!< Network is waiting for a download to finish
-         ERROR            //!< There was an error during the network execution
+         NET_ERROR        //!< There was an error during the network execution
     };
 
     /**
@@ -199,27 +199,29 @@ class Engine : public fyusenet::GfxContextTracker {
         /**
          * @brief Empty constructor
          */
-        ExecutionState() {}
+        ExecutionState(StateToken * state = nullptr) : state_(state) {}
 
         /**
          * @brief Construct state object with sequence number and iterator
          *
          * @param seq Sequence number of the run this state encodes for
          * @param iter Position in the layer list to execute from
+         * @param state Optional StateToken object that controls individual run layer behaviour
          */
-        ExecutionState(uint64_t seq, const CompiledLayers::iterator& iter) :
-            sequenceNo(seq), current(iter) {}
+        ExecutionState(uint64_t seq, const CompiledLayers::iterator& iter, StateToken *state = nullptr) :
+            state_(state), sequenceNo(seq), current(iter) {}
 
         /**
          * @brief Create a clone of the current execution state
          *
          * @return Cloned state
          */
-        ExecutionState clone() {
+        [[nodiscard]] ExecutionState clone() const {
             ExecutionState dolly(sequenceNo, current);
             return dolly;
         }
 
+        StateToken * state_ = nullptr;              //!< Pointer to object that keeps track of the state for stateful networks
         uint64_t sequenceNo = 0;                    //!< Sequence number of the run this state encodes for
         CompiledLayers::iterator current;           //!< Iterator for layer position at which the state shall execute
     };
@@ -244,7 +246,7 @@ class Engine : public fyusenet::GfxContextTracker {
      */
     template<class T>
     struct Dependency {
-        Dependency<T>(int dep=0, T * prov=nullptr, uint8_t cnt=1, uint64_t seq=0) :
+        explicit Dependency<T>(int dep=0, T * prov=nullptr, uint8_t cnt=1, uint64_t seq=0) :
             dependency(dep), sequenceNo(seq), provider(prov), count(cnt) {
         }
         int dependency = 0;                         //!< Number of the dependent layer
@@ -480,7 +482,6 @@ class Engine : public fyusenet::GfxContextTracker {
 };
 
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
 
 // vim: set expandtab ts=4 sw=4:

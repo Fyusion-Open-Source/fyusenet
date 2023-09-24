@@ -9,19 +9,14 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <cstring>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
+#include "../common/miscdefs.h"
 #include "functionlayer.h"
-#include "../gl/glexception.h"
-#include "../gl/glinfo.h"
-#include "../base/bufferspec.h"
-#include "../common/logging.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -32,10 +27,21 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 FunctionLayer::FunctionLayer(const GPULayerBuilder &builder, int layerNumber) : GPULayerBase(builder, layerNumber) {
     maxRenderTargets_ = GLInfo::getMaximumRecommendedDrawBuffers();
+    if (builder.maxSequenceLen_ > 0) {
+        // layer is to be used on sequence data
+        isSequence_ = true;
+        width_ = (builder.in() + PIXEL_PACKING-1) / PIXEL_PACKING;
+        height_ = builder.maxSequenceLen_;
+        inputPadding_ = 0;
+        outputPadding_ = 0;
+        viewport_[0] = width_;
+        viewport_[1] = height_;
+        maxRenderTargets_ = 1;
+    }
     if (flags_ &  LayerFlags::POST_BATCHNORM) {
         THROW_EXCEPTION_ARGS(FynException, "This layer type does not support batchnorm (yet)");
     }
@@ -46,12 +52,9 @@ FunctionLayer::FunctionLayer(const GPULayerBuilder &builder, int layerNumber) : 
  * @copydoc GPULayerBase::cleanup
  */
 void FunctionLayer::cleanup() {
-    if (vertexBuffer_) delete vertexBuffer_;
-    if (indexBuffer_) delete indexBuffer_;
-    if (vertexArray_) delete vertexArray_;
-    vertexBuffer_ = nullptr;
-    indexBuffer_ = nullptr;
-    vertexArray_ = nullptr;
+    FNET_DEL_AND_CLEAR(vertexBuffer_);
+    FNET_DEL_AND_CLEAR(indexBuffer_);
+    FNET_DEL_AND_CLEAR(vertexArray_);
     GPULayerBase::cleanup();
 }
 
@@ -81,21 +84,27 @@ void FunctionLayer::setup() {
  */
 std::vector<BufferSpec> FunctionLayer::getRequiredInputBuffers() const {
     std::vector<BufferSpec> result;
-    int channel=0;
-    int rem = inputChannels_;
-    if (rem < PIXEL_PACKING) {
-        // for input textures, we support textures with less than 4 channels (might be from upload)
-        auto format = BufferSpec::formatByChannels(inputChannels_, TEXTURE_TYPE_DEFAULT);
-        result.push_back(BufferSpec(channel++, 0, width_+2*inputPadding_, height_ + 2*inputPadding_,
-                                    format.first, format.second, TEXTURE_TYPE_DEFAULT,
-                                    BufferSpec::FUNCTION_SOURCE));
+    if (isSequence_) {
+        result.push_back(BufferSpec(0, 0, width_, height_,
+                                    TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
+                                    BufferSpec::FUNCTION_SOURCE).dataOrder(BufferSpec::order::GPU_SEQUENCE));
     } else {
-        while (rem > 0) {
-            result.push_back(BufferSpec(channel++, 0,
-                                        width_ + 2*inputPadding_, height_ + 2*inputPadding_,
-                                        TEXTURE_IFORMAT_4,TEXTURE_FORMAT_4,TEXTURE_TYPE_DEFAULT,
-                                        BufferSpec::FUNCTION_SOURCE));
-            rem -= PIXEL_PACKING;
+        int channel = 0;
+        if (inputChannels_ < PIXEL_PACKING) {
+            // for input textures, we support textures with less than 4 channels (might be from upload)
+            auto format = BufferSpec::formatByChannels(inputChannels_, TEXTURE_TYPE_DEFAULT);
+            result.emplace_back(channel++, 0, width_ + 2 * inputPadding_, height_ + 2 * inputPadding_,
+                                format.first, format.second, TEXTURE_TYPE_DEFAULT,
+                                BufferSpec::FUNCTION_SOURCE, inputChannels_);
+        } else {
+            int rem = inputChannels_;
+            while (rem > 0) {
+                result.emplace_back(channel++, 0,
+                                    width_ + 2 * inputPadding_, height_ + 2 * inputPadding_,
+                                    TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
+                                    BufferSpec::FUNCTION_SOURCE);
+                rem -= PIXEL_PACKING;
+            }
         }
     }
     return result;
@@ -107,14 +116,21 @@ std::vector<BufferSpec> FunctionLayer::getRequiredInputBuffers() const {
  */
 std::vector<BufferSpec> FunctionLayer::getRequiredOutputBuffers() const {
     std::vector<BufferSpec> result;
-    int channel=0;
-    int rem = outputChannels_;
-    while (rem > 0) {
-        result.push_back(BufferSpec(channel++, 0,
-                                    viewport_[0], viewport_[1],
+    if (isSequence_) {
+        result.push_back(BufferSpec(0, 0,
+                                    width_, height_,
                                     TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                    BufferSpec::FUNCTION_DEST));
-        rem -= PIXEL_PACKING;
+                                    BufferSpec::FUNCTION_DEST).dataOrder(BufferSpec::order::GPU_SEQUENCE));
+    } else {
+        int channel = 0;
+        int rem = outputChannels_;
+        while (rem > 0) {
+            result.emplace_back(channel++, 0,
+                                viewport_[0], viewport_[1],
+                                TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
+                                BufferSpec::FUNCTION_DEST);
+            rem -= PIXEL_PACKING;
+        }
     }
     return result;
 }
@@ -123,7 +139,8 @@ std::vector<BufferSpec> FunctionLayer::getRequiredOutputBuffers() const {
 /**
  * @brief Execute layer
  *
- * @param sequence Sequence number (\b must be stricly increasing)
+ * @param sequence Sequence number (\b must be strictly increasing)
+ * @param state State token that contains information for stateful layers and dynamic buffer sizes
  *
  * This function performs the actual computation that maps the input data to the output data
  * for this layer. The supplied \p sequence number must be strictly increasing per inference run
@@ -132,7 +149,7 @@ std::vector<BufferSpec> FunctionLayer::getRequiredOutputBuffers() const {
  * inference runs. Internally, it is used to make sure that asynchronously transmitted data is
  * up-to-date (on PBO reads for example).
  *
- * This particular implementation performs a multi-pass render requence, based on the number
+ * This particular implementation performs a multi-pass render sequence, based on the number
  * of input and output channels and calls an implementation specific interface consisting
  * of:
  *   - #beforeRender() which should implement pre-render inits
@@ -142,16 +159,24 @@ std::vector<BufferSpec> FunctionLayer::getRequiredOutputBuffers() const {
  *
  * All classes deriving from FunctionLayer must implement the above interface.
  */
-void FunctionLayer::forward(uint64_t sequence) {
+void FunctionLayer::forward(uint64_t sequence, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x",err);
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     prepareRender(false, false);
     beforeRender();
     int totaltex = (inputChannels_ / PIXEL_PACKING) + (((inputChannels_ % PIXEL_PACKING) > 0) ? 1 : 0);
+    if (isSequence_) {
+        glEnable(GL_SCISSOR_TEST);
+        totaltex = 1;
+        glScissor(0, 0, viewport_[0], state->seqLength);
+        glViewport(0, 0, viewport_[0], state->seqLength);
+    } else {
+        glViewport(0, 0, viewport_[0], viewport_[1]);
+    }
     int texoffset = 0;
     vertexArray_->bind();
     for (int opass=0; opass < (int)framebuffers_.size(); opass++) {
@@ -172,6 +197,7 @@ void FunctionLayer::forward(uint64_t sequence) {
     }
     afterRender();
     vertexArray_->unbind();
+    if (isSequence_) glDisable(GL_SCISSOR_TEST);
 }
 
 
@@ -192,12 +218,12 @@ void FunctionLayer::forward(uint64_t sequence) {
  * @see setupIBO, setup
  */
 void FunctionLayer::setupVBO(VAO *vao) {
-    int vertsize = 4;
+    const int vertsize = 4;
     float tmp[vertsize * 4];
-    float posleft = -1.0f + ((float) (2 * outputPadding_) / (float) viewport_[0]);
-    float posright = 1.0f - ((float) (2 * outputPadding_) / (float) viewport_[0]);
-    float postop = -1.0f + ((float) (2 * outputPadding_) / (float) viewport_[1]);
-    float posbottom = 1.0f - ((float) (2 * outputPadding_) / (float) viewport_[1]);
+    float posleft  = -1.0f + ((float)(2*outputPadding_) / (float)viewport_[0]);
+    float posright =  1.0f - ((float)(2*outputPadding_) / (float)viewport_[0]);
+    float postop   = -1.0f + ((float)(2*outputPadding_) / (float)viewport_[1]);
+    float posbottom = 1.0f - ((float)(2*outputPadding_) / (float)viewport_[1]);
     float thspan = (float) (width_) / (float) (width_ + 2 * inputPadding_);
     float tvspan = (float) (height_) / (float) (height_ + 2 * inputPadding_);
     float tleft = (float) inputPadding_ / (float) (width_ + 2 * inputPadding_);
@@ -220,7 +246,7 @@ void FunctionLayer::setupVBO(VAO *vao) {
     tmp[3 * vertsize + 3] = ttop;
     vertexBuffer_ = new VBO(context_);
     vao->enableArray(0);
-    vertexBuffer_->setBufferData(tmp, vertsize * 4 * sizeof(float), GL_STATIC_DRAW);
+    vertexBuffer_->setBufferData(tmp, (int)(vertsize * 4 * sizeof(float)), GL_STATIC_DRAW);
     vertexBuffer_->bind();
     vao->setVertexAttributeBuffer(0, vertsize, GL_FLOAT, GL_FALSE, 0, 0);
 }
@@ -290,8 +316,6 @@ void FunctionLayer::updateFBOs() {
     outputChanged_ = false;
 }
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

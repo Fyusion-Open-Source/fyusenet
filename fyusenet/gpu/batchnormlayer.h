@@ -20,14 +20,12 @@
 #include "../gl/uniformstate.h"
 #include "../gl/fbo.h"
 #include "../gl/shaderprogram.h"
-#include "../base/batchnorminterface.h"
 #include "gfxcontextlink.h"
 #include "functionlayer.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Batch-norm layer for shallow tensors
@@ -43,26 +41,26 @@ namespace gpu {
  *
  * @see https://en.wikipedia.org/wiki/Batch_normalization
  */
-class BatchNormLayer : public FunctionLayer, public BatchNormInterface {
+class BatchNormLayer : public FunctionLayer {
  public:
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     BatchNormLayer(const GPULayerBuilder & builder, int layerNumber);
-    virtual ~BatchNormLayer();
+    ~BatchNormLayer() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
-    virtual void loadScaleAndBias(const float *scaleBias, size_t sbOffset=0) override;
+    void cleanup() override;
+    void loadParameters(const ParameterProvider * source) override;
 
  protected:
     /**
      * @brief Representation of single bias/scale block to be pushed into a shader uniform
      */
     struct BiasScaleBlock {
-        BiasScaleBlock(int channels) {
+        explicit BiasScaleBlock(int channels) {
             biasScale_ = new float[2*channels];
             memset(biasScale_, 0, 2*channels*sizeof(float));
             paddedChannels_ = channels;
@@ -72,6 +70,8 @@ class BatchNormLayer : public FunctionLayer, public BatchNormInterface {
             biasScale_ = nullptr;
         }
         void fill(const float *bias, const float *scale,int channels) {
+            assert(bias);
+            assert(scale);
             for (int i=0; i < channels; i += PIXEL_PACKING) {
                 int lim = PIXEL_PACKING;
                 if (i+PIXEL_PACKING > channels) lim = channels-i;
@@ -87,10 +87,10 @@ class BatchNormLayer : public FunctionLayer, public BatchNormInterface {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
-    virtual void setupShaders() override;
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
+    void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
+    void setupShaders() override;
+    void beforeRender() override;
+    void afterRender() override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -103,9 +103,6 @@ class BatchNormLayer : public FunctionLayer, public BatchNormInterface {
     constexpr static int UNIFORM_BIASSCALE = 1;         //!< Index of the bias/scale variable in the shader uniforms
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
-
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

@@ -28,8 +28,8 @@
 //------------------------------------------ Constants ---------------------------------------------
 
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 /**
@@ -53,7 +53,7 @@ class PBOPool : public fyusenet::GfxContextTracker {
      */
     struct entry {
         entry(PBO *p, bool b) : pbo(p), busy(b) {}
-        entry(entry && src) {
+        entry(entry && src) noexcept {
             pbo = src.pbo;
             busy = src.busy;
             pending = src.pending;
@@ -72,8 +72,8 @@ class PBOPool : public fyusenet::GfxContextTracker {
     // ------------------------------------------------------------------------
     // Constructor/Destructor
     // ------------------------------------------------------------------------
-    PBOPool(int maxPBOs, const fyusenet::GfxContextLink& ctx = fyusenet::GfxContextLink());
-    virtual ~PBOPool();
+    explicit PBOPool(int maxPBOs, const fyusenet::GfxContextLink& ctx = fyusenet::GfxContextLink());
+    ~PBOPool() override;
 
     // ------------------------------------------------------------------------
     // Public methods
@@ -108,7 +108,7 @@ class PBOPool : public fyusenet::GfxContextTracker {
     uint64_t waitCycles_ = 0;               //!< For performance measurement, the number of busy-waiting rounds until a %PBO became available
 };
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 // vim: set expandtab ts=4 sw=4:

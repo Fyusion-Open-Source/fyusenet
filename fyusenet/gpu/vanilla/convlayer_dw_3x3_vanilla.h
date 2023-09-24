@@ -28,10 +28,7 @@
 #include "convlayerNxN_vanilla.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+namespace fyusion::fyusenet::gpu::vanilla {
 
 /**
  * @brief Depthwise convolution layer for 3x3 convolutions on shallow-format tensors on the GPU
@@ -60,32 +57,28 @@ class DepthwiseConvLayer3x3 : public ConvLayerNxN {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     DepthwiseConvLayer3x3(const ConvLayerBuilder& builder, int layerNumber);
-    virtual ~DepthwiseConvLayer3x3();
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void loadWeightsAndBiases(const float *weights, size_t offset=0) override;
-    virtual void forward(uint64_t sequence = 0) override;
+    void loadParameters(const ParameterProvider *weights) override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setBias(int outPass, const UniformWeightArray *bias) override;
-    virtual void compileConvolutionShaders(const char *preproc) override;
-    virtual void setupNetworkPolygons(VAO *vao, int kernel) override;
+    void setBias(int outPass, const UniformWeightArray *bias) override;
+    void compileConvolutionShaders(const char *preproc) override;
+    void setupNetworkPolygons(VAO *vao, int kernel) override;
+    programptr compileSingleShader(int outputDepth, int inputDepth, const char *preproc);
 
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
-    programptr compileSingleShader(int outputDepth, int inputDepth, const char *preproc);
     int channelMultiplier_ = 1;
     int maxInputTextures_ = 1;
 };
 
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

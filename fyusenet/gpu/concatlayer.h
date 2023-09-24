@@ -61,25 +61,25 @@ class ConcatLayer : public GPULayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void setup() override;
-    virtual void cleanup() override;
+    void setup() override;
+    void cleanup() override;
     virtual void addInput(int inputChannels,int inputPadding);
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual void addInputTexture(GLuint textureID,int channelIndex) override;
-    virtual void forward(uint64_t sequence) override;
-    virtual int numInputPorts() const override;
-    virtual int getPortChannelIndex(int port) const override;
-    virtual int numInputChannels(int port=0) const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
+    [[nodiscard]] int numInputPorts() const override;
+    [[nodiscard]] int getPortChannelIndex(int port) const override;
+    [[nodiscard]] int numInputChannels(int port=0) const override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
+    void addInputTexture(GLuint textureID, int channelIndex) override;
+    void setupFBOs() override;
+    void updateFBOs() override;
     virtual void setupShaders();
     virtual void setupNetworkPolygons(VAO *vao);
-    virtual void setupFBOs() override;
-    virtual void updateFBOs() override;
 
     // ------------------------------------------------------------------------
     // Member variables

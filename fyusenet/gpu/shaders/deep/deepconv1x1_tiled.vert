@@ -79,5 +79,6 @@ void main(void) {
 #ifdef USE_RESIDUAL
   resCoord.xy = attributes2.xy;
 #endif
+  gl_PointSize = 1.0;
 }
 

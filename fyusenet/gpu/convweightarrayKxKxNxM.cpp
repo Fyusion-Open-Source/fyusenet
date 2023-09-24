@@ -9,17 +9,14 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <cstdio>
+#include <cassert>
 #include <cstring>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "convweightarrayKxKxNxM.h"
-#include "../common/fynexception.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 //-------------------------------------- Global Variables ------------------------------------------
 
@@ -148,14 +145,14 @@ const float * ConvWeightArrayKxKxNxM::getPackageBNScale(int outputPass) const {
 /**
  * @copydoc UniformWeightArray::extractBiasData
  */
-void ConvWeightArrayKxKxNxM::extractBiasData(const float *input, size_t offset) {
+void ConvWeightArrayKxKxNxM::extractBiasData(const float *input) {
     if (!biasData_) biasData_ = new float[paddedOutputChannels_];
     memset(biasData_, 0, paddedOutputChannels_*sizeof(float));
-    for (int i=0;i<outputChannels_;i++) {
-        biasData_[i] = input[i+offset];
+    for (int i=0; i < outputChannels_; i++) {
+        biasData_[i] = input[i];
     }
     if (bnBias_ && bnScale_) {
-        for (int i=0;i<outputChannels_;i++) {
+        for (int i=0; i < outputChannels_; i++) {
             biasData_[i] = biasData_[i] * bnScale_[i] + bnBias_[i];
         }
     }
@@ -164,14 +161,14 @@ void ConvWeightArrayKxKxNxM::extractBiasData(const float *input, size_t offset) 
 /**
  * @copydoc UniformWeightArray::extractBatchnormData
  */
-void ConvWeightArrayKxKxNxM::extractBatchnormData(const float *input, size_t offset) {
+void ConvWeightArrayKxKxNxM::extractBatchnormData(const float *input) {
     if (!bnBias_) bnBias_ = new float[paddedOutputChannels_];
     if (!bnScale_) bnScale_ = new float[paddedOutputChannels_];
     memset(bnBias_, 0, paddedOutputChannels_ * sizeof(float));
     memset(bnScale_, 0, paddedOutputChannels_ * sizeof(float));
     for (int i=0; i < outputChannels_; i++) {
-        bnScale_[i] = input[i+offset];
-        bnBias_[i] = input[i+offset+outputChannels_];
+        bnScale_[i] = input[i];
+        bnBias_[i] = input[i + outputChannels_];
     }
     if (biasData_) {
         for (int i=0; i < outputChannels_; i++) {
@@ -193,7 +190,9 @@ int ConvWeightArrayKxKxNxM::getPackageSize(int inputPass, int outputPass, int xI
 /**
  * @copydoc UniformWeightArray::extractWeightData
  */
-void ConvWeightArrayKxKxNxM::extractWeightData(const float *input, size_t offset) {
+void ConvWeightArrayKxKxNxM::extractWeightData(const float *input) {
+    assert(packOffsets_);
+    assert(packSizes_);
     int fullsize = kernel_ * (kernel_  *paddedOutputChannels_) * paddedInputChannels_;
     if (!weightData_) weightData_ = new float[fullsize];
     memset(weightData_,0,fullsize * sizeof(float));
@@ -216,7 +215,7 @@ void ConvWeightArrayKxKxNxM::extractWeightData(const float *input, size_t offset
                         // this computes one 4x4 matrix
                         for (int l=0; l < ilimit; l++) {
                             for (int o=0; o < olimit; o++) {
-                                int srcoffset = offset + (olayer+o)*kernel_*kernel_*inputChannels_+((yi*kernel_+xi)*inputChannels_)+ilayer+l;
+                                int srcoffset = (olayer+o)*kernel_*kernel_*inputChannels_+((yi*kernel_+xi)*inputChannels_)+ilayer+l;
                                 weightData_[dstoffs++] = input[srcoffset];
                             }
                             if (olimit < PIXEL_PACKING) dstoffs += (PIXEL_PACKING-olimit);
@@ -239,9 +238,7 @@ void ConvWeightArrayKxKxNxM::extractWeightData(const float *input, size_t offset
 ##################################################################################################*/
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

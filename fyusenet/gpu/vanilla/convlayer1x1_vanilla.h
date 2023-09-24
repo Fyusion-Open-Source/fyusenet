@@ -30,10 +30,7 @@
 #include "convlayerbase_vanilla.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+namespace fyusion::fyusenet::gpu::vanilla {
 
 /**
  * @brief Convolution layer using 1x1 convolution kernels for shallow tensors on GPU
@@ -59,33 +56,31 @@ class ConvLayer1x1 : public ConvLayerBase {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
+    explicit ConvLayer1x1(const ConvLayerBuilder & builder);
     ConvLayer1x1(const ConvLayerBuilder & builder,int layerNumber);
     ConvLayer1x1(const GPULayerBuilder & builder,int layerNumber);
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
-    virtual void forward(uint64_t sequence) override;
+    void cleanup() override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupShaders() override;
+    void setupShaders() override;
     virtual void compileConvolutionShaders(const char *preproc);
 
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
-    std::vector<programptr> convolutionShaders_;
-    std::vector<unistateptr> convolutionShaderStates_;
+    std::vector<programptr> convolutionShaders_;            //!< Shaders for convolution operations (for different # of MRTs)
+    std::vector<unistateptr> convolutionShaderStates_;      //!< Uniform state objects for convolution shaders
 };
 
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 
 // vim: set expandtab ts=4 sw=4:

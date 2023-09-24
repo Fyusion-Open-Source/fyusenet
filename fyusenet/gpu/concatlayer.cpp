@@ -9,20 +9,17 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <cstring>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "../gl/glexception.h"
 #include "../gl/glinfo.h"
 #include "gfxcontextlink.h"
-#include "../common/logging.h"
 
 #include "concatlayer.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -34,7 +31,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 ConcatLayer::ConcatLayer(const ConcatLayerBuilder & builder, int layerNumber) : GPULayerBase((const GPULayerBuilder &)builder, layerNumber) {
     for (int i=0;i<3*4;i++) concatShaders_[i]=nullptr;
@@ -106,7 +103,7 @@ void ConcatLayer::addInput(int inputChannels, int inputPadding) {
     if (inputChannels < 3) THROW_EXCEPTION_ARGS(FynException,"Input depth < 3 currently not supported");
     if (inputPadding != inputPadding_) THROW_EXCEPTION_ARGS(FynException,"Mismatch on input padding (%d vs %d)",inputPadding_,inputPadding);
     portChannels_.push_back(inputChannels);
-    if (portOffsets_.size() == 0) portOffsets_.push_back(0);
+    if (portOffsets_.empty()) portOffsets_.push_back(0);
     else {
         size_t last = portOffsets_.size()-1;
         int buffers = portChannels_.at(last);
@@ -123,7 +120,7 @@ void ConcatLayer::addInput(int inputChannels, int inputPadding) {
  */
 std::vector<BufferSpec> ConcatLayer::getRequiredInputBuffers() const {
     std::vector<BufferSpec> result;
-    if (portChannels_.size() == 0) THROW_EXCEPTION_ARGS(FynException,"No inputs allocated, please use addInput()");
+    if (portChannels_.empty()) THROW_EXCEPTION_ARGS(FynException,"No inputs allocated, please use addInput()");
     int connindex=0;
     for (auto init = portChannels_.begin(); init != portChannels_.end(); ++init) {
         int channel=0;
@@ -132,8 +129,7 @@ std::vector<BufferSpec> ConcatLayer::getRequiredInputBuffers() const {
             result.push_back(BufferSpec(channel++, connindex, width_ + 2*inputPadding_,
                                         height_ + 2*inputPadding_,
                                         TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                        BufferSpec::CONCAT_SOURCE).interpolation(BufferSpec::ANY)
-                                                                  .passThrough(!consolidationRender_));
+                                        BufferSpec::CONCAT_SOURCE).interpolation(BufferSpec::interp::ANY));
             rem -= PIXEL_PACKING;
         }
         connindex++;
@@ -152,7 +148,7 @@ std::vector<BufferSpec> ConcatLayer::getRequiredOutputBuffers() const {
     while (rem > 0) {
         result.push_back(BufferSpec(channel++, 0, viewport_[0], viewport_[1],
                                     TEXTURE_IFORMAT_4,TEXTURE_FORMAT_4,TEXTURE_TYPE_DEFAULT,
-                                    BufferSpec::CONCAT_DEST).passThrough(!consolidationRender_).interpolation(BufferSpec::ANY));
+                                    BufferSpec::CONCAT_DEST).passThrough(!consolidationRender_).interpolation(BufferSpec::interp::ANY));
         rem -= PIXEL_PACKING;
     }
     return result;
@@ -162,14 +158,14 @@ std::vector<BufferSpec> ConcatLayer::getRequiredOutputBuffers() const {
 /**
  * @copydoc LayerBase::forward
  */
-void ConcatLayer::forward(uint64_t sequence) {
+void ConcatLayer::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if ((consolidationRender_)||(outputChanged_)) {
         if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
         int err = glGetError();
         if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-        std::lock_guard<std::recursive_mutex> lck(processingLock_);
         if (outputChanged_) updateFBOs();
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_STENCIL_TEST);
@@ -241,7 +237,7 @@ void ConcatLayer::addInputTexture(GLuint textureID, int channelIndex) {
     GPULayerBase::addInputTexture(textureID,channelIndex);
     // if we are lucky, we do not need to render at all, in this case the output is the
     // same as the input
-    if (!consolidationRender_) addOutputTexture(textureID,channelIndex);
+    if (!consolidationRender_) addOutputTexture(textureID,channelIndex, 0);
 }
 
 
@@ -288,9 +284,9 @@ int ConcatLayer::numInputChannels(int port) const {
 void ConcatLayer::setupNetworkPolygons(VAO *vao) {
     int vertsize = 4;
     float * attrs0 = new float[vertsize*4];
-    float posleft = -1.0f + ((float)(2*outputPadding_) / (float)viewport_[0]);
-    float posright = 1.0f - ((float)(2*outputPadding_) / (float)viewport_[0]);
-    float postop =  -1.0f + ((float)(2*outputPadding_) / (float)viewport_[1]);
+    float posleft  = -1.0f + ((float)(2*outputPadding_) / (float)viewport_[0]);
+    float posright =  1.0f - ((float)(2*outputPadding_) / (float)viewport_[0]);
+    float postop  =  -1.0f + ((float)(2*outputPadding_) / (float)viewport_[1]);
     float posbottom = 1.0f - ((float)(2*outputPadding_) / (float)viewport_[1]);
     float thspan=(float)(width_) / (float)(width_+2*inputPadding_);
     float tvspan=(float)(height_) / (float)(height_+2*inputPadding_);
@@ -415,8 +411,6 @@ void ConcatLayer::updateFBOs() {
 }
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

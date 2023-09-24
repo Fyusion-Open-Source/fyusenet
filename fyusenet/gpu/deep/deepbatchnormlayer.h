@@ -23,14 +23,10 @@
 #include "../../gl/ibo.h"
 #include "../../gl/vao.h"
 #include "../../base/bufferspec.h"
-#include "../../base/batchnorminterface.h"
 #include "deepfunctionlayer.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 
 /**
@@ -47,29 +43,29 @@ namespace deep {
  *
  * @see https://en.wikipedia.org/wiki/Batch_normalization
  */
-class DeepBatchNormLayer : public DeepFunctionLayer, public BatchNormInterface {
+class DeepBatchNormLayer : public DeepFunctionLayer {
  public:
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     DeepBatchNormLayer(const GPULayerBuilder & builder,int layerNumber);
-    virtual ~DeepBatchNormLayer();
+    ~DeepBatchNormLayer() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual void loadScaleAndBias(const float * scaleAndBias, size_t sbOffset) override;
+    void cleanup() override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void loadParameters(const ParameterProvider * source) override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupNetworkPolygons(VAO *vao) override;
-    virtual void setupShaders() override;
-    virtual void renderChannelBatch() override;
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
+    void setupNetworkPolygons(VAO *vao) override;
+    void setupShaders() override;
+    void renderChannelBatch() override;
+    void beforeRender() override;
+    void afterRender() override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -82,9 +78,6 @@ class DeepBatchNormLayer : public DeepFunctionLayer, public BatchNormInterface {
     VBO * biasAttribs_ = nullptr;       //!< VBO for batchnorm biases
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

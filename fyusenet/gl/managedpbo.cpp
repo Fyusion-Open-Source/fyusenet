@@ -16,8 +16,8 @@
 
 //-------------------------------------- Global Variables ------------------------------------------
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 //-------------------------------------- Local Definitions -----------------------------------------
 
 // NOTE (mw) enable this definition for more zealous tracking in non-debug mode
@@ -128,7 +128,7 @@ ManagedPBO::ManagedPBO(PBO * pbo, PBOPool * pool, std::atomic<uint32_t> *refcoun
 }
 
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 // vim: set expandtab ts=4 sw=4:

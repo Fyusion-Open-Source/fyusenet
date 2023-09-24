@@ -20,10 +20,8 @@
 #include "deeptiler.h"
 #include "deep_singleton_arithlayer.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -35,7 +33,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepSingletonArithmeticLayer::DeepSingletonArithmeticLayer(const SingletonArithLayerBuilder & builder, int layerNumber):DeepFunctionLayer((const GPULayerBuilder &)builder, layerNumber) {
     assert(builder.type_ != LayerType::ILLEGAL);
@@ -108,7 +106,7 @@ void DeepSingletonArithmeticLayer::setupShaders() {
             break;
     }
     snprintf(preproc,sizeof(preproc),"#define ARITH_OP_%s\n",opname);
-    handlePreprocFlags(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
+    preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
     shader_ = compileShaderPair("shaders/deep/deepdefault.vert","shaders/deep/deep_singleton_arith.frag",preproc,typeid(this));
     try {
         shader_->bindAttributeLocation("attributes0",0);
@@ -123,9 +121,6 @@ void DeepSingletonArithmeticLayer::setupShaders() {
 }
 
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion:fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

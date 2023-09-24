@@ -298,7 +298,7 @@ void Shader::setPreprocDefs(const char *defs) {
  * @param fileName Filename to load
  */
 void Shader::loadFromFile(const char *fileName) {
-    FILE *f = fopen(fileName,"r");
+    FILE *f = fopen(fileName,"rb");
     if (f) {
         fseek(f,0,SEEK_END);
         size_t filesize = ftell(f);
@@ -335,9 +335,9 @@ void Shader::compile() {
 
 
 /**
- * @brief
+ * @brief Get shader string as it is sent to the GL driver
  *
- * @return
+ * @return String with "fully processed" shader code
  */
 std::string Shader::getCode() const {
     return preamble_ + preprocDefs_ + shaderCode_;

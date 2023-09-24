@@ -64,13 +64,9 @@ void DeepConvLayer1x1::cleanup() {
 /**
  * @copydoc LayerBase::forward
  */
-void DeepConvLayer1x1::forward(uint64_t sequence) {
-    if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
-#ifdef DEBUG
-    int err = glGetError();
-    if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
-#endif
+void DeepConvLayer1x1::forward(uint64_t sequenceNo, StateToken * state) {
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
+    if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);

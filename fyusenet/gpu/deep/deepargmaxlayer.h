@@ -27,10 +27,7 @@
 #include "../argmaxlayerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 
 /**
@@ -89,17 +86,18 @@ class DeepArgMaxLayer : public DeepLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void setup() override;
-    virtual void cleanup() override;
-    virtual void forward(uint64_t sequence) override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void setup() override;
+    void cleanup() override;
+    void forward(uint64_t sequenceNo, StateToken *state) override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
  protected:
+
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
     void setupNetworkPolygons();
-    virtual void setupFBOs() override;
+    void setupFBOs() override;
     void setupShaders();
     unistateptr initShader(programptr shader);
 
@@ -129,9 +127,6 @@ class DeepArgMaxLayer : public DeepLayerBase {
     constexpr static int GUARD_BITS = 0;      //!< Number of additional guard bits on the LSB part of the mantissa
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

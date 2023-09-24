@@ -26,10 +26,7 @@
 #include "convlayerNxN_vanilla.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+namespace fyusion::fyusenet::gpu::vanilla {
 
 /**
  * @brief Fractional convolution layer for varying kernel sizes on shallow tensor data
@@ -50,12 +47,9 @@ class FractionalConvLayerNxN : public ConvLayerNxN {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void compileConvolutionShaders(const char *preproc) override;
+     void compileConvolutionShaders(const char *preproc) override;
 };
 
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

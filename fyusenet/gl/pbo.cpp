@@ -17,15 +17,15 @@
 #include "pbo.h"
 #include "pbopool.h"
 #include "glexception.h"
-#include "../common/logging.h"
+#include "../common/miscdefs.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
 
 
 //-------------------------------------- Local Definitions -----------------------------------------
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 
 /*##################################################################################################
 #                                   P U B L I C  F U N C T I O N S                                 #
@@ -65,18 +65,21 @@ PBO::PBO(int width, int height, int channels, int bytesPerChan, const fyusenet::
  */
 void PBO::setBufferData(const void *data, size_t dataSize, GLenum usage) {
     bind(GL_PIXEL_UNPACK_BUFFER);
-#ifdef DEBUG
-    glGetError();
-#endif
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, dataSize, data, usage);
+    CLEAR_GFXERR_DEBUG
+    if (bufferInit_) {
+        glBufferSubData(GL_PIXEL_UNPACK_BUFFER, 0, (GLsizeiptr)dataSize, data);
+    } else {
+        glBufferData(GL_PIXEL_UNPACK_BUFFER, (GLsizeiptr)dataSize, data, usage);
+    }
 #ifdef DEBUG
     GLenum err = glGetError();
     if (err != GL_NO_ERROR) THROW_EXCEPTION_ARGS(GLException,"Cannot set buffer data for buffer %d target 0x%X (glerr=0x%X)",handle_,target_,err);
 #endif
     unbind(GL_PIXEL_UNPACK_BUFFER);
-    capacity_ = dataSize;
+    if (!bufferInit_) capacity_ = dataSize;
     bufferInit_ = true;
 }
+
 
 /**
  * @brief Change %PBO dimensions
@@ -95,12 +98,14 @@ void PBO::setBufferData(const void *data, size_t dataSize, GLenum usage) {
  *       pixel (4), because a PBO is just treated as a buffer.
  */
 void PBO::resize(int width, int height, int channels, int bytesPerChan) {
-    bool changed = (width != width_) || (height != height_) || (channels != channels_) || (bytesPerChan != bytesPerChannel_);
     width_ = width;
     height_ = height;
     bytesPerChannel_ = bytesPerChan;
     channels_ = channels;
-    if (changed) bufferInit_ = false;
+    size_t size = width_ * height_ * channels_ * bytesPerChannel_;
+    if (size > capacity_) {
+        bufferInit_ = false;   // NOTE (mw) this allows growing the PBO
+    }
 }
 
 
@@ -120,7 +125,7 @@ void PBO::prepareForPersistentRead(size_t dataSize) {
 #if defined(FYUSENET_USE_EGL) || defined(__APPLE__) || defined(FYUSENET_USE_WEBGL)
     THROW_EXCEPTION_ARGS(GLNotImplException, "Persistent buffers are not implemented on this platform");
 #else
-    if (dataSize != capacity_) {
+    if (dataSize > capacity_) {
         if (!bound_) bind(GL_PIXEL_PACK_BUFFER);
 #ifdef DEBUG
         glGetError();
@@ -129,7 +134,7 @@ void PBO::prepareForPersistentRead(size_t dataSize) {
         persistent_ = false;
         mapped_ = nullptr;
 #if !defined(__APPLE__) && !defined(FYUSENET_USE_WEBGL)
-        glBufferStorage(GL_PIXEL_PACK_BUFFER, dataSize, nullptr, GL_MAP_READ_BIT|GL_MAP_PERSISTENT_BIT);  // OpenGL 4.4+
+        glBufferStorage(GL_PIXEL_PACK_BUFFER, (GLsizeiptr)dataSize, nullptr, GL_MAP_READ_BIT|GL_MAP_PERSISTENT_BIT);  // OpenGL 4.4+
 #else
         glBufferData(GL_PIXEL_PACK_BUFFER, dataSize, nullptr, GL_STATIC_READ);
 #endif
@@ -158,13 +163,11 @@ void PBO::prepareForPersistentRead(size_t dataSize) {
  * @see https://www.khronos.org/opengl/wiki/Buffer_Object
  */
 void PBO::prepareForRead(size_t dataSize, bool leaveBound) {
-    if (dataSize != capacity_) {
+    if ((dataSize > capacity_) || (!bufferInit_)) {
         bind(GL_PIXEL_PACK_BUFFER);
-#ifdef DEBUG
-        glGetError();
-#endif
+        CLEAR_GFXERR_DEBUG
         // NOTE (mw) do not use glBufferStorage() as it will fix the buffer size for the entire lifetime
-        glBufferData(GL_PIXEL_PACK_BUFFER, dataSize, nullptr, GL_STREAM_READ);  // GL_STATIC_READ also works
+        glBufferData(GL_PIXEL_PACK_BUFFER, (GLsizeiptr)dataSize, nullptr, GL_STREAM_READ);  // GL_STATIC_READ also works
         bufferInit_ = true;
 #ifdef DEBUG
         GLenum err = glGetError();
@@ -191,13 +194,11 @@ void PBO::prepareForRead(size_t dataSize, bool leaveBound) {
  * @see https://www.khronos.org/opengl/wiki/Buffer_Object
  */
 void PBO::prepareForWrite(size_t dataSize, bool leaveBound) {
-    if (dataSize != capacity_) {
+    if ((dataSize > capacity_) || (!bufferInit_)) {
         bind(GL_PIXEL_UNPACK_BUFFER);
-#ifdef DEBUG
-        glGetError();
-#endif
+        CLEAR_GFXERR_DEBUG
         // NOTE (mw) do not use glBufferStorage() as it will fix the buffer size for the entire lifetime
-        glBufferData(GL_PIXEL_UNPACK_BUFFER, dataSize, nullptr, GL_STREAM_DRAW);
+        glBufferData(GL_PIXEL_UNPACK_BUFFER, (GLsizeiptr)dataSize, nullptr, GL_STREAM_DRAW);
         bufferInit_ = true;
 #ifdef DEBUG
         GLenum err = glGetError();
@@ -238,9 +239,7 @@ void * PBO::mapWriteBuffer(size_t dataSize, size_t offset, bool sync) {
 #ifdef DEBUG
     glGetError();
 #endif
-    void * ptr = nullptr;
-    //ptr = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER,offset,dataSize,GL_MAP_WRITE_BIT|GL_MAP_INVALIDATE_BUFFER_BIT|GL_MAP_UNSYNCHRONIZED_BIT);  // NOTE (mw) no difference in speed
-    ptr = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, offset, dataSize,GL_MAP_WRITE_BIT|GL_MAP_INVALIDATE_BUFFER_BIT);
+    void * ptr = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, (GLintptr)offset, (GLsizeiptr)dataSize, GL_MAP_WRITE_BIT|GL_MAP_INVALIDATE_BUFFER_BIT);
 #ifdef DEBUG
     GLenum err = glGetError();
     assert(err == GL_NO_ERROR);
@@ -270,7 +269,7 @@ void * PBO::mapPersistentReadBuffer(size_t dataSize) {
 #else
     if (!persistent_) {
         persistent_ = true;
-        mapped_ = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, dataSize, GL_MAP_READ_BIT|GL_MAP_PERSISTENT_BIT);
+        mapped_ = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, (GLsizeiptr)dataSize, GL_MAP_READ_BIT|GL_MAP_PERSISTENT_BIT);
     }
     assert(mapped_);
     return mapped_;
@@ -302,12 +301,11 @@ void * PBO::mapReadBuffer(size_t dataSize, size_t offset) {
 #else
     if (!bound_) bind(GL_PIXEL_PACK_BUFFER);
     assert(bufferInit_);
+    assert(dataSize <= capacity_);
+    CLEAR_GFXERR_DEBUG
+    void * ptr = glMapBufferRange(GL_PIXEL_PACK_BUFFER, (GLintptr)offset, (GLsizeiptr)dataSize, GL_MAP_READ_BIT);
 #ifdef DEBUG
-    glGetError();
-#endif
-    void * ptr = glMapBufferRange(GL_PIXEL_PACK_BUFFER, offset, dataSize, GL_MAP_READ_BIT);
-#ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     assert(err == GL_NO_ERROR);
 #endif
     return ptr;
@@ -361,8 +359,8 @@ void PBO::unmapWriteBuffer() {
 ##################################################################################################*/
 
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 
 // vim: set expandtab ts=4 sw=4:

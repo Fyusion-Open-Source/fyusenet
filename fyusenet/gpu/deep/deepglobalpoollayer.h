@@ -25,10 +25,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 /**
  * @brief Global pooling layer for tensors with high channel count (deep format)
@@ -54,16 +51,16 @@ class DeepGlobalPoolLayer : public DeepPoolingLayer {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
+    void cleanup() override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void renderChannelBatch() override;
-    virtual void beforeRender() override;
-    virtual void setupShaders() override;
-    virtual void afterRender() override;
-    virtual void setupNetworkPolygons(VAO *vao) override;
+    void renderChannelBatch() override;
+    void beforeRender() override;
+    void setupShaders() override;
+    void afterRender() override;
+    void setupNetworkPolygons(VAO *vao) override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -73,9 +70,6 @@ class DeepGlobalPoolLayer : public DeepPoolingLayer {
     opmode mode_ = MAXPOOL;       //!< Operation mode for this pooling layer (s
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

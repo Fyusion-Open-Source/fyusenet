@@ -52,11 +52,11 @@ class DeepPoolingLayer : public DeepLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void setup() override;
-    virtual void cleanup() override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual void forward(uint64_t sequence) override;
+    void setup() override;
+    void cleanup() override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods

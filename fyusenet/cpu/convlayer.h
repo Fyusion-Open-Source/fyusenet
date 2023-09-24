@@ -18,11 +18,9 @@
 
 #include "cpulayerbase.h"
 #include "convlayerbuilder.h"
-#include "../base/convlayerinterface.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace cpu {	
+namespace fyusion::fyusenet::cpu {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 /**
@@ -36,21 +34,21 @@ namespace cpu {
  *
  * This is not to say, that the CPU-side of FyuseNet cannot/will not be optimized in the future.
  */
-class ConvolutionLayer : public CPULayerBase, public ConvLayerInterface {
+class ConvolutionLayer : public CPULayerBase {
  public:
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     ConvolutionLayer(const ConvLayerBuilder& builder, int layerNumber);
-    virtual ~ConvolutionLayer();
+    ~ConvolutionLayer() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual void forward(uint64_t sequence) override;
-    virtual void loadWeightsAndBiases(const float *biasAndWeights, size_t offset=0) override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
+    void loadParameters(const ParameterProvider *weights) override;
 
  protected:
     // ------------------------------------------------------------------------
@@ -73,10 +71,6 @@ class ConvolutionLayer : public CPULayerBase, public ConvLayerInterface {
     float * bnScale_ = nullptr;
 };
 
-
-
-} // cpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::cpu namespace
 
 // vim: set expandtab ts=4 sw=4:

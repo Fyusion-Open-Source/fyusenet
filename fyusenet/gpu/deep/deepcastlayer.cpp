@@ -35,7 +35,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepCastLayer::DeepCastLayer(const CastLayerBuilder & builder, int layerNumber):DeepFunctionLayer((GPULayerBuilder &)builder, layerNumber) {
     target_ = builder.target_;
@@ -119,7 +119,7 @@ void DeepCastLayer::setupShaders() {
             THROW_EXCEPTION_ARGS(FynException,"Illegal cast target supplied");
     }
     snprintf(preproc, sizeof(preproc), "define CAST_TO_%s\n",tc);
-    handlePreprocFlags(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
+    preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
     shader_ = compileShaderPair("shaders/deep/deepdefault.vert","shaders/deep/deepcast.frag",preproc,typeid(this));
     try {
         shader_->bindAttributeLocation("attributes0",0);

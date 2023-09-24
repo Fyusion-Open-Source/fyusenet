@@ -20,19 +20,17 @@
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "../gl/gl_sys.h"
-#include "../base/asynclayerinterface.h"
 #include "../common/fynexception.h"
 #include "updownlayerbuilder.h"
 #include "gpulayerbase.h"
+#include "gpu_asynclayer.h"
 #include "../cpu/cpulayerinterface.h"
 #include "../cpu/cpubuffer.h"
 #include "../gl/pbopool.h"
 #include "../gl/managedpbo.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Layer to upload CPU data to the GPU
@@ -48,7 +46,7 @@ namespace gpu {
  * reduced significantly.
  *
  * Due to the primary goal of FyuseNet being a GPU inference engine, this class (currently) does
- * not offer any convenience in regards to buffer shapes. In particular that means that if you want
+ * not offer any convenience in regard to buffer shapes. In particular that means that if you want
  * to upload a buffer, the data in the buffer must be formatted appropriately such that a batch of
  * 4 channels is always aggregated as a single element (think of it as RGBA pixels, which they are).
  * Data with less than 4 channels must be aggregated as either 1,2 or 3-channel elements, following
@@ -56,7 +54,7 @@ namespace gpu {
  *
  * On asynchronous uploads it is important to keep track of when the input buffer may be changed.
  * The UpDownLayerBuilder offers to add a callback function, which will be invoked by the uploading
- * thread \e after the buffer contents of the original input buffer have been copied and it is safe
+ * thread \e after the buffer contents of the original input buffer have been copied, and it is safe
  * to change the input buffer. Failure to comply with the signalling may lead to inconsistencies
  * in the uploaded data.
  *
@@ -64,12 +62,12 @@ namespace gpu {
  * texture (due to asynchronicity between the CPU and the GPU), the individual texture set
  * (currently 2) of this layer has to be "unlocked" before the next (asynchronous) upload on the
  * same set can start. The unlocking must happen \e after \e all layers that consume the texture(s)
- * written by this layer have read the data and written their own output. The only way to  ensure
- * that is by using appopriate fences which is handled by the Engine.
+ * written by this layer have read the data and written their own output. The only way to ensure
+ * that, is by using appropriate fences which is handled by the Engine class.
  *
  * @see Engine::waitForUploadFence(), Engine::execute()
  */
-class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public AsyncLayer {
+class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public GPUAsyncLayer {
     // NOTE (mw) a lot of assumptions in the code rely on this number to be 2, refactor the code if you change this to higher numbers
     constexpr static int ASYNC_BUFFERS = 2;
  public:
@@ -77,26 +75,24 @@ class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public A
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     UploadLayer(const UpDownLayerBuilder & builder, int layerNo);
-    virtual ~UploadLayer();
+    ~UploadLayer() override = default;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void setup() override;
-    virtual void cleanup() override;
-    virtual void setInputBuffer(CPUBuffer * buf, int port) override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual void forward(uint64_t sequence=0) override;
+    void setup() override;
+    void cleanup() override;
+    void setCPUInputBuffer(CPUBuffer *buf, int port) override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void forward(uint64_t sequenceNo, StateToken *state) override;
 #ifdef FYUSENET_MULTITHREADING
-    bool asyncForward(uint64_t sequence, const std::function<void(uint64_t)>& engineCallback);
+    bool asyncForward(uint64_t sequence, StateToken * token, const std::function<void(uint64_t)>& engineCallback);
     void swapOutputTextures(uint64_t sequence);
     bool isLocked() const;
     void unlock(uint64_t sequenceNo);
 #endif
-    virtual void updateFBOs() override;
-    virtual void clearInputBuffers(int port = -1) override;
-    virtual void addOutputTexture(GLuint textureID, int channelIndex, int shadowIndex=0) override;
+    void clearCPUInputBuffers(int port = -1) override;
 
     /**
      * @brief Get input buffer
@@ -105,7 +101,7 @@ class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public A
      *
      * @return Input buffer assigned to specified port
      */
-    virtual CPUBuffer * getInputBuffer(int port=0) const override {
+    [[nodiscard]] CPUBuffer * getCPUInputBuffer(int port=0) const override {
         assert(port == 0);
 #ifdef FYUSENET_MULTITHREADING
         std::lock_guard<std::mutex> guard(asyncLock_);
@@ -119,7 +115,7 @@ class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public A
      * @retval true if layer is asynchronous
      * @retval false otherwise
      */
-    virtual bool isAsync() const override {
+    [[nodiscard]] bool isAsync() const override {
 #ifdef FYUSENET_MULTITHREADING
         return async_;
 #else
@@ -136,7 +132,7 @@ class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public A
      *
      * As this layer does not support output buffers, this function will always throw an exception
      */
-    virtual void clearOutputBuffers(int port = -1) override {
+    void clearCPUOutputBuffers(int port = -1) override {
         THROW_EXCEPTION_ARGS(FynException,"Not supported for upload layer");
     }
 
@@ -150,7 +146,7 @@ class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public A
      * This function always returns \c false, since CPU output buffers are not supported by
      * texture uploads.
      */
-    virtual bool hasOutputBuffer(int port=0) const override {
+    [[nodiscard]] bool hasCPUOutputBuffer(int port=0) const override {
         return false;
     }
 
@@ -163,7 +159,7 @@ class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public A
      *
      * This function is not supported for this layer type and hence always returns a \c nullptr
      */
-    virtual CPUBuffer * getOutputBuffer(int port=0) const override {
+    [[nodiscard]] CPUBuffer * getCPUOutputBuffer(int port=0) const override {
         return nullptr;
     }
 
@@ -176,7 +172,7 @@ class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public A
      *
      * This function throws an exception because it is not supported for this layer type
      */
-    virtual void addOutputBuffer(CPUBuffer *buf, int port=0) override {
+    void addCPUOutputBuffer(CPUBuffer *buf, int port= 0) override {
         THROW_EXCEPTION_ARGS(FynException,"Not supported for upload layer");
     }
 
@@ -185,32 +181,39 @@ class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public A
     *
     * This function throws an exception because it is not supported for this layer type
     */
-    virtual void setResidualBuffer(CPUBuffer * buf) override {
+    virtual void setCPUResidualBuffer(CPUBuffer * buf) override {
         THROW_EXCEPTION_ARGS(FynException,"Not supported for upload layer");
     }
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    void syncUpload();
+    [[nodiscard]] BufferSpec::order getInputOrder(int port) const override;
+    [[nodiscard]] BufferSpec::order getOutputOrder(int port) const override;
+    void addOutputTexture(GLuint textureID, int channelIndex, int shadowIndex) override;
+    static BufferSpec::sizedformat bufferFormat(BufferSpec::dtype type, int packing);
+    void setupFBOs() override;
+    void updateFBOs() override;
+    void syncUpload(StateToken * state);
 #ifdef FYUSENET_MULTITHREADING
-    bool asyncUpload(uint64_t sequence, const std::function<void(uint64_t)> & callback);
-    void asyncUploadTask(opengl::ManagedPBO& pbo, const void *srcData, uint64_t sequence, CPUBuffer * buffer, int texIdx,  const std::function<void(uint64_t)> & callback);
-    void updateDependencies(const std::vector<GLuint>& textures) const;
+    bool asyncUpload(uint64_t sequence, StateToken * token, const std::function<void(uint64_t)> & callback);
+    void asyncUploadTask(opengl::ManagedPBO& pbo, const void *srcData, uint64_t sequence, CPUBuffer * buffer,
+                         int texIdx, int width, int height, size_t totalSize, const std::function<void(uint64_t)> & callback);
 #endif
-    virtual void setupFBOs() override;
 
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
-    BufferSpec::dtype dataType_;                    //!< Data type for this layer (currently only bytes and 32-bit floats are supported)
-    CPUBuffer * input_ = nullptr;                   //!< Pointer to assigned input CPU buffer
-    bool async_ = false;                            //!< Synchronous/Asynchronous upload mode toggle
-    uint8_t bytesPerChan_ = 0;                      //!< Bytes per channel
+    BufferSpec::dtype dataType_;            //!< Data type for this layer
+    CPUBuffer * input_ = nullptr;           //!< Pointer to assigned input CPU buffer
+    bool async_ = false;                    //!< Synchronous/Asynchronous upload mode toggle
+    uint8_t bytesPerChan_ = 0;              //!< Bytes per channel
+    int maxSequenceLength_ = 0;             //!< Maximum sequence length and indicator if sequence data is to be uploaded
+    int seqPacking_ = PIXEL_PACKING;        //!< Packing factor for sequence items
 #ifdef FYUSENET_MULTITHREADING
-    mutable std::mutex asyncLock_;                  //!< Locks access to members used for asynchronous uploads
-    uint64_t inFlight_[ASYNC_BUFFERS];              //!< Stores sequence numbers of in-flight uploads, the index in the array relates to the texture set
-    int locked_ = 0;                                //!< Number of locked texture sets, also see #asyncLock_
+    mutable std::mutex asyncLock_;          //!< Locks access to members used for asynchronous uploads
+    uint64_t inFlight_[ASYNC_BUFFERS];      //!< Stores sequence numbers of in-flight uploads, the index in the array relates to the texture set
+    int locked_ = 0;                        //!< Number of locked texture sets, also see #asyncLock_
 
     /**
      * Optional user callback on completion of an asynchronous upload
@@ -225,9 +228,7 @@ class UploadLayer : public GPULayerBase, public cpu::CPULayerInterface, public A
 };
 
 
-}  // gpu namespace
-}  // fyusenet namespace
-}  // fyusion namespace
+}  // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

@@ -17,10 +17,8 @@
 #include "deepglobalpoollayer.h"
 #include "../../gl/glexception.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -32,7 +30,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepGlobalPoolLayer::DeepGlobalPoolLayer(const PoolLayerBuilder & builder,int layerNumber) :
     DeepPoolingLayer(builder,layerNumber) {
@@ -96,7 +94,7 @@ void DeepGlobalPoolLayer::afterRender() {
  */
 void DeepGlobalPoolLayer::setupShaders() {
     char preproc[1024] = {0};
-    handlePreprocFlags(flags_, preproc, sizeof(preproc)-1);
+    preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-1);
     if (mode_ == AVGPOOL) {
         shader_ = compileShaderPair("shaders/deep/deepdefault.vert","shaders/deep/deepglobavgpool.frag",preproc,typeid(this));
     } else {
@@ -111,7 +109,7 @@ void DeepGlobalPoolLayer::setupShaders() {
     }
     shaderState_ = UniformState::makeShared(shader_);
     shaderState_->setUniformValue("inputLayer0",0);
-    shaderState_->setUniformVec2("imdim",width_,height_);
+    shaderState_->setUniformVec2("imdim", width_, height_);
     shaderState_->setUniformVec2("texStep", 1.0f/(float)tiler_->getInputTextureWidth(), 1.0f/(float)tiler_->getInputTextureHeight());
 }
 
@@ -131,7 +129,7 @@ void DeepGlobalPoolLayer::setupNetworkPolygons(VAO *vao) {
     }
     vertexBuffer_ = new VBO(context_);
     vao->enableArray(0);
-    vertexBuffer_->setBufferData(attrs0,tiler_->numOutputTiles()*4*sizeof(float),GL_STATIC_DRAW);
+    vertexBuffer_->setBufferData(attrs0, (GLsizei)(tiler_->numOutputTiles() * 4 * sizeof(float)), GL_STATIC_DRAW);
     vertexBuffer_->bind();
     vao->setVertexAttributeBuffer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
     delete [] attrs0;
@@ -139,9 +137,6 @@ void DeepGlobalPoolLayer::setupNetworkPolygons(VAO *vao) {
 
 
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

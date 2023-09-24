@@ -201,6 +201,13 @@ GLContextInterface * GLContext::getMain() const {
     return manager_->getMain();
 }
 
+/**
+ * @copydoc GLContextInterface::texturePool()
+ */
+ScopedTexturePool * GLContext::texturePool() const {
+    assert(manager_);
+    return manager_->texturePool();
+}
 
 /*##################################################################################################
 #                               N O N -  P U B L I C  F U N C T I O N S                            #

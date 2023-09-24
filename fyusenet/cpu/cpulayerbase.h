@@ -23,9 +23,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace cpu {
+namespace fyusion::fyusenet::cpu {
 
 /**
  * @brief Base class for CPU-based neural network layers
@@ -43,24 +41,24 @@ class CPULayerBase : public LayerBase, public CPULayerInterface {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     CPULayerBase(const LayerBuilder& builder, int layerNumber);
-    virtual ~CPULayerBase();
+    ~CPULayerBase() override = default;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void setup() override;
-    virtual void cleanup() override;
-    virtual void addOutputBuffer(CPUBuffer * buf, int port=0) override;
-    virtual void setInputBuffer(CPUBuffer * buf, int port) override;
-    virtual void setResidualBuffer(CPUBuffer * buf) override;
-    virtual void clearInputBuffers(int port=-1) override;
-    virtual void clearOutputBuffers(int port=-1) override;
-    virtual void writeResult(const char *fileName, bool includePadding) override;
+    void setup() override;
+    void cleanup() override;
+    void addCPUOutputBuffer(CPUBuffer * buf, int port= 0) override;
+    void setCPUInputBuffer(CPUBuffer * buf, int port) override;
+    void setCPUResidualBuffer(CPUBuffer * buf) override;
+    void clearCPUInputBuffers(int port=-1) override;
+    void clearCPUOutputBuffers(int port=-1) override;
+    void writeResult(const char *fileName, bool includePadding) override;
 
     /**
-     * @copydoc CPULayerInterface::hasOutputBuffer
+     * @copydoc CPULayerInterface::hasCPUOutputBuffer
      */
-    virtual bool hasOutputBuffer(int port=0) const override {
+    bool hasCPUOutputBuffer(int port=0) const override {
         assert(port >= 0);
         if ((int)outputs_.size() <= port) return false;
         return (outputs_.at(port) != nullptr);
@@ -68,9 +66,9 @@ class CPULayerBase : public LayerBase, public CPULayerInterface {
 
 
     /**
-     * @copydoc CPULayerInterface::getOutputBuffer
+     * @copydoc CPULayerInterface::getCPUOutputBuffer
      */
-    virtual CPUBuffer * getOutputBuffer(int port=0) const override {
+    CPUBuffer * getCPUOutputBuffer(int port=0) const override {
         assert(port >= 0);
         if ((int)outputs_.size() <= port) return nullptr;
         return outputs_[port];
@@ -78,9 +76,9 @@ class CPULayerBase : public LayerBase, public CPULayerInterface {
 
 
     /**
-     * @copydoc CPULayerInterface::getInputBuffer
+     * @copydoc CPULayerInterface::getCPUInputBuffer
      */
-    virtual CPUBuffer * getInputBuffer(int port=0) const override {
+    CPUBuffer * getCPUInputBuffer(int port=0) const override {
         assert(port >= 0);
         if ((int)inputs_.size() <= port) return nullptr;
         return inputs_[port];
@@ -95,9 +93,7 @@ class CPULayerBase : public LayerBase, public CPULayerInterface {
     std::vector<CPUBuffer *> residuals_;      //!< List of residual buffers for this layer
 };
 
-} // cpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::cpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

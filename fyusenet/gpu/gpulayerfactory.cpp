@@ -9,11 +9,9 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <cstring>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
-#include "../common/logging.h"
 #include "gpulayerfactory.h"
 #include "convlayerbase.h"
 #include "deep/deepextractimgpatches.h"
@@ -46,32 +44,34 @@
 #include "scalelayer.h"
 #include "avgpoollayer.h"
 #include "maxpoollayer.h"
-#include "rgb2bgrlayer.h"
 #include "batchnormlayer.h"
 #include "sigmoidlayer.h"
 #include "tanhlayer.h"
+#include "silulayer.h"
+#include "gelulayer.h"
 #include "castlayer.h"
 #include "singleton_arithlayer.h"
 #include "deep2shallow.h"
 #include "shallow2deep.h"
 #include "concatlayer.h"
 #include "addsublayer.h"
+#include "sequence/embedding_sequence.h"
+#include "sequence/linear_sequence.h"
+#include "sequence/rmsnorm_sequence.h"
+#include "sequence/tokenscoring_sequence.h"
+#include "sequence/causal_multihead_attentionlayer.h"
 #include "vanilla/convlayer1x1_vanilla.h"
 #include "vanilla/convlayerNxN_vanilla.h"
 #include "vanilla/convlayer_dw_3x3_vanilla.h"
 #include "vanilla/transconvlayer2x2_vanilla.h"
 #include "vanilla/transconvlayer3x3_vanilla.h"
 #include "vanilla/fractionalconvlayerNxN_vanilla.h"
-#include "vanilla/transconvlayer2x2_vanilla.h"
-#include "vanilla/transconvlayer3x3_vanilla.h"
-#include "../gl/glinfo.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
 
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //-------------------------------------- Local Definitions -----------------------------------------
 
 
@@ -132,10 +132,8 @@ fyusenet::LayerBase * GPULayerFactoryBackend::createLayer(LayerType type,LayerBu
             return (fyusenet::LayerBase *)createFracConvLayer((ConvLayerBuilder *)builder,layerNumber);
         case LayerType::RELU:
             // we emulate the ReLU layer with a scaling layer
-            return (fyusenet::LayerBase *)createScaleLayer((ScaleLayerBuilder *)builder,layerNumber);
         case LayerType::CLIP:
-            // we emulate the clip layer with a scaling layer
-            return (fyusenet::LayerBase *)createScaleLayer((ScaleLayerBuilder *)builder,layerNumber);
+            // we emulate the Clip layer with a scaling layer
         case LayerType::SCALE2D:
             return (fyusenet::LayerBase *)createScaleLayer((ScaleLayerBuilder *)builder,layerNumber);
         case LayerType::CONCAT:
@@ -158,6 +156,10 @@ fyusenet::LayerBase * GPULayerFactoryBackend::createLayer(LayerType type,LayerBu
             return (fyusenet::LayerBase *)createUploadLayer((UpDownLayerBuilder *)builder, layerNumber);
         case LayerType::SIGMOID:
             return (fyusenet::LayerBase *)createSigmoidLayer((GPULayerBuilder *)builder, layerNumber);
+        case LayerType::SILU:
+            return (fyusenet::LayerBase *)createSiLULayer((GPULayerBuilder *)builder, layerNumber);
+        case LayerType::GELU:
+            return (fyusenet::LayerBase *)createGeLULayer((GPULayerBuilder *)builder, layerNumber);
         case LayerType::IMGEXTRACT:
             return (fyusenet::LayerBase *)createImgExtractLayer((ImgExtractLayerBuilder *)builder, layerNumber);
         case LayerType::NONMAX2D:
@@ -178,6 +180,16 @@ fyusenet::LayerBase * GPULayerFactoryBackend::createLayer(LayerType type,LayerBu
             return (fyusenet::LayerBase *)createBatchNormLayer((GPULayerBuilder *)builder, layerNumber);
         case LayerType::GEMM:
             return (fyusenet::LayerBase *)createGEMMLayer((GPULayerBuilder *)builder, layerNumber);
+        case LayerType::ATTENTION:
+            return (fyusenet::LayerBase *)createAttentionLayer((AttentionLayerBuilder *)builder, layerNumber);
+        case LayerType::RMSNORM:
+            return (fyusenet::LayerBase *)createRMSNormLayer((GPULayerBuilder *)builder, layerNumber);
+        case LayerType::LINEAR:
+            return (fyusenet::LayerBase *)createLinearLayer((LinearLayerBuilder *)builder, layerNumber);
+        case LayerType::EMBEDDING:
+            return (fyusenet::LayerBase *)createEmbeddingLayer((EmbeddingLayerBuilder *)builder, layerNumber);
+        case LayerType::TOKENSCORING:
+            return (fyusenet::LayerBase *)createTokenScoringLayer((TokenScoringLayerBuilder *)builder, layerNumber);
         default:
             THROW_EXCEPTION_ARGS(FynException,"Unsupported layer type");
     }
@@ -226,7 +238,7 @@ void GPULayerFactoryBackend::checkRequirements() {
  *
  * @param builder Instance of ArgMaxLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -248,7 +260,7 @@ GPULayerBase * GPULayerFactoryBackend::createArgMaxLayer(ArgMaxLayerBuilder *bui
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -268,7 +280,7 @@ GPULayerBase * GPULayerFactoryBackend::createDownloadLayer(UpDownLayerBuilder *b
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  */
@@ -286,7 +298,7 @@ GPULayerBase * GPULayerFactoryBackend::createUploadLayer(UpDownLayerBuilder * bu
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -306,7 +318,7 @@ GPULayerBase * GPULayerFactoryBackend::createOESLayer(GPULayerBuilder *builder,i
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -327,7 +339,7 @@ GPULayerBase * GPULayerFactoryBackend::createPaddingLayer(GPULayerBuilder *build
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -346,7 +358,7 @@ GPULayerBase * GPULayerFactoryBackend::createAddSubLayer(GPULayerBuilder *builde
  *
  * @param builder Instance of ConvLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -401,7 +413,7 @@ GPULayerBase * GPULayerFactoryBackend::createConvLayer(ConvLayerBuilder *builder
  *
  * @param builder Instance of ConvLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -436,7 +448,7 @@ GPULayerBase * GPULayerFactoryBackend::createTransConvLayer(ConvLayerBuilder *bu
  *
  * @param builder Instance of ConvLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -462,7 +474,7 @@ GPULayerBase * GPULayerFactoryBackend::createFracConvLayer(ConvLayerBuilder *bui
  *
  * @param builder Instance of ScaleLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -481,7 +493,7 @@ GPULayerBase * GPULayerFactoryBackend::createScaleLayer(ScaleLayerBuilder *build
  *
  * @param builder Instance of ConcatLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -500,7 +512,7 @@ GPULayerBase * GPULayerFactoryBackend::createConcatLayer(ConcatLayerBuilder *bui
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -516,7 +528,7 @@ GPULayerBase * GPULayerFactoryBackend::createS2DLayer(GPULayerBuilder *builder,i
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -532,7 +544,7 @@ GPULayerBase * GPULayerFactoryBackend::createD2SLayer(GPULayerBuilder *builder,i
  *
  * @param builder Instance of PoolLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -554,7 +566,7 @@ GPULayerBase * GPULayerFactoryBackend::createMaxPoolLayer(PoolLayerBuilder *buil
  *
  * @param builder Instance of PoolLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -576,7 +588,7 @@ GPULayerBase * GPULayerFactoryBackend::createAvgPoolLayer(PoolLayerBuilder *buil
  *
  * @param builder Instance of CustomLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -595,7 +607,7 @@ GPULayerBase * GPULayerFactoryBackend::createCustomLayer(CustomLayerBuilder *bui
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -610,11 +622,50 @@ GPULayerBase * GPULayerFactoryBackend::createSigmoidLayer(GPULayerBuilder *build
 
 
 /**
+ * @brief Create a SiLU activation layer
+ *
+ * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
+ *
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
+ *
+ * @return Raw pointer to created layer
+ *
+ * @see SiLULayer
+ */
+GPULayerBase * GPULayerFactoryBackend::createSiLULayer(GPULayerBuilder *builder, int layerNumber) {
+    if (builder->isDeep()) {
+        return new deep::DeepSigmoidLayer(*builder, layerNumber);
+    }
+    return new SiLULayer(*builder, layerNumber);
+}
+
+
+/**
+ * @brief Create a GeLU activation layer
+ *
+ * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
+ *
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
+ *
+ * @return Raw pointer to created layer
+ *
+ * @see GeLULayer
+ */
+GPULayerBase * GPULayerFactoryBackend::createGeLULayer(GPULayerBuilder *builder, int layerNumber) {
+    if (builder->isDeep()) {
+        THROW_EXCEPTION_ARGS(FynException, "Not implemented yet");
+    }
+    return new GeLULayer(*builder, layerNumber);
+}
+
+
+
+/**
  * @brief Create a tanh activation layer
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -633,7 +684,7 @@ GPULayerBase * GPULayerFactoryBackend::createTanhLayer(GPULayerBuilder *builder,
  *
  * @param builder Instance of ImgExtraactLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -657,7 +708,7 @@ GPULayerBase * GPULayerFactoryBackend::createImgExtractLayer(ImgExtractLayerBuil
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -678,7 +729,7 @@ GPULayerBase * GPULayerFactoryBackend::createNonMax2DLayer(GPULayerBuilder *buil
  *
  * @param builder Instance of BlurLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -699,7 +750,7 @@ GPULayerBase * GPULayerFactoryBackend::createBlur2DLayer(BlurLayerBuilder *build
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -721,7 +772,7 @@ GPULayerBase * GPULayerFactoryBackend::createRGB2BGRLayer(GPULayerBuilder *build
  *
  * @param builder Instance of SingletonArithLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -740,7 +791,7 @@ GPULayerBase * GPULayerFactoryBackend::createSingletonArithLayer(SingletonArithL
  *
  * @param builder Instance of CastLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -761,7 +812,7 @@ GPULayerBase * GPULayerFactoryBackend::createCastLayer(CastLayerBuilder *builder
  *
  * @param builder Instance of TranposeLayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -782,7 +833,7 @@ GPULayerBase * GPULayerFactoryBackend::createTransposeLayer(TransposeLayerBuilde
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -801,7 +852,7 @@ GPULayerBase * GPULayerFactoryBackend::createBatchNormLayer(GPULayerBuilder * bu
  *
  * @param builder Instance of GPULayerBuilder that contains the parameters for the layer
  *
- * @param layerNumber Layer number to assigned to the created layer, must be unique
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
  *
  * @return Raw pointer to created layer
  *
@@ -815,9 +866,93 @@ GPULayerBase * GPULayerFactoryBackend::createGEMMLayer(GPULayerBuilder * builder
 }
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+/**
+ * @brief Create normalization layer that computes RMS norm over input sequences
+ *
+ * @param builder Builder with layer parameters
+ *
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
+ *
+ * @return Raw pointer to created layer
+ */
+GPULayerBase * GPULayerFactoryBackend::createRMSNormLayer(GPULayerBuilder * builder, int layerNumber) {
+    if (!builder->isSequence()) {
+        THROW_EXCEPTION_ARGS(FynException,"RMSNormLayer only supported for sequence tensors");
+    }
+    return new sequence::RMSNormLayer(*builder, layerNumber);
+}
+
+
+/**
+ * @brief Create layer for sequence embeddings
+ *
+ * @param builder Builder with layer parameters
+ *
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
+ *
+ * @return Raw pointer to created layer
+ */
+GPULayerBase * GPULayerFactoryBackend::createEmbeddingLayer(EmbeddingLayerBuilder * builder, int layerNumber) {
+    if (!builder->isSequence()) {
+        THROW_EXCEPTION_ARGS(FynException,"Embedding layers only supported for sequence tensors");
+    }
+    return new sequence::EmbeddingLayer(*builder, layerNumber);
+}
+
+/**
+ * @brief Create attention layer
+ *
+ * @param builder Builder with layer parameters
+ *
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
+ *
+ * @return Raw pointer to created layer
+ */
+GPULayerBase * GPULayerFactoryBackend::createAttentionLayer(AttentionLayerBuilder *builder, int layerNumber) {
+    if (!builder->isSequence()) {
+        THROW_EXCEPTION_ARGS(FynException,"Attention layers only supported for sequence tensors");
+    }
+    if (!builder->causal_) {
+        THROW_EXCEPTION_ARGS(FynException,"Only causally-masked attention is supported");
+    }
+    return new sequence::CausalMultiHeadAttentionLayer(*builder, layerNumber);
+}
+
+
+/**
+ *
+  * @param builder Builder with layer parameters
+ *
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
+ *
+ * @return Raw pointer to created layer
+* @return
+ */
+GPULayerBase * GPULayerFactoryBackend::createLinearLayer(LinearLayerBuilder * builder, int layerNumber) {
+    if (!builder->isSequence()) {
+        THROW_EXCEPTION_ARGS(FynException,"Linear layers only supported for sequence tensors");
+    }
+    return new sequence::LinearLayer(*builder, layerNumber);
+}
+
+/**
+ * @brief Create layer for token "de-embedding" and scoring
+ *
+ * @param builder Builder with layer parameters
+ *
+ * @param layerNumber Layer number to be assigned to the created layer, must be unique
+ *
+ * @return Raw pointer to created layer
+ */
+GPULayerBase * GPULayerFactoryBackend::createTokenScoringLayer(TokenScoringLayerBuilder * builder, int layerNumber) {
+    if (!builder->isSequence()) {
+        THROW_EXCEPTION_ARGS(FynException,"Token scsoring layers only supported for sequence tensors");
+    }
+    return new sequence::TokenScoringLayer(*builder, layerNumber);
+}
+
+
+} // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

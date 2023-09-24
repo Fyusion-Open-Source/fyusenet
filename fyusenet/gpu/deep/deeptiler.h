@@ -21,10 +21,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 /**
  * @brief Management class for texture tiles in deep neural networks
@@ -56,7 +53,7 @@ class DeepTiler {
      * @brief Representation of a single tile on a texture
      *
      * This object stores the geometric parameters for a single tile and offers a few convenience
-     * functions for acces.
+     * functions for access.
      * Depending on whether or not this object is used for output or input purposes, the data stored
      * in #quad_ is either device coordinates for output or texture coordinates for input.
      */
@@ -66,7 +63,7 @@ class DeepTiler {
         void toFloatVec(float *tgt, int offset, int stride=2, bool transpose=false) const;
         void lowClamp(float *tgt, int offset) const;
         void toDisplacement(const Tile& defaultExtents, float *tgt, int offset) const;
-        std::pair<float,float> midPoint() const;
+        [[nodiscard]] std::pair<float,float> midPoint() const;
 
         int renderTarget_ = 0;       //!< For later expansion
         int textureID_ = 0;          //!< For texture tagging
@@ -81,32 +78,32 @@ class DeepTiler {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
-    DeepTiler();
+    DeepTiler() = default;
     DeepTiler(LayerType ltype, int width, int height, int inputChannels, int outputChannels,
-              float hscale, float vscale, int inputPadding, int outputPadding,
-              int horizDown, int vertDown, int horizUp, int vertUp, int kernel=1);
+              float hscale=1.0f, float vscale=1.0f, int inputPadding=0, int outputPadding=0,
+              int horizDown=1, int vertDown=1, int horizUp=1, int vertUp=1, int kernel=1);
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    std::vector<Tile> createOutputTiles() const;
-    std::vector<Tile> createInputTiles(int xPixelOffset,int yPixelOffset,int texID=0) const;
-    Tile getDefaultTextureExtents() const;
-    static Tile getUnitTextureExtents();
-    int getViewportWidth() const;
-    int getViewportHeight() const;
-    int getInputTextureWidth() const;
-    int getInputTextureHeight() const;
-    int getInputChannels() const;
-    int getOutputChannels() const;
-    int getInputWidth() const;
-    int getInputHeight() const;
-    int numInputTiles(tx mode = ALL) const;
-    int numOutputTiles(tx mode = ALL) const;
-    int getOutputWidth() const;
-    int getOutputHeight() const;
-    float getTextureStepX() const;
-    float getTextureStepY() const;
+    [[nodiscard]] std::vector<Tile> createOutputTiles() const;
+    [[nodiscard]] std::vector<Tile> createInputTiles(int xPixelOffset,int yPixelOffset,int texID=0) const;
+    [[nodiscard]] Tile getDefaultTextureExtents() const;
+    [[nodiscard]] static Tile getUnitTextureExtents();
+    [[nodiscard]] int getViewportWidth() const;
+    [[nodiscard]] int getViewportHeight() const;
+    [[nodiscard]] int getInputTextureWidth() const;
+    [[nodiscard]] int getInputTextureHeight() const;
+    [[nodiscard]] int getInputChannels() const;
+    [[nodiscard]] int getOutputChannels() const;
+    [[nodiscard]] int getInputWidth() const;
+    [[nodiscard]] int getInputHeight() const;
+    [[nodiscard]] int numInputTiles(tx mode = ALL) const;
+    [[nodiscard]] int numOutputTiles(tx mode = ALL) const;
+    [[nodiscard]] int getOutputWidth() const;
+    [[nodiscard]] int getOutputHeight() const;
+    [[nodiscard]] float getTextureStepX() const;
+    [[nodiscard]] float getTextureStepY() const;
 
     /**
      * @brief Set global pooling mode on tiler
@@ -125,10 +122,6 @@ class DeepTiler {
         return (layer_ == LayerType::MAXPOOL2D) || (layer_ == LayerType::AVGPOOL2D);
     }
  private:
-    // ------------------------------------------------------------------------
-    // Non-public methods
-    // ------------------------------------------------------------------------
-    static std::pair<int,int> computeTiling(int depth);
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -157,10 +150,6 @@ class DeepTiler {
     LayerType layer_ = LayerType::ILLEGAL;
 };
 
-
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

@@ -22,10 +22,7 @@
 #include "deeptransconvlayerbase.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 /**
  * @brief Transpose convolution layer for a 3x3 convolution kernel on deep tensor data
@@ -48,15 +45,15 @@ class DeepTransConvLayer3x3 : public DeepTransConvLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
+    void cleanup() override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void compileConvolutionShaders(const char *preproc) override;
+    void compileConvolutionShaders(const char *preproc) override;
     unistateptr initShader(programptr shader);
-    virtual void renderPass(int pass) override;
+    void renderPass(int pass) override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -67,10 +64,6 @@ class DeepTransConvLayer3x3 : public DeepTransConvLayerBase {
     unistateptr noBiasShaderState_;             //!< Uniform-variable state for #noBiasShader_
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
-
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

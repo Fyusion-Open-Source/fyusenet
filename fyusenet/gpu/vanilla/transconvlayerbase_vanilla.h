@@ -30,24 +30,21 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+namespace fyusion::fyusenet::gpu::vanilla {
 
 /**
  * @brief Base class for transpose convolution layers
  *
  * This class serves as base/interface for transposed convolution layers. In contrast to standard
  * convolutional layers, the transposed convolution is often used for upsampling purposes (sometimes
- * called deconvolution) performs a "broadcasting" operation on the input tensor, akin to a Kronecker
+ * called deconvolution) performs a “broadcasting” operation on the input tensor, akin to a Kronecker
  * product, by multiplying the kernel with each element in the input tensor and adding it to the
  * output tensor. When performing upsampling, the upsampling stride determines the spacing between
  * the multiplied kernel elements in the output tensor.
  *
  * An implementation of a transpose convolution in a fragment shader is a tiny bit tricky due to the
  * broadcasting nature of the operator. The implementations derived from this class make use of a
- * stencil buffer for the broadcasting operation. Currently the transpose convolution layers in
+ * stencil buffer for the broadcasting operation. Currently, the transpose convolution layers in
  * FyuseNet only support stride-2 transpose-convolutions, which performs a "convoluted upsampling"
  * of the input tensor by a factor of 2 along both spatial dimensions. The fixed 2-fold upsampling
  * basically leads to 4 different configurations which are encoded in a stencil-buffer and 4 specialized
@@ -63,14 +60,14 @@ class TransConvLayerBase : public ConvLayerBase {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     TransConvLayerBase(const ConvLayerBuilder& builder, int layerNumber);
-    virtual ~TransConvLayerBase();
+    ~TransConvLayerBase() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void forward(uint64_t sequence = 0) override;
-    virtual void setup() override;
-    virtual void cleanup() override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
+    void setup() override;
+    void cleanup() override;
 
  protected:
 
@@ -84,14 +81,14 @@ class TransConvLayerBase : public ConvLayerBase {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    unistateptr configureShader(programptr shader, int stratum) const;
+    [[nodiscard]] unistateptr configureShader(const programptr& shader, int stratum) const;
     void performInputPasses(UniformWeightArray *weights, int outputPass);
-    virtual void setupNetworkPolygons(VAO *vao, int kernel) override;
+    void setupNetworkPolygons(VAO *vao, int kernel) override;
     void setupStencilBuffer();
-    virtual void setBias(int outPass,const UniformWeightArray *bias) override;
-    virtual size_t shaderPreprocessing(char *preproc, size_t maxChars) override;
-    virtual void setupFBOs() override;
-    virtual void updateFBOs() override;
+    void setBias(int outPass,const UniformWeightArray *bias) override;
+    size_t shaderPreprocessing(char *preproc, size_t maxChars) override;
+    void setupFBOs() override;
+    void updateFBOs() override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -112,10 +109,6 @@ class TransConvLayerBase : public ConvLayerBase {
 
 };
 
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
-
+} // fyusion::fyusenet::gpu::vanillavanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

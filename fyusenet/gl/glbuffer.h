@@ -45,7 +45,7 @@ class GLBuffer : public fyusenet::GfxContextTracker {
     void bind(GLenum target);
     void unbind();
     void unbind(GLenum target);
-    void setBufferData(void *data,int dataSize,GLenum usage);
+    void setBufferData(void *data, int dataSize, GLenum usage);
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods

@@ -40,9 +40,7 @@ namespace opengl {
   class PBO;
 }
 
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusenet::gpu::deep {
 
 /**
  * @brief Download layer from GPU to CPU for deep tensor data
@@ -94,24 +92,25 @@ class DeepDownloadLayer : public DeepLayerBase, public cpu::CPULayerInterface, p
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     DeepDownloadLayer(const UpDownLayerBuilder& builder, int layerNo);
-    virtual ~DeepDownloadLayer();
+    ~DeepDownloadLayer() override = default;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void setup() override;
-    virtual void forward(uint64_t sequence) override;
+    void setup() override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
 #ifdef FYUSENET_MULTITHREADING
-    virtual void asyncForward(uint64_t sequence, const std::function<void(uint64_t)>& callback) override;
+    void asyncForward(uint64_t sequenceNo, StateToken * token, const std::function<void(uint64_t)>& callback) override;
 #endif
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual CPUBuffer * getOutputBuffer(int port=0) const override;
-    virtual void addOutputBuffer(cpu::CPUBuffer *buf, int port=0) override;
-    virtual bool hasOutputBuffer(int port=0) const override;    
-    virtual void clearOutputBuffers(int port = -1) override;
-    virtual void wait(uint64_t sequenceNo) override;
+    std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    CPUBuffer * getCPUOutputBuffer(int port=0) const override;
+    void addCPUOutputBuffer(CPUBuffer *buf, int port= 0) override;
+    [[nodiscard]] bool hasCPUOutputBuffer(int port=0) const override;
+    void clearCPUOutputBuffers(int port = -1) override;
+    void wait(uint64_t sequenceNo) override;
     void updateOutputBuffer(CPUBuffer *buf, int port=0);
+    [[nodiscard]] BufferShape getOutputShape(int port) const override;
 
     /**
      * @brief Check if download layer is asynchronous
@@ -132,7 +131,7 @@ class DeepDownloadLayer : public DeepLayerBase, public cpu::CPULayerInterface, p
      *
      * @throw FynException always
      */
-    virtual CPUBuffer * getInputBuffer(int port=0) const override {
+    virtual CPUBuffer * getCPUInputBuffer(int port=0) const override {
         THROW_EXCEPTION_ARGS(FynException,"Input buffers are not supported for this layer type");
     }
 
@@ -146,21 +145,21 @@ class DeepDownloadLayer : public DeepLayerBase, public cpu::CPULayerInterface, p
      *
      * As this layer does not support input buffers, this function will always throw an exception
      */
-    virtual void clearInputBuffers(int port = -1) override {
+    virtual void clearCPUInputBuffers(int port = -1) override {
         THROW_EXCEPTION_ARGS(FynException,"Not supported for download layer");
     }
 
     /**
-     * @copydoc cpu::CPULayerInterface::setInputBuffer
+     * @copydoc cpu::CPULayerInterface::setCPUInputBuffer
      */
-    virtual void setInputBuffer(CPUBuffer * buf,int port) override {
+    virtual void setCPUInputBuffer(CPUBuffer * buf, int port) override {
         THROW_EXCEPTION_ARGS(FynException,"Not supported for download layer");
     }
 
     /**
-     * @copydoc cpu::CPULayerInterface::setResidualBuffer
+     * @copydoc cpu::CPULayerInterface::setCPUResidualBuffer
      */
-    virtual void setResidualBuffer(CPUBuffer * buf) override {
+    virtual void setCPUResidualBuffer(CPUBuffer * buf) override {
         THROW_EXCEPTION_ARGS(FynException,"Not supported for download layer");
     }
  protected:
@@ -194,9 +193,7 @@ class DeepDownloadLayer : public DeepLayerBase, public cpu::CPULayerInterface, p
 #endif
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
+} // fyusenet::gpu::deep namespace
 } // fyusion namespace
 
 // vim: set expandtab ts=4 sw=4:

@@ -27,9 +27,7 @@
 #include "gpulayerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Layer that performs non-maximum suppresion on the spatial (2D) part of a tensor in shallow representation
@@ -48,12 +46,12 @@ class NonMaxSuppression2D : public FunctionLayer {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
-    virtual void setupShaders() override;
+    void beforeRender() override;
+    void afterRender() override;
+    void setupShaders() override;
     unistateptr initShader(programptr shader,int renderTargets);
     programptr compileShader(const char *preproc);
-    virtual void renderChannelBatch(int outPass, int numRenderTargets, int texOffset) override;
+    void renderChannelBatch(int outPass, int numRenderTargets, int texOffset) override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -63,9 +61,7 @@ class NonMaxSuppression2D : public FunctionLayer {
     ShaderProgram *currentShader_ = nullptr;
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

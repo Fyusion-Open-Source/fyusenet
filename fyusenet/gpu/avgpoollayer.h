@@ -22,9 +22,7 @@
 #include "poolinglayer.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Average-pooling layer
@@ -51,16 +49,14 @@ class AvgPoolLayer : public PoolingLayer {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
-    virtual void renderChannelBatch(int outPass, int numRenderTargets, int texOffset) override;
-    virtual unistateptr initShader(programptr shader, int renderTargets) override;
-    virtual programptr compileShader(const char *preproc) override;
+    void beforeRender() override;
+    void afterRender() override;
+    void renderChannelBatch(int outPass, int numRenderTargets, int texOffset) override;
+    unistateptr initShader(programptr shader, int renderTargets) override;
+    programptr compileShader(const char *preproc) override;
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

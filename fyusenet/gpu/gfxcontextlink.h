@@ -18,12 +18,11 @@
 #include "../gl/glcontextinterface.h"
 #include "../common/logging.h"
 
-#define VERBOSE
-
 namespace fyusion {
 
 namespace opengl {
     class AsyncPool;
+    class ScopedTexturePool;
 }
 
 namespace fyusenet {
@@ -39,6 +38,10 @@ namespace fyusenet {
  * are not eliminated while there are still pending links (or at least you will get a warning
  * about that).
  *
+ * In addition to establishing a link to a context for the underlying gfx system (which currently
+ * is OpenGL), this class also provides some convenience methods for creating shaders and managing
+ * the graphics state.
+ *
  * @note The header file of this link resides in the GPU subfolder instead of the backend-
  *       specific GL folder, whereas the implementation is placed in the GL subfolder. In
  *       addition, the class resides within the fyusenet namespace. This is done for extension
@@ -52,7 +55,7 @@ class GfxContextLink {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
-    GfxContextLink(opengl::GLContextInterface * wrap = nullptr);
+    explicit GfxContextLink(opengl::GLContextInterface * wrap = nullptr);
     GfxContextLink(const GfxContextLink& src);
     ~GfxContextLink();
 
@@ -76,13 +79,14 @@ class GfxContextLink {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    bool isCurrent() const;
-    int device() const;
+    [[nodiscard]] bool isCurrent() const;
+    [[nodiscard]] int device() const;
     void reset();
     syncid issueSync() const;
     void waitSync(syncid sync) const;
-    bool waitClientSync(syncid sync, GLuint64 timeout) const;
+    bool waitClientSync(syncid sync, GLuint64 timeout) const;    
     void removeSync(syncid sync) const;
+    [[nodiscard]] opengl::ScopedTexturePool * texturePool() const;
 
     /**
      * @brief Check if this link points to a valid context
@@ -90,7 +94,7 @@ class GfxContextLink {
      * @retval true If link/context is valid
      * @retval false Otherwise
      */
-    bool isValid() const {
+    [[nodiscard]] bool isValid() const {
         return (context_ != nullptr);
     }
 
@@ -99,7 +103,7 @@ class GfxContextLink {
      *
      * @return Pointer to high-level interface of GL context (abstracted from system)
      */
-    const opengl::GLContextInterface * interface() const {
+    [[nodiscard]] const opengl::GLContextInterface * interface() const {
         return context_;
     }
 
@@ -108,16 +112,17 @@ class GfxContextLink {
      *
      * @return Pointer to high-level interface of GL context (abstracted from system)
      */
-    opengl::GLContextInterface * interface() {
+    [[nodiscard]] opengl::GLContextInterface * interface() {
         return context_;
     }
+
 
     static const GfxContextLink EMPTY;           //!< Symbolic placeholder for an empty (invalid) context link
  private:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    GfxContextLink(bool empty);
+    explicit GfxContextLink(bool empty);
 
     // ------------------------------------------------------------------------
     // Member variables

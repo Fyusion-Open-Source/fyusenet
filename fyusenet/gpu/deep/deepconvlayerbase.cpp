@@ -9,7 +9,6 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <cstring>
 #include <cassert>
 #include <algorithm>
 
@@ -21,10 +20,7 @@
 #include "deeplayerbase.h"
 #include "../floatconversion.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -76,6 +72,7 @@ DeepConvLayerBase::DeepConvLayerBase(const ConvLayerBuilder & builder, int layer
 #else
     halfSupport_ = GLInfo::supportsHalf();
 #endif
+    hasParameters_ = true;
 }
 
 
@@ -118,6 +115,7 @@ DeepConvLayerBase::DeepConvLayerBase(const GPULayerBuilder & builder, int layerN
 #else
     halfSupport_ = GLInfo::supportsHalf();
 #endif
+    hasParameters_ = true;
 }
 
 
@@ -145,7 +143,7 @@ DeepConvLayerBase::~DeepConvLayerBase()  {
  * @brief Perform setup of layer code
  *
  * @pre The GL context that is to be used for running the inference must be current to the calling
- *      thread and loadWeightsAndBiases() has been called prior to this function.
+ *      thread and loadParameters() has been called prior to this function.
  *
  * @post Layer is marked as valid
  *
@@ -163,7 +161,7 @@ void DeepConvLayerBase::setup() {
     setupFBOs();
     vertexArray_->unbind();
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
         THROW_EXCEPTION_ARGS(FynException,"Failed to setup network layer (glerr=0x%x)",err);
     }
@@ -203,7 +201,7 @@ std::vector<BufferSpec> DeepConvLayerBase::getRequiredInputBuffers() const {
     std::vector<BufferSpec> result;
     result.push_back(BufferSpec(0 ,0, tiler_->getInputTextureWidth(), tiler_->getInputTextureHeight(),
                                 TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                BufferSpec::CONVOLUTION_SOURCE).dataOrder(BufferSpec::order::GPU_DEEP));
+                                BufferSpec::FUNCTION_SOURCE).dataOrder(BufferSpec::order::GPU_DEEP));
     if (flags_ & LayerFlags::RESIDUAL_INPUT) {
         result.push_back(BufferSpec(0, 1, residualViewport_[0], residualViewport_[1],
                                     TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
@@ -220,7 +218,7 @@ std::vector<BufferSpec> DeepConvLayerBase::getRequiredOutputBuffers() const {
     std::vector<BufferSpec> result;
     result.push_back(BufferSpec(0, 0, viewport_[0], viewport_[1],
                                 TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                BufferSpec::CONVOLUTION_DEST).dataOrder(BufferSpec::order::GPU_DEEP));
+                                BufferSpec::FUNCTION_DEST).dataOrder(BufferSpec::order::GPU_DEEP));
     return result;
 }
 
@@ -247,24 +245,25 @@ bool DeepConvLayerBase::isApplicable() const {
 /**
  * @brief Read weights and biases from raw data and store them into a texture
  *
- * @param biasAndWeights Pointer to array with bias and weight values (see long description)
- * @param offset Optional offset (in floating-point elements) into \p biasAndWeights where to
- *               start reading from
+ * @param weightSource Pointer to ParameterProvider object that supplies all weight data
  *
- * This function parses the weights and biases stored in the \p biasAndWeights parameter for
- * usage with the GPU. It is assumed that the biases and weights are stored biases first,
- * followed by the convolution weights. In case a batchnorm operation is used, the batchnorm
- * parameters are following the weight data in the form of all scales and then all offsets.
- * For example, for \e n output channels, the first \e n entries in \p biasAndWeights are the
- * biases. For \e m input channels and a kernel of size \e k (i.e. a kxk kernel), we expect a 4D
- * array of size nxkxkxm with the following index order:
+ * This function extracts the weights and biases stored in the \p weightSource parameter for
+ * usage with the GPU. For convolutions, the convolution weights are supposed to be
+ * stored in the following nested order:
  *
  * @code
  * [outchannel][kernely][kernelx][inchannel]
  * @endcode
  *
+ * Thus for \e m input channels and a kernel of size \e k (i.e. a \f$ k \times k \f$ kernel),
+ * we expect a 4D array of size \f$ n \times k \times k \times m \f$. The bias data as well
+ * is supposed to be stored as simple 1D vectors and the batch-norm parameters are expected
+ * to be stored in the following order:
+ *  1. all scales (single value per output channel for a total of \c output values)
+ *  2. all offsets (single value per output channel for a total of \c output values)
+ *
  * As opposed to the shallow tensor handling, it is not efficient to use multiple render passes
- * with changing uniforms for the convolution (at least not in my tests on mobile GPUs). Instead
+ * with changing uniforms for the convolution (at least not in my tests on mobile GPUs). Instead,
  * a different path is chosen, which packs the convolution coefficients into textures and use a
  * few tricks - when available.
  *
@@ -289,8 +288,15 @@ bool DeepConvLayerBase::isApplicable() const {
  * single channel and can reduce the texture width by 50% . This has to be decoded by the shader
  * later.
  *
+ * The parameter provider is called with the following \c name parameters on loading data:
+ *   - \c layername.weights for the weight data, \c subIndex set to 0
+ *   - \c layername.bias for the bias data, \c subIndex set to 1
+ *   - \c layername.bn for the batch-norm data, \c subIndex set to 2
+ *
+ *  Where \c layername is the name assigned to this layer by the builder
  */
-void DeepConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, size_t offset) {
+void DeepConvLayerBase::loadParameters(const ParameterProvider *weightSource) {
+    assert(weightSource);
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
     // as we store matrices here, we have 4 items, therefore do not divide by PIXEL_PACKING
     int texwidth = ((inputChannels_ % PIXEL_PACKING)==0) ? inputChannels_ : inputChannels_ + (PIXEL_PACKING - (inputChannels_ % PIXEL_PACKING));
@@ -305,74 +311,82 @@ void DeepConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, size_t
     if ((checkwidth > GLInfo::getMaximumTextureSize()) || (texheight > GLInfo::getMaximumTextureSize())) {
         THROW_EXCEPTION_ARGS(FynException, "Weights do not fit into GL texture");
     }
-    float * weights = new float[texwidth * texheight * PIXEL_PACKING];
-    const float * srcweights = biasAndWeights + outputChannels_ + offset;
-    memset(weights, 0, texwidth*texheight*PIXEL_PACKING*sizeof(float));
-    for (int outlayer=0 ; outlayer < outputChannels_ ; outlayer += PIXEL_PACKING) {
-        int orem = ((outputChannels_ - outlayer) >= PIXEL_PACKING) ? PIXEL_PACKING : (outputChannels_ - outlayer);
-        for (int fy=0; fy < kernel_; fy++) {
-            float *wptr = weights + ((outlayer/PIXEL_PACKING)*kernel_ + fy) * (texwidth*PIXEL_PACKING);
-            // below defines one row in the target texture
-            for (int inlayer=0; inlayer < inputChannels_; inlayer += PIXEL_PACKING) {
-                int irem = ((inputChannels_ - inlayer) >= PIXEL_PACKING) ? PIXEL_PACKING : (inputChannels_ - inlayer);
-                for (int fx=0; fx < kernel_; fx++) {
-                    for (int ol=outlayer; ol < outlayer+orem; ol++) {
-                        for (int il=inlayer; il < inlayer+irem; il++) {
-                            int srcoffset = ol*(kernel_ * kernel_ * inputChannels_) + ((fy*kernel_ + fx) * inputChannels_) + il ;
-                            *wptr = srcweights[srcoffset];
-                            wptr++;
+    if (auto wgtsrc = weightSource->get(getName()+std::string(".weights"), getNumber(), 0) ; !wgtsrc.empty()) {
+        float * weights = new float[texwidth * texheight * PIXEL_PACKING];
+        memset(weights, 0, texwidth * texheight * PIXEL_PACKING * sizeof(float));
+        const float *srcweights = std::any_cast<const float *>(wgtsrc.get());
+        for (int outlayer = 0; outlayer < outputChannels_; outlayer += PIXEL_PACKING) {
+            int orem = ((outputChannels_ - outlayer) >= PIXEL_PACKING) ? PIXEL_PACKING : (outputChannels_ - outlayer);
+            for (int fy = 0; fy < kernel_; fy++) {
+                float *wptr = weights + ((outlayer / PIXEL_PACKING) * kernel_ + fy) * (texwidth * PIXEL_PACKING);
+                // below defines one row in the target texture
+                for (int inlayer = 0; inlayer < inputChannels_; inlayer += PIXEL_PACKING) {
+                    int irem = ((inputChannels_ - inlayer) >= PIXEL_PACKING) ? PIXEL_PACKING : (inputChannels_ - inlayer);
+                    for (int fx = 0; fx < kernel_; fx++) {
+                        for (int ol = outlayer; ol < outlayer + orem; ol++) {
+                            for (int il = inlayer; il < inlayer + irem; il++) {
+                                int srcoffset = ol * (kernel_ * kernel_ * inputChannels_) + ((fy * kernel_ + fx) * inputChannels_) + il;
+                                *wptr = srcweights[srcoffset];
+                                wptr++;
+                            }
+                            wptr += PIXEL_PACKING - irem;
                         }
-                        wptr += PIXEL_PACKING-irem;
+                        wptr += (PIXEL_PACKING - orem) * PIXEL_PACKING;
                     }
-                    wptr += (PIXEL_PACKING-orem)*PIXEL_PACKING;
                 }
             }
         }
-    }
-    if (!weightTexture_) glGenTextures(1,&weightTexture_);
-    glBindTexture(GL_TEXTURE_2D,weightTexture_);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        if (!weightTexture_) glGenTextures(1, &weightTexture_);
+        glBindTexture(GL_TEXTURE_2D, weightTexture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 #ifndef HIGH_PRECISION
-    if (halfSupport_) {
-        unsigned int * fp16 = FloatConversion::getInstance()->toFP16UI(weights,texwidth*texheight*PIXEL_PACKING);
+        if (halfSupport_) {
+            unsigned int *fp16 = FloatConversion::getInstance()->toFP16UI(weights, texwidth * texheight * PIXEL_PACKING);
 #ifdef GL_RGBA32UI
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI,texwidth/2,texheight,0,GL_RGBA_INTEGER,GL_UNSIGNED_INT,fp16);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, texwidth / 2, texheight, 0, GL_RGBA_INTEGER, GL_UNSIGNED_INT, fp16);
 #else
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI_EXT,texwidth/2,texheight,0,GL_RGBA_INTEGER_EXT,GL_UNSIGNED_INT,fp16);
+            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI_EXT,texwidth/2,texheight,0,GL_RGBA_INTEGER_EXT,GL_UNSIGNED_INT,fp16);
 #endif
-        delete [] fp16;
-    } else {
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
+            delete[] fp16;
+        } else {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, texwidth, texheight, 0, GL_RGBA, GL_FLOAT, weights);
+        }
+#else
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
+#endif
+        delete[] weights;
     }
-#else
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
-#endif
-    delete [] weights;
     //------------------------------------------------------
     // If we have the post-BN flag set, store the batchnorm
     // stuff...
     //------------------------------------------------------
     if (flags_ & fyusenet::LayerFlags::POST_BATCHNORM) {
-        int padout = 4*((outputChannels_ + 3)/4);
-        const float * srcbn = biasAndWeights + outputChannels_ + offset + kernel_*kernel_*inputChannels_*outputChannels_;
+        auto bnsrc = weightSource->get(getName()+".bn", getNumber(), 2);
+        if (bnsrc.empty()) {
+            THROW_EXCEPTION_ARGS(FynException, "Cannot find batchnorm data for layer %s", getName().c_str());
+        }
+        int padout = PIXEL_PACKING * ((outputChannels_ + PIXEL_PACKING-1) / PIXEL_PACKING);
+        const float * srcbn = std::any_cast<const float *>(bnsrc.get());
         postBNScales_ = new float[padout];
         postBNBias_ = new float[padout];
-        memset(postBNScales_,0,padout*sizeof(float));
-        memset(postBNBias_,0,padout*sizeof(float));
+        memset(postBNScales_, 0, padout*sizeof(float));
+        memset(postBNBias_, 0, padout*sizeof(float));
         memcpy(postBNScales_, srcbn, outputChannels_*sizeof(float));
         memcpy(postBNBias_, srcbn+outputChannels_, outputChannels_*sizeof(float));
     }
     //------------------------------------------------------
     // Now for the bias part (and also batchnorm)...
     //------------------------------------------------------
-    int bs = PIXEL_PACKING*(1+(outputChannels_+PIXEL_PACKING-1)/PIXEL_PACKING);
+    int bs = PIXEL_PACKING*(1+(outputChannels_ + PIXEL_PACKING-1) / PIXEL_PACKING);
     if (flags_ & LayerFlags::POST_BATCHNORM) bs *= 2;
     float * bias = new float[bs];
     memset(bias, 0, bs*sizeof(float));
-    memcpy(bias + PIXEL_PACKING,biasAndWeights+offset,outputChannels_*sizeof(float));
+    weightSource->map(getName()+std::string(".bias"), getNumber(), 1).with([&](const std::any &data) {
+        memcpy(bias + PIXEL_PACKING, std::any_cast<const float *>(data), outputChannels_ * sizeof(float));
+    });
     // load batchnorm scale and bias if necessary
     if (flags_ & LayerFlags::POST_BATCHNORM) {
         for (int i=0; i < outputChannels_; i++) {
@@ -411,7 +425,7 @@ void DeepConvLayerBase::writeResult(const char *fileName,bool includePadding) {
         lheight += 2*inputPadding_;
     }
 #ifndef FYUSENET_USE_WEBGL
-    FILE *out = fopen(fileName,"w");
+    FILE *out = fopen(fileName,"wb");
     if (out) {
 #else
     uint8_t * download = new uint8_t[lwidth * lheight * outputChannels_];
@@ -424,7 +438,7 @@ void DeepConvLayerBase::writeResult(const char *fileName,bool includePadding) {
         for (int fb = 0 ; fb < numFBOs(); fb++ ) {
             memset(data, 0, owidth*oheight*PIXEL_PACKING*sizeof(float));
             FBO *fbo = getFBO(fb);
-            fbo->writeToMemory<float,GL_FLOAT>(data,PIXEL_PACKING,owidth*oheight*PIXEL_PACKING*sizeof(float));
+            fbo->writeToMemory<float,GL_FLOAT>(data,PIXEL_PACKING, (GLsizei)(owidth * oheight * PIXEL_PACKING * sizeof(float)));
             for (int ty=0; ty < tiler_->numOutputTiles(DeepTiler::VERTICAL); ty++) {
                 for (int tx=0; tx < tiler_->numOutputTiles(DeepTiler::HORIZONTAL); tx++) {
                     int rem = ((outputChannels_ - layernum) > PIXEL_PACKING) ? PIXEL_PACKING : outputChannels_-layernum;
@@ -482,7 +496,7 @@ void DeepConvLayerBase::copyResult(float *memory, bool includePadding) {
             memset(data, 0, owidth*oheight*PIXEL_PACKING*sizeof(float));
             FBO *fbo = getFBO(fb);
             assert(fbo->numAttachments() == 1);
-            fbo->writeToMemory<float,GL_FLOAT>(data,PIXEL_PACKING,owidth*oheight*PIXEL_PACKING*sizeof(float));
+            fbo->writeToMemory<float,GL_FLOAT>(data,PIXEL_PACKING,(GLsizei)(owidth * oheight * PIXEL_PACKING * sizeof(float)));
             for (int ty=0; ty < tiler_->numOutputTiles(DeepTiler::VERTICAL); ty++) {
                 for (int tx=0; tx < tiler_->numOutputTiles(DeepTiler::HORIZONTAL); tx++) {
                     int rem = ((outputChannels_ - layernum) > PIXEL_PACKING) ? PIXEL_PACKING : outputChannels_ - layernum;
@@ -541,16 +555,19 @@ void DeepConvLayerBase::setupShaders() {
  *  - dilation for <i>a trous</i> convolution
  */
 size_t DeepConvLayerBase::shaderPreprocessing(char *preproc, size_t maxChars) {
+#if defined(WIN32) || defined(WIN64)
+        using ssize_t = int64_t;
+#endif
     char extra[128];
-    ssize_t mc = handlePreprocFlags((layerflags)(flags_ & (~LayerFlags::RESIDUAL_INPUT)), preproc, maxChars);
+    ssize_t mc = (ssize_t)preprocessor_.generatePreprocessorPreamble(flags_ & (~LayerFlags::RESIDUAL_INPUT), preproc, maxChars);
     assert(mc > 0);
     if ((mali_) && (kernel_ > 1)) {
         strncat(preproc, "#define MALI\n", mc);
-        mc = maxChars-strlen(preproc);  // ouch
+        mc = (ssize_t)maxChars - (ssize_t)strlen(preproc);  // ouch
     }
     if (preG71_) {
         strncat(preproc, "#define PRE_G71\n", mc);
-        mc = maxChars-strlen(preproc);  // ouch
+        mc = (ssize_t)maxChars - (ssize_t)strlen(preproc);  // ouch
     }
 #ifdef HIGH_PRECISION
     strncat(preproc, "#define HIGH_PRECISION\n", mc);
@@ -558,7 +575,7 @@ size_t DeepConvLayerBase::shaderPreprocessing(char *preproc, size_t maxChars) {
 #endif
     snprintf(extra, sizeof(extra), "#define KERNEL %d\n",kernel_);
     strncat(preproc, extra, mc);
-    mc -= strlen(extra);
+    mc -= (ssize_t)strlen(extra);
     assert(mc > 0);
     if (largeDilation_) {
         snprintf(extra, sizeof(extra),"#define LARGE_DILATION\n");
@@ -568,7 +585,7 @@ size_t DeepConvLayerBase::shaderPreprocessing(char *preproc, size_t maxChars) {
         snprintf(extra, sizeof(extra),"#define DILATION %d\n", dilation_[0]);
     }
     strncat(preproc, extra, mc);
-    return mc - strlen(extra);
+    return mc - (ssize_t)strlen(extra);
 }
 
 
@@ -580,11 +597,11 @@ size_t DeepConvLayerBase::shaderPreprocessing(char *preproc, size_t maxChars) {
  * This function binds the locations of the vertex shader attributes to the correct index and
  * then finally links the shader.
  */
-void DeepConvLayerBase::shaderPostprocessing(programptr shader) {
+void DeepConvLayerBase::shaderPostprocessing(programptr & shader) {
     try {
-        shader->bindAttributeLocation("attributes0", 0);  // FIXME (mw) quite specialization for a base class
-        shader->bindAttributeLocation("attributes1", 1);  // FIXME (mw) quite specialization for a base class
-        shader->bindAttributeLocation("attributes2", 2);  // FIXME (mw) quite specialization for a base class
+        shader->bindAttributeLocation("attributes0", 0);  // NOTE (mw) quite specialized for a base class, maybe rethink
+        shader->bindAttributeLocation("attributes1", 1);  // NOTE (mw) quite specialized for a base class, maybe rethink
+        shader->bindAttributeLocation("attributes2", 2);  // NOTE (mw) quite specialized for a base class, maybe rethink
         shader->link();
     } catch (GLException& ex) {
         FNLOGE("Cannot link shader for layer %s",getName().c_str());
@@ -618,7 +635,7 @@ void DeepConvLayerBase::setupNetworkPolygons(VAO *vao) {
     }
     vertexBuffer_ = new VBO(context_);
     vao->enableArray(0);
-    vertexBuffer_->setBufferData(attrs0,tiler_->numOutputTiles()*4*4*sizeof(float),GL_STATIC_DRAW);
+    vertexBuffer_->setBufferData(attrs0, (int)(tiler_->numOutputTiles() * 4 * 4 *sizeof(float)),GL_STATIC_DRAW);
     vertexBuffer_->bind();
     vao->setVertexAttributeBuffer(0,4,GL_FLOAT,GL_FALSE,0,0);
     delete [] attrs0;
@@ -637,7 +654,7 @@ void DeepConvLayerBase::setupNetworkPolygons(VAO *vao) {
     }
     textureOffsets_ = new VBO(context_);
     vao->enableArray(1);
-    textureOffsets_->setBufferData(attrs1,tiler_->numOutputTiles()*2*4*sizeof(int),GL_STATIC_DRAW);
+    textureOffsets_->setBufferData(attrs1, (int)(tiler_->numOutputTiles() * 2 * 4 *sizeof(int)), GL_STATIC_DRAW);
     textureOffsets_->bind();
     vao->setVertexAttributeBuffer(1, 2, GL_INT, 0, 0);
     delete [] attrs1;
@@ -656,9 +673,9 @@ void DeepConvLayerBase::setupNetworkPolygons(VAO *vao) {
         }
         residualBuffer_ = new VBO(context_);
         vao->enableArray(2);
-        residualBuffer_->setBufferData(attrs2,residualTiler_->numInputTiles()*2*4*sizeof(float),GL_STATIC_DRAW);
+        residualBuffer_->setBufferData(attrs2, (int)(residualTiler_->numInputTiles() * 2 * 4 *sizeof(float)),GL_STATIC_DRAW);
         residualBuffer_->bind();
-        vao->setVertexAttributeBuffer(2,2,GL_FLOAT,GL_FALSE,0,0);
+        vao->setVertexAttributeBuffer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
         delete [] attrs2;
     }
     //---------------------------------------------
@@ -668,14 +685,14 @@ void DeepConvLayerBase::setupNetworkPolygons(VAO *vao) {
     indexBuffer_ = new IBO(context_);
     for (int i=0; i < tiler_->numOutputTiles(); i++) {
         int offset = i*4;
-        indices[i*6+0] = offset + 0;
-        indices[i*6+1] = offset + 1;
-        indices[i*6+2] = offset + 2;
-        indices[i*6+3] = offset + 0;
-        indices[i*6+4] = offset + 2;
-        indices[i*6+5] = offset + 3;
+        indices[i*6+0] = (GLshort)(offset + 0);
+        indices[i*6+1] = (GLshort)(offset + 1);
+        indices[i*6+2] = (GLshort)(offset + 2);
+        indices[i*6+3] = (GLshort)(offset + 0);
+        indices[i*6+4] = (GLshort)(offset + 2);
+        indices[i*6+5] = (GLshort)(offset + 3);
     }
-    indexBuffer_->setBufferData(indices,6*tiler_->numOutputTiles()*sizeof(GLshort),GL_STATIC_DRAW);
+    indexBuffer_->setBufferData(indices, (int)(6 * tiler_->numOutputTiles() * sizeof(GLshort)),GL_STATIC_DRAW);
     indexBuffer_->bind();
     delete [] indices;
     //---------------------------------------------------------------------------
@@ -740,11 +757,22 @@ void DeepConvLayerBase::updateFBOs() {
     outputChanged_ = false;
 }
 
+/**
+ * @copydoc GPULayerBase::getInputOrder
+ */
+BufferSpec::order DeepConvLayerBase::getInputOrder(int port) const {
+    return BufferSpec::order::GPU_DEEP;
+}
+
+/**
+ * @copydoc GPULayerBase::getOutputOrder
+ */
+BufferSpec::order DeepConvLayerBase::getOutputOrder(int port) const {
+    return BufferSpec::order::GPU_DEEP;
+}
 
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

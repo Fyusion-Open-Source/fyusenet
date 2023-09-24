@@ -25,11 +25,8 @@
 #include "convlayerNxN_vanilla.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
 
+namespace fyusion::fyusenet::gpu::vanilla {
 
 //-------------------------------------- Local Definitions -----------------------------------------
 
@@ -41,7 +38,7 @@ namespace vanilla {
 
 
 /**
- * @copydoc vanilla::ConvLayerBase::ConvLayerBase
+ * @copydoc vanilla::ConvLayerBase::ConvLayerBase(const ConvLayerBuilder&,int)
  */
 ConvLayerNxN::ConvLayerNxN(const ConvLayerBuilder & builder, int layerNumber):ConvLayerBase(builder,layerNumber) {
     assert((builder.kernel_ % 2) == 1);
@@ -69,13 +66,13 @@ void ConvLayerNxN::cleanup() {
 /**
  * @copydoc LayerBase::forward
  */
-void ConvLayerNxN::forward(uint64_t sequence) {
+void ConvLayerNxN::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -166,6 +163,9 @@ void ConvLayerNxN::setupShaders() {
  * properly during rendering.
  */
 void ConvLayerNxN::compileConvolutionShaders(const char *preproc) {
+#if defined(WIN32) || defined(WIN64)
+        using ssize_t = int64_t;
+#endif
     char finalpreproc[1024+128] = {0};
     char extra[128];
     char shadername[64];
@@ -213,9 +213,6 @@ void ConvLayerNxN::compileConvolutionShaders(const char *preproc) {
 }
 
 
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

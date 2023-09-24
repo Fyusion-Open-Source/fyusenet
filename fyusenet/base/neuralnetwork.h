@@ -19,10 +19,20 @@
 #include "layerfactory.h"
 #include "buffermanager.h"
 #include "compiledlayers.h"
+#ifdef FYUSENET_GL_BACKEND
+#include "../gl/gl_sys.h"
+#endif
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
+namespace gpu {
+    class GPULayerBase;
+}
+
+namespace cpu {
+    class CPULayerBase;
+}
 
 /**
  * @brief Base class for neural networks
@@ -168,15 +178,16 @@ class NeuralNetwork : public GfxContextTracker {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
-    NeuralNetwork(const GfxContextLink & ctx = GfxContextLink());
-    virtual ~NeuralNetwork();
+    explicit NeuralNetwork(const GfxContextLink & ctx = GfxContextLink());
+    ~NeuralNetwork() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
     virtual void cleanup();
     virtual void setup();
-    virtual execstate forward();
+    execstate forward();
+    virtual execstate forward(StateToken * token);
     virtual execstate finish();
 #ifdef FYUSENET_MULTITHREADING
     virtual void asynchronous(const AsyncAdapter & adapter = AsyncAdapter());
@@ -190,7 +201,7 @@ class NeuralNetwork : public GfxContextTracker {
      * The return value of this function comes in handy during asynchronous operations, for example
      * to set input buffers for the next run and make sure that there are no clashes.
      */
-    uint64_t nextSequenceNo() const {
+    [[nodiscard]] uint64_t nextSequenceNo() const {
         return (engine_) ? engine_->nextSequenceNo() : 0;
     }
 
@@ -201,7 +212,7 @@ class NeuralNetwork : public GfxContextTracker {
      *
      * @see forward(), Engine::lastSequenceNo()
      */
-    uint64_t lastSequenceNo() const {
+    [[nodiscard]] uint64_t lastSequenceNo() const {
         return (engine_) ? engine_->lastSequenceNo() : 0;
     }
 
@@ -210,8 +221,8 @@ class NeuralNetwork : public GfxContextTracker {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual CompiledLayers glSetup();
-     std::shared_ptr<LayerFactory> getLayerFactory(compute_device dev = compute_device::DEV_GPU);
+    virtual CompiledLayers gpuSetup();
+    std::shared_ptr<LayerFactory> getLayerFactory(compute_device dev = compute_device::DEV_GPU);
 
     /**
      * @brief Initialize all weights in weight-bearing layers
@@ -248,6 +259,10 @@ class NeuralNetwork : public GfxContextTracker {
      */
     virtual void connectLayers(CompiledLayers & layers, BufferManager * buffers) = 0;
 
+#ifdef FYUSENET_GL_BACKEND
+    static fyusion::opengl::FBO * getFBO(const gpu::GPULayerBase * layer, int index=0);
+#endif
+
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
@@ -261,7 +276,7 @@ class NeuralNetwork : public GfxContextTracker {
 };
 
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
+
 
 // vim: set expandtab ts=4 sw=4:

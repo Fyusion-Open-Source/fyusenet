@@ -30,7 +30,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 AvgPoolLayer::AvgPoolLayer(const PoolLayerBuilder & builder, int layerNumber) : PoolingLayer(builder, layerNumber) {
     vertexArray_ = nullptr;

@@ -26,9 +26,7 @@
 #include "../base/layerflags.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Type-casting emulation for shallow-tensor data
@@ -64,21 +62,19 @@ class CastLayer : public FunctionLayer {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
+    void cleanup() override;
  protected:
-    virtual void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
-    virtual void setupShaders() override;
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
+    void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
+    void setupShaders() override;
+    void beforeRender() override;
+    void afterRender() override;
     programptr shaders_[FBO::MAX_DRAWBUFFERS];
     unistateptr shaderStates_[FBO::MAX_DRAWBUFFERS];
     ShaderProgram *currentShader_ = nullptr;
     CastTarget target_;
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

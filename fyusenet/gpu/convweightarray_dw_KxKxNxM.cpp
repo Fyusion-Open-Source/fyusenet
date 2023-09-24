@@ -175,13 +175,21 @@ const float * DepthwiseConvWeightArrayKxKxNxM::getPackageBNScale(int outputPass)
 }
 
 /**
+ * @copydoc UniformWeightArray::getPackageSize
+ */
+int DepthwiseConvWeightArrayKxKxNxM::getPackageSize(int inputPass, int outputPass, int xIndex, int yIndex) const {
+    return packSizes_[outputPass];
+}
+
+
+/**
  * @copydoc UniformWeightArray::extractBiasData
  */
-void DepthwiseConvWeightArrayKxKxNxM::extractBiasData(const float *input, size_t offset) {
+void DepthwiseConvWeightArrayKxKxNxM::extractBiasData(const float *input) {
     if (!biasData_) biasData_ = new float[paddedOutputChannels_];
     memset(biasData_,0,paddedOutputChannels_*sizeof(float));
     for (int i=0;i<outputChannels_;i++) {
-        biasData_[i] = input[i+offset];
+        biasData_[i] = input[i];
     }
     if (bnBias_ && bnScale_) {
         for (int i=0;i<outputChannels_;i++) {
@@ -194,14 +202,14 @@ void DepthwiseConvWeightArrayKxKxNxM::extractBiasData(const float *input, size_t
 /**
  * @copydoc UniformWeightArray::extractBatchnormData
  */
-void DepthwiseConvWeightArrayKxKxNxM::extractBatchnormData(const float *input, size_t offset) {
+void DepthwiseConvWeightArrayKxKxNxM::extractBatchnormData(const float *input) {
     if (!bnBias_) bnBias_ = new float[paddedOutputChannels_];
     if (!bnScale_) bnScale_ = new float[paddedOutputChannels_];
     memset(bnBias_,0,paddedOutputChannels_*sizeof(float));
     memset(bnScale_,0,paddedOutputChannels_*sizeof(float));
     for (int i=0;i<outputChannels_;i++) {
-        bnScale_[i] = input[i+offset];
-        bnBias_[i] = input[i+offset+outputChannels_];
+        bnScale_[i] = input[i];
+        bnBias_[i] = input[i+outputChannels_];
     }
     if (biasData_) {
         for (int i=0;i<outputChannels_;i++) {
@@ -212,17 +220,9 @@ void DepthwiseConvWeightArrayKxKxNxM::extractBatchnormData(const float *input, s
 
 
 /**
- * @copydoc UniformWeightArray::getPackageSize
- */
-int DepthwiseConvWeightArrayKxKxNxM::getPackageSize(int inputPass, int outputPass, int xIndex, int yIndex) const {
-    return packSizes_[outputPass];
-}
-
-
-/**
  * @copydoc UniformWeightArray::extractWeightData
  */
-void DepthwiseConvWeightArrayKxKxNxM::extractWeightData(const float *input, size_t offset) {
+void DepthwiseConvWeightArrayKxKxNxM::extractWeightData(const float *input) {
     int fullsize = kernel_*(kernel_*paddedInputChannels_)*channelMultiplier_;
     if (!weightData_) weightData_ = new float[fullsize];
     memset(weightData_,0,fullsize*sizeof(float));
@@ -242,7 +242,7 @@ void DepthwiseConvWeightArrayKxKxNxM::extractWeightData(const float *input, size
             for (int yi=0; yi < kernel_; yi++) {
                 for (int xi=0; xi < kernel_; xi++) {
                     for (int chan=ichan; chan < ichan+ilimit; chan++) {
-                        int srcoffset = offset + chan * kernel_ * kernel_ * channelMultiplier_+(yi*kernel_+xi)*channelMultiplier_+mult;
+                        int srcoffset = chan * kernel_ * kernel_ * channelMultiplier_+(yi*kernel_+xi)*channelMultiplier_+mult;
                         weightData_[dstoffs++] = input[srcoffset];
                     }
                     if (ilimit < PIXEL_PACKING) dstoffs += (PIXEL_PACKING-ilimit);

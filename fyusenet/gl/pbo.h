@@ -19,8 +19,7 @@
 #include "../gpu/gfxcontextlink.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
 
 /**
  * @brief Wrapper class around OpenGL pixel buffer objects (PBOs)
@@ -65,13 +64,11 @@ class PBO : public GLBuffer {
     void prepareForRead(size_t dataSize, bool leaveBound=false);
     void prepareForWrite(size_t dataSize, bool leaveBound=false);
     void resize(int width, int height, int channels, int bytesPerChan);
-    void writeToMemory(void *data);
 
 
-    bool matches(int width, int height, int channels, int bytesPerChannel) const {
-        // NOTE (mw) we are way too strict here, a PBO is just a buffer and a too large PBO will
-        // do the job just fine, but we leave it at this for now
-        return (width_ == width) && (height_ == height) && (channels_ == channels) && (bytesPerChannel == bytesPerChannel_);
+    [[nodiscard]] bool matches(int width, int height, int channels, int bytesPerChannel) const {
+        size_t size = width * height * channels * bytesPerChannel;
+        return (size <= capacity_);
     }
 
     /**
@@ -79,7 +76,7 @@ class PBO : public GLBuffer {
      *
      * @return Width of %PBO
      */
-    int width() const {
+    [[nodiscard]] int width() const {
         return width_;
     }
 
@@ -88,7 +85,7 @@ class PBO : public GLBuffer {
      *
      * @return Height of %PBO
      */
-    int height() const {
+    [[nodiscard]] int height() const {
         return height_;
     }
 
@@ -97,7 +94,7 @@ class PBO : public GLBuffer {
      *
      * @return Number of channels per pixel
      */
-    int channels() const {
+    [[nodiscard]] int channels() const {
         return channels_;
     }
 
@@ -108,7 +105,7 @@ class PBO : public GLBuffer {
      *
      * @pre prepareForRead() or prepareForWrite() has been called
      */
-    size_t capacity() const {
+    [[nodiscard]] size_t capacity() const {
         return capacity_;
     }
 
@@ -139,8 +136,8 @@ class PBO : public GLBuffer {
 };
 
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 
 // vim: set expandtab ts=4 sw=4:

@@ -80,13 +80,13 @@ void DeepTransConvLayerBase::setup() {
 /**
  * @copydoc LayerBase::forward
  */
-void DeepTransConvLayerBase::forward(uint64_t sequence) {
+void DeepTransConvLayerBase::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -130,12 +130,10 @@ void DeepTransConvLayerBase::forward(uint64_t sequence) {
 }
 
 
-
-
 /**
- * @copydoc ConvLayerInterface::loadWeightsAndBiases
+ * @copydoc DeepConvLayerBase::loadParameters()
  */
-void DeepTransConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, size_t offset) {
+void DeepTransConvLayerBase::loadParameters(const ParameterProvider *weightSource) {
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
     int texwidth = ((inputChannels_ % PIXEL_PACKING)==0) ? inputChannels_ : inputChannels_ + (PIXEL_PACKING - (inputChannels_ % PIXEL_PACKING));
     texwidth *= kernel_;
@@ -144,59 +142,61 @@ void DeepTransConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, s
     if (((texwidth/2) > GLInfo::getMaximumTextureSize()) || (texheight > GLInfo::getMaximumTextureSize())) {
         THROW_EXCEPTION_ARGS(FynException,"Weights do not fit into GL texture");
     }
-    float * weights = new float[texwidth*texheight*PIXEL_PACKING];
-    const float * srcweights = biasAndWeights + outputChannels_ + offset;
-    memset(weights,0,texwidth*texheight*PIXEL_PACKING*sizeof(float));
-    for (int outlayer=0 ; outlayer<outputChannels_ ; outlayer+=PIXEL_PACKING) {
-        int orem = ((outputChannels_-outlayer)>=PIXEL_PACKING) ? PIXEL_PACKING : (outputChannels_-outlayer);
-        for (int fy=0; fy < kernel_; fy++) {
-            float *wptr = weights+((outlayer/PIXEL_PACKING)*kernel_+fy)*(texwidth*PIXEL_PACKING);
-            // below defines one row in the target texture
-            for (int inlayer=0; inlayer < inputChannels_; inlayer += PIXEL_PACKING) {
-                int irem = ((inputChannels_ - inlayer) >= PIXEL_PACKING) ? PIXEL_PACKING : (inputChannels_-inlayer);
-                for (int fx=0; fx < kernel_; fx++) {
-                    for (int ol=outlayer; ol < outlayer+orem; ol++) {
-                        for (int il=inlayer; il < inlayer+irem; il++) {
-                            int srcoffset = ol*(kernel_*kernel_*inputChannels_)+((fy*kernel_+fx)*inputChannels_) + il ;
-                            *wptr = srcweights[srcoffset];
-                            wptr++;
+    if (auto wgtsrc = weightSource->get(getName()+std::string(".weights"), getNumber(), 0) ; !wgtsrc.empty()) {
+        float *weights = new float[texwidth * texheight * PIXEL_PACKING];
+        memset(weights, 0, texwidth * texheight * PIXEL_PACKING * sizeof(float));
+        const float *srcweights = std::any_cast<const float *>(wgtsrc.get());
+        for (int outlayer = 0; outlayer < outputChannels_; outlayer += PIXEL_PACKING) {
+            int orem = ((outputChannels_ - outlayer) >= PIXEL_PACKING) ? PIXEL_PACKING : (outputChannels_ - outlayer);
+            for (int fy = 0; fy < kernel_; fy++) {
+                float *wptr = weights + ((outlayer / PIXEL_PACKING) * kernel_ + fy) * (texwidth * PIXEL_PACKING);
+                // below defines one row in the target texture
+                for (int inlayer = 0; inlayer < inputChannels_; inlayer += PIXEL_PACKING) {
+                    int irem = ((inputChannels_ - inlayer) >= PIXEL_PACKING) ? PIXEL_PACKING : (inputChannels_ - inlayer);
+                    for (int fx = 0; fx < kernel_; fx++) {
+                        for (int ol = outlayer; ol < outlayer + orem; ol++) {
+                            for (int il = inlayer; il < inlayer + irem; il++) {
+                                int srcoffset = ol * (kernel_ * kernel_ * inputChannels_) + ((fy * kernel_ + fx) * inputChannels_) + il;
+                                *wptr = srcweights[srcoffset];
+                                wptr++;
+                            }
+                            wptr += PIXEL_PACKING - irem;
                         }
-                        wptr += PIXEL_PACKING-irem;
+                        wptr += (PIXEL_PACKING - orem) * PIXEL_PACKING;
                     }
-                    wptr += (PIXEL_PACKING-orem)*PIXEL_PACKING;
                 }
             }
         }
-    }
-    if (!weightTexture_) glGenTextures(1,&weightTexture_);
-    glBindTexture(GL_TEXTURE_2D,weightTexture_);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        if (!weightTexture_) glGenTextures(1, &weightTexture_);
+        glBindTexture(GL_TEXTURE_2D, weightTexture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 #ifndef HIGH_PRECISION
-    if (halfSupport_) {
-        unsigned int * fp16 = FloatConversion::getInstance()->toFP16UI(weights,texwidth*texheight*PIXEL_PACKING);
+        if (halfSupport_) {
+            unsigned int *fp16 = FloatConversion::getInstance()->toFP16UI(weights, texwidth * texheight * PIXEL_PACKING);
 #ifdef GL_RGBA32UI
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI,texwidth/2,texheight,0,GL_RGBA_INTEGER,GL_UNSIGNED_INT,fp16);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, texwidth / 2, texheight, 0, GL_RGBA_INTEGER, GL_UNSIGNED_INT, fp16);
 #else
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI_EXT,texwidth/2,texheight,0,GL_RGBA_INTEGER_EXT,GL_UNSIGNED_INT,fp16);
+            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32UI_EXT,texwidth/2,texheight,0,GL_RGBA_INTEGER_EXT,GL_UNSIGNED_INT,fp16);
 #endif
-        delete [] fp16;
-    } else {
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
+            delete[] fp16;
+        } else {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, texwidth, texheight, 0, GL_RGBA, GL_FLOAT, weights);
+        }
+#else
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
+#endif
+        delete[] weights;
     }
-#else
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,texwidth,texheight,0,GL_RGBA,GL_FLOAT,weights);
-#endif
-    delete [] weights;
     //------------------------------------------------------
     // If we have the post-BN flag set, store the batchnorm
     // stuff...
     //------------------------------------------------------
-    if (flags_ & fyusenet::LayerFlags::POST_BATCHNORM) {
-        int padout = 4*((outputChannels_+3)/4);
-        const float * srcbn = biasAndWeights + outputChannels_ + offset + kernel_*kernel_*inputChannels_*outputChannels_;
+    if (auto bnsrc = weightSource->get(getName()+std::string(".bn"), getNumber(), 2)  ; flags_ & fyusenet::LayerFlags::POST_BATCHNORM) {
+        int padout = PIXEL_PACKING * ((outputChannels_ + PIXEL_PACKING-1) / PIXEL_PACKING);
+        const float * srcbn = std::any_cast<const float *>(bnsrc.get());
         postBNScales_ = new float[padout];
         postBNBias_ = new float[padout];
         memset(postBNScales_,0,padout*sizeof(float));
@@ -207,10 +207,12 @@ void DeepTransConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, s
     //------------------------------------------------------
     // Now for the bias part (and also batchnorm)...
     //------------------------------------------------------
-    int bs = PIXEL_PACKING*(1+(outputChannels_+PIXEL_PACKING-1)/PIXEL_PACKING);
+    int bs = PIXEL_PACKING * (1 + (outputChannels_ + PIXEL_PACKING-1) / PIXEL_PACKING);
     float * bias = new float[bs];
-    memset(bias,0,bs*sizeof(float));
-    memcpy(bias+PIXEL_PACKING,biasAndWeights+offset,outputChannels_*sizeof(float));
+    memset(bias, 0, bs*sizeof(float));
+    weightSource->map(getName()+std::string(".bias"), getNumber(), 1).with([&](const std::any &data) {
+        memcpy(bias + PIXEL_PACKING, std::any_cast<const float *>(data), outputChannels_ * sizeof(float));
+    });
     // load batchnorm scale and bias if necessary
     if (flags_ & LayerFlags::POST_BATCHNORM) {
         for (int i=0;i<outputChannels_;i++) {
@@ -227,7 +229,7 @@ void DeepTransConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, s
 #ifdef HIGH_PRECISION
     glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,1+(outputChannels_+PIXEL_PACKING-1)/PIXEL_PACKING,1,0,GL_RGBA,GL_FLOAT,bias);
 #else
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,1+(outputChannels_+PIXEL_PACKING-1)/PIXEL_PACKING,1,0,GL_RGBA,GL_FLOAT,bias);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,1 + (outputChannels_ + PIXEL_PACKING-1) / PIXEL_PACKING, 1, 0, GL_RGBA, GL_FLOAT, bias);
 #endif
     delete [] bias;
 }
@@ -241,6 +243,9 @@ void DeepTransConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, s
  * @copydoc DeepLayerBase::shaderPreprocessing
  */
 size_t DeepTransConvLayerBase::shaderPreprocessing(char *preproc, size_t maxChars) {
+#if defined(WIN32) || defined(WIN64)
+            using ssize_t = int64_t;
+#endif
     char extra[256];
     DeepConvLayerBase::shaderPreprocessing(preproc, maxChars);
     snprintf(extra, sizeof(extra), "#define DISP_UNIT %d\n#define WEIGHT_UNIT %d\n#define BIAS_UNIT %d\n",DISP_TEXTURE, WEIGHT_TEXTURE, BIAS_TEXTURE);

@@ -14,16 +14,43 @@
 
 #include <string>
 #include <exception>
-#include <stdarg.h>
+#include <cstdarg>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
 
 //-------------------------------------- Public Definitions ----------------------------------------
 
+#if !defined(__PRETTY_FUNCTION__) && !defined(__GNUC__)
+#define __PRETTY_FUNCTION__ __FUNCSIG__
+#endif
+
 #define THROW_EXCEPTION_ARGS(exclass,...) throw exclass(__PRETTY_FUNCTION__,__FILE__,__LINE__,__VA_ARGS__)
 #define THROW_EXCEPTION_ARGS_EXTRA(exclass,extra,...) throw exclass(__PRETTY_FUNCTION__,__FILE__,__LINE__,extra,__VA_ARGS__)
 
+#if defined(WIN32) || defined(WIN64)
+#define CUSTOM_EXCEPTION(name,base)                                                                \
+class name:public base {                                                                           \
+ public:                                                                                           \
+    name():base() {                                                                                \
+    }                                                                                              \
+    name(const char *func,const char *file,int line):base() {                                      \
+        generateWhat(func,file,line,__FUNCTION__);                                                 \
+    }                                                                                              \
+    name(const char *func, const char *file, int line, const char *fmt, ...) : base() {            \
+        char tmp[MAX_MESSAGE_SIZE];                                                                \
+        va_list args;                                                                              \
+        va_start(args,fmt);                                                                        \
+        vsnprintf(tmp,MAX_MESSAGE_SIZE,fmt,args);                                                  \
+        va_end(args);                                                                              \
+        generateWhat(func,file,line,__FUNCTION__,tmp);                                             \
+    }                                                                                              \
+    virtual ~name() throw() {                                                                      \
+    }                                                                                              \
+    name(const name& ex):base(ex) {                                                                \
+    }                                                                                              \
+}
+#else
 #define CUSTOM_EXCEPTION(name,base)                                                                \
 class name:public base {                                                                           \
  public:                                                                                           \
@@ -41,12 +68,12 @@ class name:public base {                                                        
         va_end(args);                                                                              \
         generateWhat(func,file,line,__FUNCTION__,tmp);                                             \
     }                                                                                              \
-    virtual ~name() throw() {                                                                      \
+    ~name() noexcept {                                                                             \
     }                                                                                              \
-    name(const name& ex):base(ex) {                                                                \
+    name(const name& ex) noexcept : base(ex)  {                                                    \
     }                                                                                              \
 }
-
+#endif
 
 //------------------------------------- Public Declarations ----------------------------------------
 
@@ -72,7 +99,7 @@ namespace fyusion {
  * This will throw an exception of type FynException that features the supplied error message, as
  * well as the function-name, file-name and line within that file where the exception was thrown.
  */
-class FynException:public std::exception {
+class FynException : public std::exception {
  public:
     enum {
         MAX_INFO_SIZE = 768,
@@ -84,12 +111,13 @@ class FynException:public std::exception {
     // ------------------------------------------------------------------------
     FynException();
     FynException(const char *function, const char *file, int line, const char *format, ...);
-    virtual ~FynException() throw();
+    FynException(const FynException& ex) noexcept;
+    ~FynException() noexcept override = default;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual const char * what() const throw() override;
+    const char * what() const noexcept override;
 
  protected:
     // ------------------------------------------------------------------------

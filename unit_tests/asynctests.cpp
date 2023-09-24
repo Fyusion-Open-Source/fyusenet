@@ -8,14 +8,10 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <cstdint>
 #include <cmath>
 #include <fstream>
 #include <memory>
-#include <thread>
-#include <cassert>
 #include <functional>
-#include <algorithm>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
@@ -48,11 +44,8 @@ int main(int argc,char **argv) {
  */
 class AsyncTest : public ::testing::Test, public TestContextManager {
  public:
-    AsyncTest() {
-    }
-
-    ~AsyncTest() {
-    }
+    AsyncTest() = default;
+    ~AsyncTest() = default;
 
  protected:
 
@@ -94,28 +87,19 @@ class AsyncTest : public ::testing::Test, public TestContextManager {
         callbacks.downloadReady(std::bind(&AsyncTest::imageReady, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3))
             .uploadReady(std::bind(&AsyncTest::uploadReady, this, std::placeholders::_1, std::placeholders::_2));
         network_->asynchronous(callbacks);
-        FILE * in = fopen("stylenet3x3_112_v3.dat", "rb");
-        ASSERT_NE(in, nullptr);
-        fseek(in, 0, SEEK_END);
-        size_t fsz = ftell(in);
-        fseek(in, 0, SEEK_SET);
-        ASSERT_EQ(fsz % sizeof(float), 0ul);
-        std::unique_ptr<float[]> weights(new float[fsz / sizeof(float)]);
-        ASSERT_NE(weights, nullptr);
-        fread(weights.get(), 1, fsz, in);
-        fclose(in);
-        network_->loadWeightsAndBiases(weights.get(), fsz / sizeof(float));
+        auto params = new StyleNet3x3Provider("stylenet3x3_112_v3.dat");
+        network_->setParameters(params);  // ownership taken by network
         network_->setup();
     }
 
 
-    virtual void SetUp() override {
+    void SetUp() override {
         // TODO (mw) only set up contexts once
         setupGLContext(4);
         fyusion::fyusenet::GfxContextManager::instance()->setupPBOPools(4, 4);
     }
 
-    virtual void TearDown() override {
+    void TearDown() override {
         if (network_) {
             network_->finish();
             network_->cleanup();

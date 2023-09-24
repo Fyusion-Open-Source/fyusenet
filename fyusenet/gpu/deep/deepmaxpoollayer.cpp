@@ -17,10 +17,8 @@
 #include "deepmaxpoollayer.h"
 #include "../../gl/glexception.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -32,7 +30,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepMaxPoolLayer::DeepMaxPoolLayer(const PoolLayerBuilder & builder,int layerNumber):DeepPoolingLayer(builder,layerNumber) {
     assert(builder.operation_ == PoolLayerBuilder::POOL_MAX);
@@ -84,6 +82,9 @@ void DeepMaxPoolLayer::afterRender() {
  * @copydoc DeepPoolingLayer::setupShaders
  */
 void DeepMaxPoolLayer::setupShaders() {
+#if defined(WIN32) || defined(WIN64)
+            using ssize_t = int64_t;
+#endif
     char preproc[1024]={0},add[256];
     ssize_t mc = (ssize_t)shaderPreprocessing(preproc, sizeof(preproc)-1);
     assert(mc > 0);
@@ -118,9 +119,6 @@ void DeepMaxPoolLayer::setupShaders() {
 
 
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

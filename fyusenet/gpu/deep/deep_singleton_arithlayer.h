@@ -27,10 +27,7 @@
 #include "../singleton_arithlayerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 
 /**
@@ -54,16 +51,16 @@ class DeepSingletonArithmeticLayer : public DeepFunctionLayer {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
+    void cleanup() override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupShaders() override;
-    virtual void beforeRender() override;
-    virtual void renderChannelBatch() override;
-    virtual void afterRender() override;
+    void setupShaders() override;
+    void beforeRender() override;
+    void renderChannelBatch() override;
+    void afterRender() override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -74,10 +71,7 @@ class DeepSingletonArithmeticLayer : public DeepFunctionLayer {
     float operand_ = 0.0f;        //!< The singleton operand to use with the tensor
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 
 // vim: set expandtab ts=4 sw=4:

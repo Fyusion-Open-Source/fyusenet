@@ -15,16 +15,14 @@
 
 #include "fbo.h"
 #include "glexception.h"
-#include "../common/logging.h"
+#include "../common/miscdefs.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
 const GLenum FBO::WRITE_BUFFERS[FBO::MAX_DRAWBUFFERS]={GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT1,GL_COLOR_ATTACHMENT2,
                                                        GL_COLOR_ATTACHMENT3,GL_COLOR_ATTACHMENT4,GL_COLOR_ATTACHMENT5,
                                                        GL_COLOR_ATTACHMENT6,GL_COLOR_ATTACHMENT7};
-}
 }
 
 //-------------------------------------- Local Definitions -----------------------------------------
@@ -82,12 +80,10 @@ FBO::FBO(const fyusenet::GfxContextLink & context, int width, int height) : GfxC
  *
  * @throws GLException if %FBO could not be generated
  */
-FBO::FBO(const fyusenet::GfxContextLink & context,int width,int height,int channels, Texture::pixtype type, GLenum target) : GfxContextTracker(),
+FBO::FBO(const fyusenet::GfxContextLink & context, int width, int height, int channels, Texture::pixtype type, GLenum target) : GfxContextTracker(),
     width_(width), height_(height) {
     setContext(context);
-    glGenFramebuffers(1,&handle_);
-    if (!handle_) THROW_EXCEPTION_ARGS(GLException,"Cannot generate framebuffer");
-    addTexture(GL_COLOR_ATTACHMENT0,setupInternalTexture(width, height, channels, type, target), target);
+    addTexture(GL_COLOR_ATTACHMENT0, setupInternalTexture(width, height, channels, type, target), target);
     numDrawBuffers_ = 1;
     unbind();
 }
@@ -110,8 +106,6 @@ FBO::FBO(const fyusenet::GfxContextLink & context, int width, int height, GLuint
     width_(width), height_(height) {
     assert(color0Texture > 0);
     setContext(context);
-    glGenFramebuffers(1,&handle_);
-    if (!handle_) THROW_EXCEPTION_ARGS(GLException,"Cannot generate framebuffer");
     addTexture(GL_COLOR_ATTACHMENT0, color0Texture, target);
     numDrawBuffers_ = 1;
     unbind();
@@ -132,8 +126,6 @@ FBO::FBO(const fyusenet::GfxContextLink & context, int width, int height, GLuint
 FBO::FBO(const fyusenet::GfxContextLink &context, const Texture2D &backingTexture) : GfxContextTracker(),
     width_(backingTexture.width()), height_(backingTexture.height()) {
     setContext(context);
-    glGenFramebuffers(1,&handle_);
-    if (!handle_) THROW_EXCEPTION_ARGS(GLException,"Cannot generate framebuffer");
     addTexture(GL_COLOR_ATTACHMENT0, backingTexture.getHandle(), backingTexture.target());
     numDrawBuffers_ = 1;
     unbind();
@@ -143,7 +135,7 @@ FBO::FBO(const fyusenet::GfxContextLink &context, const Texture2D &backingTextur
 /**
  * @brief Destructor
  *
- * Deletes the %FBO and the internnal backing texture (if it was set up). External textures are not
+ * Deletes the %FBO and the internal backing texture (if it was set up). External textures are not
  * deallocated.
  *
  * @warning If the destructor is called with a different GL context bound, this will lead to a
@@ -153,11 +145,14 @@ FBO::~FBO() {
     if (context_.isCurrent()) {
         if (bound_) unbind();
         if (handle_) glDeleteFramebuffers(1, &handle_);
-        if (internalTexture_ ) {
-            glDeleteTextures(1, &internalTexture_);
+        if (numInternalTextures_ > 0) {
+            glDeleteTextures(numInternalTextures_, internalTextures_);
 #ifdef DEBUG
-            textureMemory_.fetch_sub(width_ * height_ * internalChannels_ * Texture::channelSize(internalType_));
+            for (int t=0; t < numInternalTextures_; t++) {
+                textureMemory_.fetch_sub(width_ * height_ * internalChannels_[t] * Texture::channelSize(internalTypes_[t]));
+            }
 #endif
+            numInternalTextures_ = 0;
         }
     }
 }
@@ -196,15 +191,17 @@ void FBO::invalidate() {
  * @pre %FBO must be bound
  */
 void FBO::resize(int width, int height) {
-    if (internalTexture_) {
-        glBindTexture(GL_TEXTURE_2D, internalTexture_);
+    if (numInternalTextures_ > 0) {
+        for (int t=0; t < numInternalTextures_; t++) {
+            glBindTexture(internalTargets_[t], internalTextures_[t]);
 #ifdef DEBUG
-        int diff = width*height - width_ * height_;
-        diff *= internalChannels_ * Texture::channelSize(internalType_);
-        textureMemory_.fetch_add(diff);
+            int diff = width * height - width_ * height_;
+            diff *= internalChannels_[t] * Texture::channelSize(internalTypes_[t]);
+            textureMemory_.fetch_add(diff);
 #endif
-        auto ti = Texture::textureInfo(internalType_, internalChannels_);
-        glTexImage2D(GL_TEXTURE_2D, 0, ti.intFormat, width_, height_, 0, ti.format, ti.dataType, nullptr);
+            auto ti = Texture::textureInfo(internalTypes_[t], internalChannels_[t]);
+            glTexImage2D(internalTargets_[t], 0, ti.intFormat, width_, height_, 0, ti.format, ti.dataType, nullptr);
+        }
     } else {
         // clear existing attachments as they cannot be used anymore, note that the framebuffer
         // will be incomplete after this operation
@@ -241,7 +238,12 @@ template<typename T,GLenum dtype>
 void FBO::writeToMemory(T *memory, int channels, GLsizei bufsize, bool integral) {
     assert((channels > 0) && (channels <= 4));
     GLenum format = (integral) ? CHANNELS_TO_FMT_INT[channels-1] : CHANNELS_TO_FMT[channels-1];
+    CLEAR_GFXERR_DEBUG
+#ifdef DEBUG
+    if (!bound_) bind(GL_READ_FRAMEBUFFER, true);
+#else
     if (!bound_) bind(GL_READ_FRAMEBUFFER);
+#endif
     int stride = channels * sizeof(T) * width_;
     int align = 1;
     if ((stride & 1) == 0) align = 2;
@@ -251,7 +253,6 @@ void FBO::writeToMemory(T *memory, int channels, GLsizei bufsize, bool integral)
     GLint pbo[1];
     glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, pbo);
     assert(pbo[0] == 0);
-    glGetError();
 #endif
     glPixelStorei(GL_PACK_ALIGNMENT, align);
     GLenum err = GL_NO_ERROR;
@@ -275,9 +276,11 @@ void FBO::writeToMemory(T *memory, int channels, GLsizei bufsize, bool integral)
     }
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
     unbind(GL_READ_FRAMEBUFFER);
+#ifdef DEBUG
     if (err != GL_NO_ERROR) {
         THROW_EXCEPTION_ARGS(GLException, "Unable to readout FBO (err=0x%X)", err);
     }
+#endif
 }
 
 
@@ -313,11 +316,48 @@ void FBO::writeToMemory(T *memory, int channels, GLsizei bufsize, bool integral)
  * @see GfxContextLink::issueSync(), https://www.khronos.org/opengl/wiki/Pixel_Buffer_Object
  */
 size_t FBO::copyToPBO(PBO *target, GLenum dataType, int channels, size_t pboOffset, bool bindPBO, bool integral) {
+    return copyToPBO(target, width_, height_, dataType, channels, pboOffset, bindPBO, integral);
+}
+
+
+/**
+ * @brief Copy %FBO (color-only) contents to target PBO
+ *
+ * @param target PBO to copy data to (not bound)
+ *
+ * @param width Width of the (part of) the %FBO to copy
+ *
+ * @param height Height of the (part of) the %FBO to copy
+ *
+ * @param dataType Pixel data type to use, e.g. \c GL_UNSIGNED_BYTE or \c GL_FLOAT
+ *
+ * @param channels Number of channels per color-attachment in the %FBO
+ *
+ * @param pboOffset Offset into the supplied PBO (in bytes) where to start writing the data to
+ *
+ * @param bindPBO Bind %PBO before starting copy (set to \c true if %PBO is not already bound)
+ *
+ * @param integral If set to \c true, will assume a download to an integral data format, default is
+ *                 \c false
+ *
+ * @return Number of bytes read from this %FBO and all its attachments
+ *
+ * @throws GLException on size mismatch, unsupported datatypes, framebuffer-mismatch and GL errors
+ *         for debug builds
+ *
+ * This function optionally binds the %FBO to the read framebuffer, binds the supplied target PBO
+ * and invokes a GL read-pixel operation with the supplied PBO as target. It transfers all color
+ * attachments of the %FBO to the supplied %PBO. It is recommended to use %PBO transfers using
+ * a multi-threaded setup and fences.
+ *
+ * @warning This function assumes that this %FBO has color attachments only and that all color
+ *          attachments are of RGBA type (4 channels each).
+ *
+ * @see GfxContextLink::issueSync(), https://www.khronos.org/opengl/wiki/Pixel_Buffer_Object
+ */
+size_t FBO::copyToPBO(PBO *target, int width, int height, GLenum dataType, int channels, size_t pboOffset, bool bindPBO, bool integral) {
     if (numAttachments() > 1) THROW_EXCEPTION_ARGS(GLException,"Too many framebuffer attachments (only 1 is allowed for now)");
-    if ((target->width() != width_) || (target->height() != height_)) THROW_EXCEPTION_ARGS(GLException,"Mismatching dimensions on PBO and FBO");
-#ifdef DEBUG
-    glGetError();
-#endif
+    CLEAR_GFXERR_DEBUG
     int mult = 1;
     switch (dataType) {
         case GL_UNSIGNED_BYTE:
@@ -336,7 +376,9 @@ size_t FBO::copyToPBO(PBO *target, GLenum dataType, int channels, size_t pboOffs
         default:
             THROW_EXCEPTION_ARGS(GLException, "Unsupported data type");
     }
-    int stride = channels * mult * width_;
+    size_t reqsize = width * height * channels * mult;
+    if (target->capacity() < (pboOffset + reqsize)) THROW_EXCEPTION_ARGS(GLException, "PBO too small (required %ld bytes, got %ld)", reqsize, target->capacity());
+    int stride = channels * mult * width;
     int align = 1;
     if ((stride & 1) == 0) align = 2;
     if ((stride & 3) == 0) align = 4;
@@ -344,7 +386,7 @@ size_t FBO::copyToPBO(PBO *target, GLenum dataType, int channels, size_t pboOffs
     if (bindPBO) target->bind(GL_PIXEL_PACK_BUFFER);
     glPixelStorei(GL_PACK_ALIGNMENT, align);
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err) THROW_EXCEPTION_ARGS(GLException, "Copy to PBO (prior buffer read) yielded error 0x%X", err);
 #endif
     size_t attoffset = 0;
@@ -352,8 +394,8 @@ size_t FBO::copyToPBO(PBO *target, GLenum dataType, int channels, size_t pboOffs
     for (int i=0; i < (int)attachments_.size(); i++) {
         if (attachments_.count(GL_COLOR_ATTACHMENT0+i) > 0) {
             glReadBuffer(GL_COLOR_ATTACHMENT0+i);
-            glReadPixels(0, 0 , width_, height_, format, dataType, (GLvoid *)(attoffset + pboOffset));
-            attoffset += width_ * height_ * channels * mult;
+            glReadPixels(0, 0 , width, height, format, dataType, (GLvoid *)(attoffset + pboOffset));
+            attoffset += width * height * channels * mult;
         }
     }
 #ifdef DEBUG
@@ -521,12 +563,10 @@ int FBO::numDrawBuffers() const {
 void FBO::setWriteMask() const {
     assert(bound_);
     int db = numDrawBuffers();
-#ifdef DEBUG
-    glGetError();
-#endif
+    CLEAR_GFXERR_DEBUG
     glDrawBuffers(db, WRITE_BUFFERS);
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) THROW_EXCEPTION_ARGS(GLException,"Illegal write mask set (err=0x%X, db=%d)",err,db);
 #endif
 }
@@ -647,6 +687,26 @@ void FBO::addTexture(GLenum attachment, const Texture2D &texture) {
 }
 
 
+/**
+ * @brief Convenience function to add an internal backing texture to the FBO
+ *
+ * @param attachment Attachment point for the new texture
+ * @param pixType Pixel format for the new texture
+ * @param channels Number of channels for the new texture
+ * @param target Optional texture bind target, defaults to \c GL_TEXTURE_2D
+ *
+ * @post %FBO will be bound
+ *
+ * This is a simple convenience function that adds another internal texture to the FBO. Internal
+ * textures are managed by the FBO itself and are bound to its lifecycle. It is recommended to
+ * make use of the other addTexture() functions, in particular if you want to use texture pooling.
+ */
+void FBO::addTexture(GLenum attachment, int channels, Texture::pixtype pixType, GLenum target) {
+    assert(channels > 0 && channels <= 4);
+    GLuint tex = setupInternalTexture(width_, height_, channels, pixType, target);
+    addTexture(attachment, tex, target);
+}
+
 
 /**
  * @brief Attach a texture to the %FBO
@@ -661,10 +721,10 @@ void FBO::addTexture(GLenum attachment, const Texture2D &texture) {
  *
  * @see setWriteMask()
  */
-void FBO::addTexture(GLenum attachment,GLuint texture, GLenum target) {
+void FBO::addTexture(GLenum attachment, GLuint texture, GLenum target) {
     if (texture == 0) THROW_EXCEPTION_ARGS(GLException, "Invalid texture supplied to FBO");
     if (handle_ == 0) {
-        glGenFramebuffers(1,&handle_);
+        glGenFramebuffers(1, &handle_);
         if (handle_ == 0) THROW_EXCEPTION_ARGS(GLException,"Cannot generate framebuffer");
     }
     if (!bound_) {
@@ -676,7 +736,7 @@ void FBO::addTexture(GLenum attachment,GLuint texture, GLenum target) {
         glBindFramebuffer(GL_FRAMEBUFFER, handle_);
         bound_ = true;
     }
-    glFramebufferTexture2D(GL_FRAMEBUFFER,attachment,target,texture,0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, target, texture, 0);
     GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
         THROW_EXCEPTION_ARGS(GLException, "Framebuffer incomplete");
@@ -733,40 +793,48 @@ void FBO::addRenderbuffer(GLenum attachment, GLuint handle) {
  * the %FBO is rendering into. It simply creates its own internal texture, which can be queried
  * externally.
  *
- * @post #internalTexture_ has a valid GL texture handle and is set to the same value as the
+ * @post #internalTextures_ has a valid GL texture handle and is set to the same value as the
  *       return value
  */
-GLuint FBO::setupInternalTexture(int width,int height,int channels, Texture::pixtype type, GLenum target) {
+GLuint FBO::setupInternalTexture(int width, int height, int channels, Texture::pixtype type, GLenum target) {
     assert((channels > 0) && (channels <= 4));
 #ifdef USE_GLES
     assert(channels != 3);
 #endif
-    glGenTextures(1, &internalTexture_);
-    if (internalTexture_ == 0) THROW_EXCEPTION_ARGS(GLException,"Cannot create internal texture handle for FBO");
-    internalChannels_ = channels;
-    internalType_ = type;
-    internalTarget_ = target;
+#ifdef DEBUG
+    glGetError();
+#endif
+    assert(numInternalTextures_ < MAX_INTNL_TEXTURES);
+    int idx = numInternalTextures_;
+    glGenTextures(1, &internalTextures_[idx]);
+    if (internalTextures_[idx] == 0) THROW_EXCEPTION_ARGS(GLException,"Cannot create internal texture handle for FBO");
+    numInternalTextures_++;
+    internalChannels_[idx] = channels;
+    internalTypes_[idx] = type;
+    internalTargets_[idx] = target;
     // ------------------------------------------------------
     // Create empty texture, we default it to edge clamping
     // and nearest neighbor interpolation, though that does
     // not matter for the FBO
     // ------------------------------------------------------
-    auto ti = Texture::textureInfo(internalType_, internalChannels_);
-    glBindTexture(target,internalTexture_);
+    auto ti = Texture::textureInfo(internalTypes_[idx], internalChannels_[idx]);
+    glBindTexture(target, internalTextures_[idx]);
     glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexImage2D(target,0,ti.intFormat,width,height,0,ti.format,ti.dataType,nullptr);
+    glTexImage2D(target, 0, ti.intFormat, width, height, 0, ti.format, ti.dataType, nullptr);
 #ifdef DEBUG
+    assert(glGetError() == GL_NO_ERROR);
     textureMemory_.fetch_add(width * height * channels * Texture::channelSize(type));
 #endif
-    return internalTexture_;
+    return internalTextures_[idx];
 }
 
 template void FBO::writeToMemory<float,GL_FLOAT>(float *memory,int channels, GLsizei bufsize, bool integral);
 template void FBO::writeToMemory<uint8_t,GL_UNSIGNED_BYTE>(uint8_t *memory,int channels, GLsizei bufsize, bool integral);
 template void FBO::writeToMemory<uint16_t,GL_UNSIGNED_SHORT>(uint16_t *memory,int channels, GLsizei bufsize, bool integral);
+template void FBO::writeToMemory<uint32_t,GL_UNSIGNED_INT>(uint32_t *memory,int channels, GLsizei bufsize, bool integral);
 
 } // opengl namespace
 } // fyusion namespace

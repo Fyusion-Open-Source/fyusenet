@@ -8,4 +8,6 @@ if (BUILD_TARGET STREQUAL "Web")
   add_subdirectory(web)
 endif()
 
+add_subdirectory(helpers)
+
 # vim: set expandtab ts=2 sw=2:

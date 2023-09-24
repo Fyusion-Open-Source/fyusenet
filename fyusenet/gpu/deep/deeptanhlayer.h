@@ -27,10 +27,7 @@
 #include "../scalelayerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 
 /**
@@ -54,13 +51,10 @@ class DeepTanhLayer : public DeepSigmoidLayer {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupShaders() override;
+    void setupShaders() override;
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 
 // vim: set expandtab ts=4 sw=4:

@@ -20,10 +20,8 @@
 #include "../../common/logging.h"
 #include "deeptiler.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -35,7 +33,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepSigmoidLayer::DeepSigmoidLayer(const GPULayerBuilder & builder, int layerNumber) :
       DeepFunctionLayer(builder, layerNumber) {
@@ -88,7 +86,7 @@ void DeepSigmoidLayer::afterRender() {
  */
 void DeepSigmoidLayer::setupShaders() {
     char preproc[1024] = {0};
-    handlePreprocFlags(flags_, preproc, sizeof(preproc)-1);
+    preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-1);
     shader_ = compileShaderPair("shaders/deep/deepdefault.vert", "shaders/deep/deepsigmoid.frag", preproc, typeid(this));
     try {
         shader_->bindAttributeLocation("attributes0", 0);
@@ -102,9 +100,6 @@ void DeepSigmoidLayer::setupShaders() {
 }
 
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

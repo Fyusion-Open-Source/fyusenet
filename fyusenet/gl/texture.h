@@ -24,11 +24,11 @@
 //------------------------------------------ Constants ---------------------------------------------
 
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
-class BasicTexturePool;
+class ScopedTexturePool;
 
 /**
  * @brief Base class for OpenGL textures
@@ -36,7 +36,7 @@ class BasicTexturePool;
  * @note We are not tracking GL contexts in textures because we assume context sharing for those.
  */
 class Texture {
-    friend class BasicTexturePool;
+    friend class ScopedTexturePool;
  public:
 
     /**
@@ -65,6 +65,10 @@ class Texture {
         UINT16,                     //!< Unsigned 16-bit (normalized)
         UINT16_INTEGRAL,            //!< Unsigned 16-bit (integer)
         INT16_INTEGRAL,             //!< Signed 16-bit (integer)
+        UINT32,                     //!< Unsigned 32-bit (normalized)
+        INT32,                      //!< Signed 32-bit (normalized)
+        UINT32_INTEGRAL,            //!< Unsigned 32-bit (integer)
+        INT32_INTEGRAL,             //!< Signed 32-bit (integer)
         FLOAT16,                    //!< Half-precision floating-point (16-bit)
         FLOAT32                     //!< Single-precision floating-point (32-bit)
     };
@@ -103,7 +107,7 @@ class Texture {
     /**
      * @brief Constructor (idle)
      */
-    Texture() {}
+    Texture() = default;
 
     /**
      * @brief Constructor
@@ -113,7 +117,7 @@ class Texture {
      * @param type Data type for the texture
      *
      */
-    Texture(GLenum tgt, uint8_t channels=0, pixtype type = INVALID) :
+    explicit Texture(GLenum tgt, uint8_t channels=0, pixtype type = INVALID) :
           target_(tgt), channels_(channels), dataType_(type) {}
 
     /**
@@ -121,8 +125,8 @@ class Texture {
      *
      * See the derived classes destructors for action.
      */
-    virtual ~Texture() {
-    }
+    virtual ~Texture() = default;
+
 
     // ------------------------------------------------------------------------
     // Overloaded operators
@@ -132,8 +136,8 @@ class Texture {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    bool isIntegral() const;
-    bool isFloat() const;
+    [[nodiscard]] bool isIntegral() const;
+    [[nodiscard]] bool isFloat() const;
     void setTarget(GLenum target);
 
     static texinfo textureInfo(pixtype type, int channels);
@@ -154,7 +158,7 @@ class Texture {
      * @retval true if texture is empty
      * @retval false otherwise
      */
-    bool empty() const {
+    [[nodiscard]] bool empty() const {
         return (getHandle() == 0);
     }
 
@@ -163,7 +167,7 @@ class Texture {
      *
      * Also see implementation in derived classes
      */
-    void reset() {
+    virtual void reset() {
         handle_.reset();
     }
 
@@ -172,7 +176,7 @@ class Texture {
      *
      * @return Target for this type of texture (e.g. \c GL_TEXTURE_2D for 2D textures)
      */
-    GLenum target() const {
+    [[nodiscard]] GLenum target() const {
         return target_;
     }
 
@@ -182,7 +186,7 @@ class Texture {
      *
      * @return Texture data type
      */
-    pixtype type() const {
+    [[nodiscard]] pixtype type() const {
         return dataType_;
     }
 
@@ -191,7 +195,7 @@ class Texture {
      *
      * @return Number of channels
      */
-    uint8_t channels() const {
+    [[nodiscard]] uint8_t channels() const {
         return channels_;
     }
 
@@ -202,7 +206,7 @@ class Texture {
      * @retval true
      * @retval false
      */
-    bool unique() const {
+    [[nodiscard]] bool unique() const {
         if (fromPool_) return (handle_.use_count() == 2);
         else return handle_.unique();
     }
@@ -212,7 +216,7 @@ class Texture {
      *
      * @return Number of times the underlying handle is referenced
      */
-    int refcount() const {
+    [[nodiscard]] int refcount() const {
         return handle_.use_count();
     }
 
@@ -226,7 +230,7 @@ class Texture {
      *
      * @warning This function is not thread-safe (yet)
      */
-    GLsync syncID() const {
+    [[nodiscard]] GLsync syncID() const {
         return syncID_;
     }
 
@@ -246,7 +250,7 @@ class Texture {
      *
      * @warning This function is not thread-safe (yet)
      */
-    bool wantsFence() const {
+    [[nodiscard]] bool wantsFence() const {
         return wantsFence_;
     }
 
@@ -304,7 +308,7 @@ class Texture {
 
 
     /**
-     * @brief Deletection function for owned handles
+     * @brief Deletion function for owned handles
      *
      * @param handlePtr Pointer to handle
      *
@@ -318,11 +322,11 @@ class Texture {
 
 
     /**
-     * @brief Deletection function for owned handles
+     * @brief Deletion function for external handles
      *
      * @param handlePtr Pointer to handle
      *
-     * This only dedeallocates the memory occupied by the handle, the referenced texture will not
+     * This only deallocates the memory occupied by the handle, the referenced texture will not
      * be deleted.
      */
     static void deleteExternalHandle(GLuint * handlePtr) {
@@ -335,7 +339,7 @@ class Texture {
     std::shared_ptr<GLuint> handle_;                      //!< Shared pointer to raw GL handle
     bool handleOwned_ = true;                             //!< Indicator if texture handle is owned by this class or just externally tracked
     mutable bool paramPending_ = false;                   //!< Indicator that texture parameters have changed in the class but not (yet) in the GL object
-    BasicTexturePool * fromPool_ = nullptr;               //!< Pointer to texture pool if this is a pooled texture
+    ScopedTexturePool * fromPool_ = nullptr;              //!< Pointer to texture pool if this is a pooled texture
     GLenum target_ = 0;                                   //!< Texture target for this texture (e.g. \c GL_TEXTURE_2D )
     uint8_t channels_ = 0;                                //!< Number of channels per pixel
     pixtype dataType_ = INVALID;                          //!< Data type for texture
@@ -355,9 +359,9 @@ class Texture2D : public Texture {
     // Constructors / Destructor
     // ------------------------------------------------------------------------
     Texture2D();
-    Texture2D(int width, int height, pixtype type, int channels, BasicTexturePool *pool, bool lock=true);
+    Texture2D(int width, int height, pixtype type, int channels, ScopedTexturePool *pool, uint32_t scope, bool lock=true);
     Texture2D(int width, int height, pixtype type, int channels, bool clear=false);
-    virtual ~Texture2D();
+    ~Texture2D() override;
     // ------------------------------------------------------------------------
     // Overloaded operators
     // ------------------------------------------------------------------------
@@ -374,7 +378,7 @@ class Texture2D : public Texture {
     void upload(const void *data, pixtype cpuDataFmt);
     void upload(const void *data, GLint internal, GLenum format, GLenum type);
     void clear();
-    void reset();
+    void reset() override;
 
     /**
      * @brief Get texture width
@@ -419,6 +423,7 @@ class Texture2D : public Texture {
 };
 
 
+#if !defined(FYUSENET_USE_WEBGL) && !defined(FYUSENET_USE_EGL)
 /**
  * @brief Simple wrapper for 3D textures
  */
@@ -429,7 +434,7 @@ class Texture3D : public Texture {
     // ------------------------------------------------------------------------
     Texture3D();
     Texture3D(int width, int height, int depth, pixtype type, int channels, bool clear=false);
-    virtual ~Texture3D();
+    ~Texture3D() override;
 
     // ------------------------------------------------------------------------
     // Overloaded operators
@@ -447,7 +452,7 @@ class Texture3D : public Texture {
     void upload(const void *data, pixtype cpuDataFmt);
     void upload(const void *data, GLint internal, GLenum format, GLenum type);
     void clear();
-    void reset();
+    void reset() override;
 
     /**
      * @brief Get texture width
@@ -500,7 +505,7 @@ class Texture3D : public Texture {
      */
     intp interpolation_[2] = {NEAREST, NEAREST};
 };
-
+#endif
 
 /**
  * @brief Simple wrapper for 2D textures with pre-existing handle
@@ -512,7 +517,7 @@ class Texture2DRef : public Texture2D {
     Texture2DRef(GLuint handle, int width, int height, pixtype type, int channels, GLenum target = GL_TEXTURE_2D);
 };
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 // vim: set expandtab ts=4 sw=4:

@@ -20,9 +20,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Weight array for KxK convolution using 4-elements per pixel
@@ -76,22 +74,22 @@ class ConvWeightArrayKxKxNxM : public UniformWeightArray {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     ConvWeightArrayKxKxNxM(int kernel, int inputChannels, int outputChannels, int maxRenderTargets);
-    virtual ~ConvWeightArrayKxKxNxM();
+     ~ConvWeightArrayKxKxNxM() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual const float * getPackageWeights(int inputPass,int outputPass,int xIndex,int yIndex) const override;
-    virtual const float * getPackageBias(int outputPass) const override;
-    virtual const float * getPackageBNScale(int outputPass) const override;
-    virtual void extractBiasData(const float *input, size_t offset) override;
-    virtual void extractWeightData(const float *input, size_t offset) override;
-    virtual void extractBatchnormData(const float *input, size_t offset) override;
-    virtual int numInputRenderPasses() const override;
-    virtual int numOutputRenderPasses() const override;
-    virtual int numRenderTargets(int outputPass) const override;
-    virtual int outputTextureOffset(int outputPass) const override;
-    virtual int getPackageSize(int inputPass, int outputPass, int xindex, int yindex) const override;
+    [[nodiscard]] const float * getPackageWeights(int inputPass,int outputPass,int xIndex,int yIndex) const override;
+    [[nodiscard]] const float * getPackageBias(int outputPass) const override;
+    [[nodiscard]] const float * getPackageBNScale(int outputPass) const override;
+    void extractBiasData(const float *input) override;
+    void extractWeightData(const float *input) override;
+    void extractBatchnormData(const float *input) override;
+    [[nodiscard]] int numInputRenderPasses() const override;
+    [[nodiscard]] int numOutputRenderPasses() const override;
+    [[nodiscard]] int numRenderTargets(int outputPass) const override;
+    [[nodiscard]] int outputTextureOffset(int outputPass) const override;
+    [[nodiscard]] int getPackageSize(int inputPass, int outputPass, int xindex, int yindex) const override;
  private:
 
     // ------------------------------------------------------------------------
@@ -112,8 +110,6 @@ class ConvWeightArrayKxKxNxM : public UniformWeightArray {
     unsigned int *packSizes_ = nullptr;                 //!< Package size (in elemnets) for each package in the #weightData_ block
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

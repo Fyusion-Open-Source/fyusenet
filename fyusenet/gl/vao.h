@@ -126,6 +126,8 @@ class VAO {
         switch (type) {
             case GL_INT:
             case GL_UNSIGNED_INT:
+            case GL_UNSIGNED_SHORT:
+            case GL_SHORT:
             case GL_UNSIGNED_BYTE:
             case GL_BYTE:
                 THROW_EXCEPTION_ARGS(GLException,"Trying to provide integer data to floating-point attribute buffer");
@@ -153,21 +155,31 @@ class VAO {
      */
     void setVertexAttributeBuffer(GLuint index,GLint components,GLenum type,GLsizei stride,unsigned int offset) {
 #ifdef DEBUG
-      switch (type) {
-          case GL_FLOAT:
-          case GL_HALF_FLOAT:
-              THROW_EXCEPTION_ARGS(GLException,"Trying to provide floating-point data to integer attribute buffer");
-          default:
-              break;
-      }
+        switch (type) {
+            case GL_FLOAT:
+            case GL_HALF_FLOAT:
+                THROW_EXCEPTION_ARGS(GLException,"Trying to provide floating-point data to integer attribute buffer");
+            default:
+                break;
+        }
 #endif
-      glGetError();
-      glVertexAttribIPointer(index,components,type,stride,(const char *)0+offset);
+        glGetError();
+        glVertexAttribIPointer(index,components,type,stride,(const char *)0+offset);
 #ifdef DEBUG
-      GLenum err = glGetError();
-      if (err != GL_NO_ERROR) THROW_EXCEPTION_ARGS(GLException,"Set vertex attribute pointer for index %d failed (glerr=0x%X)",index,err);
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) THROW_EXCEPTION_ARGS(GLException,"Set vertex attribute pointer for index %d failed (glerr=0x%X)",index,err);
 #endif
-  }
+    }
+
+    /**
+     * @brief Check if VAO is valid
+     *
+     * @retval true VAO is valid
+     * @retval false VAO is invalid
+     */
+    bool isValid() const {
+        return (glIsVertexArray(handle_) == GL_TRUE);
+    }
 
  private:
     GLuint handle_ = 0;                     //!< Raw GL handle for the %VAO

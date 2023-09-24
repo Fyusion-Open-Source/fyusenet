@@ -17,8 +17,8 @@
 
 //-------------------------------------- Global Variables ------------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //-------------------------------------- Local Definitions -----------------------------------------
 
 
@@ -34,7 +34,7 @@ NeuralNetwork::NeuralNetwork(const GfxContextLink& ctx) {
 }
 
 /**
- * @brief Destructor (idle)
+ * @brief Destructor
  */
 NeuralNetwork::~NeuralNetwork() {
     assert(engine_ == nullptr);
@@ -135,7 +135,22 @@ NeuralNetwork::execstate NeuralNetwork::finish() {
 
 
 /**
+ * @brief Execute neural network without any state token
+ *
+ * @return Combination of engine execution state and sequence ID that was assigned to this run
+ *
+ * This is merely a convenience function that invokes forward(StateToken *token) with a \c nullptr
+ * as token.
+ */
+NeuralNetwork::execstate NeuralNetwork::forward() {
+    return forward(nullptr);
+}
+
+
+/**
  * @brief Execute neural network
+ *
+ * @param token Optional pointer to a StateToken that tracks and controls inference state
  *
  * @return Combination of engine execution state and sequence ID that was assigned to this run
  *
@@ -170,14 +185,14 @@ NeuralNetwork::execstate NeuralNetwork::finish() {
  *
  * @see finish
  */
-NeuralNetwork::execstate NeuralNetwork::forward() {
+NeuralNetwork::execstate NeuralNetwork::forward(StateToken *token) {
     assert(setup_);
 #ifndef FYUSENET_MULTITHREADING
     assertContext();
 #endif
     execstate state;
     if (engine_) {
-        state.status = engine_->forwardLayers();
+        state.status = engine_->forwardLayers(token);
         state.sequenceNo = engine_->lastSequenceNo();
     } else {
         state.status = Engine::EXEC_STOPPED;
@@ -235,7 +250,7 @@ void NeuralNetwork::asynchronous(const AsyncAdapter & adapter) {
  *
  * @see CompiledLayers, Engine::asyncSetup, buildLayers, connectLayers, initializeWeights
  */
-CompiledLayers NeuralNetwork::glSetup() {
+CompiledLayers NeuralNetwork::gpuSetup() {
     assert(engine_);
     CompiledLayers layers = buildLayers();
     // TODO (mw) should we allow for an already existing buffer manager ?
@@ -270,12 +285,25 @@ std::shared_ptr<LayerFactory> NeuralNetwork::getLayerFactory(compute_device dev)
     };
 }
 
+#ifdef FYUSENET_GL_BACKEND
+/**
+ * @brief Get OpenGL output FBO from specified layer
+ *
+ * @param layer Pointer to layer to retrieve FBO from
+ * @param index FBO index within the output FBOs (defaults to 0)
+ *
+ * @return Pointer to FBO object at specified index/layer, may be a \c nullptr
+ *
+ * @warning This function is only available in OpenGL builds
+ */
+fyusion::opengl::FBO * NeuralNetwork::getFBO(const gpu::GPULayerBase * layer, int index) {
+    if (!layer) THROW_EXCEPTION_ARGS(FynException, "Cannot work with null layer");
+    return layer->getFBO(index);
+}
+#endif
 
 
+} // fyusion::fyusenet namespace
 
-
-
-} // fyusenet namespace
-} // fyusion namespace
 // vim: set expandtab ts=4 sw=4:
 

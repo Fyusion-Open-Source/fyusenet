@@ -86,8 +86,16 @@ void DeepTransConvLayer3x3::renderPass(int pass) {
     }
 }
 
+
 /**
- * @copydoc DeepConvLayerBase::compileConvolutionShaders
+ * @brief Compile convolution-specific shaders
+ *
+ * @param preproc Existing preprocessor macros for the shader
+ *
+ * This function compiles and links the convolution-specific shader(s) and stores the shader
+ * programs in the appropriate locations at #shader_ and #noBiasShader_ . In addition, the
+ * shader state objects at #shaderState_ and #noBiasShaderState_ are initialized with the
+ * implementation-specific values.
  */
 void DeepTransConvLayer3x3::compileConvolutionShaders(const char *preproc) {
     char finalparams[2048];

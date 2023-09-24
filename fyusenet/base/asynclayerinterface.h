@@ -19,8 +19,8 @@
 
 #include "layerbase.h"
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 /**
@@ -43,7 +43,7 @@ class AsyncLayer {
          UPLOAD_DONE,               //!< Upload has been fully pushed to the GL pipeline
          DOWNLOAD_COMMENCED,        //!< Download has been started and it is safe to swap the buffer
          DOWNLOAD_DONE,             //!< Download is complete and CPU buffer contains correct data
-         ERROR                      //!< Something went wrong
+         ASYNC_ERROR                //!< Something went wrong
      };
 
     /**
@@ -52,7 +52,7 @@ class AsyncLayer {
      * @retval true Layer shall run asynchronously
      * @retval false Layer shall run synchronously
      */
-    virtual bool isAsync() const = 0;
+    [[nodiscard]] virtual bool isAsync() const = 0;
 
     /**
      * @brief Add asynchronous dependency on the output of this layer
@@ -82,7 +82,7 @@ class AsyncLayer {
      *
      * @see addAsyncDependency();
      */
-    virtual int lastAsyncDependency() const {
+    [[nodiscard]] virtual int lastAsyncDependency() const {
         return lastAsyncDependency_;
     }
 
@@ -93,20 +93,20 @@ class AsyncLayer {
      *
      * @see addAsyncDependency();
      */
-    virtual int firstAsyncDependency() const {
+    [[nodiscard]] virtual int firstAsyncDependency() const {
         return firstAsyncDependency_;
     }
 
  protected:
+
     std::vector<LayerBase *> dependencies_;      //!< List of (asynchronous) dependency layers, only used in async layers
-    std::vector<int> dependencyOffsets_;           //!< List of port numbers for asynchronous dependencies, only used in async layers
+    std::vector<int> dependencyOffsets_;         //!< List of port numbers for asynchronous dependencies, only used in async layers
     int lastAsyncDependency_ = -1;               //!< Highest layer number for subsequent layers that have an asynchronous dependency on this layer's output (-1 if none)
     int firstAsyncDependency_ = -1;              //!< Lowest layer number for subsequent layers that have an asynchronous dependency on this layer's output (-1 if none)
-
 };
 
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
+
 // vim: set expandtab ts=4 sw=4:
 

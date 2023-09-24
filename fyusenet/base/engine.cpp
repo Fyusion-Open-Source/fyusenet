@@ -15,26 +15,20 @@
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "engine.h"
-#include "../base/layerflags.h"
 #include "../base/neuralnetwork.h"
 #include "../common/performance.h"
-#include "../cpu/cpulayerbase.h"
-#include "../cpu/cpubuffer.h"
 #include "../gpu/uploadlayer.h"
 #include "../gpu/downloadlayer.h"
 #include "../gpu/deep/deepdownloadlayer.h"
-#ifdef FYUSENET_MULTITHREADING
-#include "../gl/asyncpool.h"
-#endif
-#include "../gpu/uploadlayer.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
 
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //-------------------------------------- Local Definitions -----------------------------------------
 
+// Maximum type to wait for the fence sync in the GL pipeline (in ns)
 #define SYNC_EXPIRY 5000000000
 
 
@@ -46,7 +40,7 @@ namespace fyusenet {
  * @brief Constructor
  *
  * @param context Link to GL context that this engine instance should work under if not asynchronous
- * @param async Flag that controls whether or not the engine is supposed to run asychronously
+ * @param async Flag that controls whether the engine is supposed to run asynchronously
  *
  * Construct an Engine object around the supplied \p context. In case of a multi-threaded build,
  * and with the \p async parameter set to true, an engine thread is created with a GL context that
@@ -67,30 +61,29 @@ Engine::Engine(const GfxContextLink& context, bool async) : GfxContextTracker() 
 
 
 /**
- * @brief Destructor
+ * @brief Run network setup
  *
- * Pretty much idle, having a nice day at the beach.
+ * @param net Pointer to network that should be brought up
+ *
+ * This function runs the glSetup() method of the supplied network and registers the layers of
+ * that net with the engine instance.
  */
-Engine::~Engine() {
-}
-
-
 void Engine::setup(NeuralNetwork *net) {
 #ifndef FYUSENET_MULTITHREADING
     if (net) {
-        setLayers(net->glSetup());
+        setLayers(net->gpuSetup());
         setup_ = true;
     }
 #else
     if (async_ && net) {
         net->setContext(exec_.context());
-        auto init = [this, net]() { setLayers(net->glSetup()); };
+        auto init = [this, net]() { setLayers(net->gpuSetup()); };
         exec_->waitTask(init);
         setup_ = true;
         exec_->setTask(std::bind(&Engine::looper,this,exec_.context()));
     } else {
         if (net) {
-            setLayers(net->glSetup());
+            setLayers(net->gpuSetup());
             setup_ = true;
         }
     }
@@ -200,7 +193,7 @@ void Engine::disableIntermediateOutput() {
  *
  * This enables taking timings for individual layer execution. Please note that these timings
  * usually <b>do not reflect</b> what the real timings on the GPU are, since the GPU execution
- * happens in its own command queue and usually is quite decoupled from the CPU issueing those
+ * happens in its own command queue and usually is quite decoupled from the CPU issuing those
  * commands.
  *
  * @warning This function is not thread-safe, do not call it in parallel to forwardLayers()
@@ -281,13 +274,16 @@ void Engine::finish() {
 /**
  * @brief Execute all registered layers in ascending order
  *
+ * @param token Optional StateToken instance which keeps track of information in stateful networks,
+ *              <i>the ownership is transferred to the engine</i>
+ *
  * @return State of the engine on return of this function, see detailed description for more info
  *
  * @throws FynException in case of errors during the execution
  *
- * This function executes all network layers in order of their layer numbers. In a multithreaded
+ * This function executes all network layers in order of their layer numbers. In a multi-threaded
  * build configuration, this function also takes care of asynchronous operations by first checking
- * if there are any pending async operations and continueing these before executing the next batch
+ * if there are any pending async operations and continuing these before executing the next batch
  * of layer runs. On exit, this function returns the last state of the engine, which can take the
  * following values:
  *   - \c EXEC_DONE , the execution of a single run through all layers is complete (pending GL operations)
@@ -305,7 +301,7 @@ void Engine::finish() {
  *
  * @see execute(), looper(), finish()
  */
-Engine::execstate Engine::forwardLayers() {
+Engine::execstate Engine::forwardLayers(StateToken * token) {
 #ifdef FYUSENET_MULTITHREADING
     if (async_) {
         std::lock_guard<std::mutex> guard(runGuard_);
@@ -328,7 +324,7 @@ Engine::execstate Engine::forwardLayers() {
         return execstate::EXEC_DEFERRED;
     }
 #endif
-    ExecutionState estate(sequenceNo_++, layers_.begin());
+    ExecutionState estate(sequenceNo_++, layers_.begin(), token);
     state status = execute(estate, context_);
     glDisable(GL_BLEND);
     return (status == state::DONE) ? execstate::EXEC_DONE : execstate::EXEC_ERROR;
@@ -359,7 +355,7 @@ Engine::execstate Engine::forwardLayers() {
  *
  * There are currently two types of asynchronous layers: upload and download layers. The handling
  * of asynchronous uploads works by moving the upload itself to a thread while memorizing the
- * execution context  before exiting with the \c Engine::state::UPLOADING state. Once the upload thread
+ * execution context before exiting with the \c Engine::state::UPLOADING state. Once the upload thread
  * is finished, it will push the execution state to the #readyStates_ queue and upon the next call
  * to forward() or finish(), the execution state will be taken from the queue and the execution
  * will be continued from there, before moving on to the next inference run.
@@ -373,10 +369,10 @@ Engine::execstate Engine::forwardLayers() {
  * state to the #readyStates_ list for deferred execution.
  *
  * On exit, this function returns the last state of the engine, which can take the following values:
- *   - \c DONE , the execution of a single run through all layers is complete (pending GL operations)
- *   - \c UPLOADING , the execution was deferred due to an asynchronous upload operation
- *   - \c DOWNLOADING, the execution was deferred due to an asynchronous download operation
- *   - \c ERROR, there was an error during execution
+ *   - \c DONE : the execution of a single run through all layers is complete (pending GL operations)
+ *   - \c UPLOADING : the execution was deferred due to an asynchronous upload operation
+ *   - \c DOWNLOADING : the execution was deferred due to an asynchronous download operation
+ *   - \c NET_ERROR : there was an error during execution
  *
  * @see looper(), forwardLayers(), finish()
  *
@@ -387,6 +383,7 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
     using namespace gpu;
     tstamp start, end;
     std::string fname;
+    StateToken * stoken = state.state_;
     //-----------------------------------------------------------
     // Traverse through layers in ascending order of layer number
     //-----------------------------------------------------------
@@ -395,10 +392,12 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
         LayerBase * layer = state.current.second;
         assert(layer);
         if (layer) {
-            //-----------------------------------------------------------
+            bool masked = stoken && stoken->maskLayers.find(layer->getNumber()) != stoken->maskLayers.end();
+            //---------------------------------------------------------------
             // If this layer is dependent on a currently running async
-            // download or upload, mark down the state and bail out here
-            //-----------------------------------------------------------
+            // download or upload, mark down the state and bail out here,
+            // even if the layer is masked. Otherwise, we break the sequence
+            //---------------------------------------------------------------
 #ifdef FYUSENET_MULTITHREADING
             // we assume that we don't have direct upload -> download connections
             asyncStateLock_.lock();
@@ -408,7 +407,7 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
                         if (minimumWaitingDependency_.find(state.sequenceNo) != minimumWaitingDependency_.end()) {
                             minimumWaitingDependency_[state.sequenceNo] = std::min(minimumWaitingDependency_[state.sequenceNo], layer->getNumber());
                         } else minimumWaitingDependency_[state.sequenceNo] = layer->getNumber();
-                        asyncDownloadWaiters_.push_back(WaitingState<AsyncLayer>(layer->getNumber(), dep.provider, state.sequenceNo, state.clone()));
+                        asyncDownloadWaiters_.emplace_back(layer->getNumber(), (AsyncLayer *)dep.provider, state.sequenceNo, state.clone());
                         asyncStateLock_.unlock();
                         return state::DOWNLOADING;
                     }
@@ -418,7 +417,7 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
                         if (minimumWaitingDependency_.find(state.sequenceNo) != minimumWaitingDependency_.end()) {
                             minimumWaitingDependency_[state.sequenceNo] = std::min(minimumWaitingDependency_[state.sequenceNo], layer->getNumber());
                         } else minimumWaitingDependency_[state.sequenceNo] = layer->getNumber();
-                        asyncUploadWaiters_.push_back(WaitingState<gpu::UploadLayer>(layer->getNumber(), dep.provider, state.sequenceNo, state.clone()));
+                        asyncUploadWaiters_.emplace_back(layer->getNumber(), (UploadLayer *)dep.provider, state.sequenceNo, state.clone());
                         asyncStateLock_.unlock();
                         return state::UPLOADING;
                     }
@@ -431,17 +430,17 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
             // intermediate results...
             //-----------------------------------------------------------
             // TODO (mw) hacky, use some filesystem abstraction here
-            if (writeResults_) {
-                if (outputDir_.size() > 0) fname = outputDir_ + std::string("/") + layer->getName() + std::string("_") + std::to_string(state.sequenceNo)+ std::string(".bin");
+            if ((writeResults_) && (!masked)) {
+                if (!outputDir_.empty()) fname = outputDir_ + std::string("/") + layer->getName() + std::string("_") + std::to_string(state.sequenceNo)+ std::string(".bin");
                 else fname = layer->getName() + std::string("_") + std::to_string(state.sequenceNo) + std::string(".bin");
             }
             //-----------------------------------------------------------
             // Handle CPU layers...
             //-----------------------------------------------------------
-            if (layer->getDevice() == compute_device::DEV_CPU) {
-                cpu::CPULayerBase * cpulay = dynamic_cast<cpu::CPULayerBase *>(layer);
+            if ((layer->getDevice() == compute_device::DEV_CPU) && (!masked)) {
+                auto * cpulay = dynamic_cast<cpu::CPULayerBase *>(layer);
                 if (timings_) start = fy_get_stamp();
-                cpulay->forward(state.sequenceNo);
+                cpulay->forward(state.sequenceNo, stoken);
                 if (timings_) {
                     end = fy_get_stamp();
                     if (runs_ == 0) timingData_[idx] = 0;
@@ -449,15 +448,15 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
                 }
                 if (writeResults_) {
                     // NOTE (mw) we assume it is floating point data every time
-                    cpulay->getOutputBuffer()->write<float>(fname.c_str());
+                    cpulay->getCPUOutputBuffer()->write<float>(fname.c_str());
                 }
             } else {
                 //-----------------------------------------------------------
                 // Handle upload layers..
                 //-----------------------------------------------------------
-                if (dynamic_cast<UploadLayer *>(layer)) {
-                    UploadLayer * ul = dynamic_cast<UploadLayer *>(layer);
-                    if ((ul)->getInputBuffer() == nullptr) THROW_EXCEPTION_ARGS(FynException,"No input buffer in upload layer %s", ul->getName().c_str());
+                if (dynamic_cast<UploadLayer *>(layer) && !masked) {
+                    auto * ul = dynamic_cast<UploadLayer *>(layer);
+                    if ((ul)->getCPUInputBuffer() == nullptr) THROW_EXCEPTION_ARGS(FynException, "No input buffer in upload layer %s", ul->getName().c_str());
                     if (ul->isAsync()) {
 #ifdef FYUSENET_MULTITHREADING
                         //-----------------------------------------------------------
@@ -465,14 +464,14 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
                         //  1. an early stage dep which is the _first_ layer that expects
                         //     an input from the UL
                         //  2. a deferred dep which is the _last_ layer that expects an
-                        //     input from the the UL
+                        //     input from the UL
                         // We then invoke async processing on the layer and then
                         // continue execution. The deferred dependency is important to
                         // make sure that no texture is overwritten before it has been
                         // processed by the last dependent layer in the chain.
                         //-----------------------------------------------------------
                         upIssueLock_.lock();
-                        bool issueok = ul->asyncForward(state.sequenceNo, std::bind(&Engine::uploadCallback, this, ul, std::placeholders::_1));
+                        bool issueok = ul->asyncForward(state.sequenceNo, stoken, std::bind(&Engine::uploadCallback, this, ul, std::placeholders::_1));
                         if (issueok) {
                             // transition to asyncStateLock_
                             asyncStateLock_.lock();
@@ -499,7 +498,7 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
                             asyncUploadDependencies_.push_back(early);
                             asyncUploadDeferredDependencies_.push_back(late);
                             deferredAsyncDependencies_.insert(lastdep);
-                            numBackgroundTasks_++;           // the async forward above triggers an background upload task
+                            numBackgroundTasks_++;           // the async forward above triggers a background upload task
                         } else {
                             asyncStateLock_.lock();
                             upIssueLock_.unlock();
@@ -508,101 +507,106 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
                             // self-referential pending state to the upload waiters
                             // and let waitForUploadFence() unlock that later...
                             //-------------------------------------------------------
-                            asyncUploadWaiters_.push_back(WaitingState<gpu::UploadLayer>(layer->getNumber(), ul, state.sequenceNo, state.clone()));
+                            asyncUploadWaiters_.emplace_back(layer->getNumber(), ul, state.sequenceNo, state.clone());
                         }
                         asyncStateLock_.unlock();
 #else
                         THROW_EXCEPTION_ARGS(FynException,"No multithreading support compiled in");
 #endif
-                    } else ul->forward(state.sequenceNo);
+                    } else {
+                        ul->forward(state.sequenceNo, stoken);
+                        if (writeResults_) {
+                            (dynamic_cast<GPULayerBase *>(layer))->writeResult(fname.c_str(), false);
+                        }
+                    }
                 } else
-                    //-------------------------------------------------------
-                    // Handle download layers (shallow and deep)...
-                    //-------------------------------------------------------
-                    if (dynamic_cast<DownloadLayer *>(layer)) {
-                        DownloadLayer * dl = dynamic_cast<DownloadLayer *>(layer);
-                        if (timings_) start = fy_get_stamp();
-                        CPUBuffer * buf = dl->getOutputBuffer(0);
-                        if (!buf) THROW_EXCEPTION_ARGS(FynException,"No output buffer in download layer %s", dl->getName().c_str());
-                        if (dl->isAsync()) {
+                //-------------------------------------------------------
+                // Handle download layers (shallow and deep)...
+                //-------------------------------------------------------
+                if (dynamic_cast<DownloadLayer *>(layer) && !masked) {
+                    auto * dl = dynamic_cast<DownloadLayer *>(layer);
+                    if (timings_) start = fy_get_stamp();
+                    CPUBuffer * buf = dl->getCPUOutputBuffer(0);
+                    if (!buf) THROW_EXCEPTION_ARGS(FynException,"No output buffer in download layer %s", dl->getName().c_str());
+                    if (dl->isAsync()) {
 #ifdef FYUSENET_MULTITHREADING
-                            //-----------------------------------------------------------
-                            // For async download layers we enter the layer as a download
-                            // dependency, then invoke async processing on the layer
-                            // before we continue execution...
-                            //-----------------------------------------------------------
-                            int fd = dl->firstAsyncDependency();
-                            asyncStateLock_.lock();
-                            if (fd >= 0) {
-                                asyncDownloadDependencies_.push_back(Dependency<AsyncLayer>(fd, static_cast<AsyncLayer *>(dl), 1, state.sequenceNo));
-                                if (asyncDependencies_.find(fd) != asyncDependencies_.end()) asyncDependencies_.insert(fd);
-                            }
-                            numBackgroundTasks_++;                  // the async forward below generates a new background task
-                            asyncStateLock_.unlock();
-                            dl->asyncForward(state.sequenceNo, std::bind(&Engine::asyncDownloadDone, this, dl, std::placeholders::_1));
+                        //-----------------------------------------------------------
+                        // For async download layers we enter the layer as a download
+                        // dependency, then invoke async processing on the layer
+                        // before we continue execution...
+                        //-----------------------------------------------------------
+                        int fd = dl->firstAsyncDependency();
+                        asyncStateLock_.lock();
+                        if (fd >= 0) {
+                            asyncDownloadDependencies_.emplace_back(fd, static_cast<AsyncLayer *>(dl), 1, state.sequenceNo);
+                            if (asyncDependencies_.find(fd) != asyncDependencies_.end()) asyncDependencies_.insert(fd);
+                        }
+                        numBackgroundTasks_++;                  // the async forward below generates a new background task
+                        asyncStateLock_.unlock();
+                        dl->asyncForward(state.sequenceNo, stoken, std::bind(&Engine::asyncDownloadDone, this, dl, std::placeholders::_1));
 #else
-                            THROW_EXCEPTION_ARGS(FynException,"No multithreading support compiled in");
+                        THROW_EXCEPTION_ARGS(FynException,"No multithreading support compiled in");
 #endif
-                        } else dl->forward(state.sequenceNo);
-                        if (timings_) {
-                            end = fy_get_stamp();
-                            if (runs_ == 0) timingData_[idx] = 0;
-                            timingData_[idx] += fy_elapsed_micros(start, end);
-                        }
-                        if ((writeResults_) && (!dl->isAsync())) {
-                            // TODO (mw) also handle write-out for asynchronous layers, currently they are ignored
-                            buf->write<float>(fname.c_str());
-                        }
-                    } else
-                        if (dynamic_cast<deep::DeepDownloadLayer *>(layer)) {
-                            deep::DeepDownloadLayer * dl = dynamic_cast<deep::DeepDownloadLayer *>(layer);
-                            if (timings_) start = fy_get_stamp();
-                            CPUBuffer * buf = dl->getOutputBuffer(0);
-                            if (!buf) THROW_EXCEPTION_ARGS(FynException,"No output buffer in download layer %s", dl->getName().c_str());
-                            if (dl->isAsync()) {
+                    } else dl->forward(state.sequenceNo, stoken);
+                    if (timings_) {
+                        end = fy_get_stamp();
+                        if (runs_ == 0) timingData_[idx] = 0;
+                        timingData_[idx] += fy_elapsed_micros(start, end);
+                    }
+                    if ((writeResults_) && (!dl->isAsync())) {
+                        // TODO (mw) also handle write-out for asynchronous layers, currently they are ignored
+                        buf->write<float>(fname.c_str());
+                    }
+                } else
+                if (dynamic_cast<deep::DeepDownloadLayer *>(layer) && !masked) {
+                    auto * dl = dynamic_cast<deep::DeepDownloadLayer *>(layer);
+                    if (timings_) start = fy_get_stamp();
+                    CPUBuffer * buf = dl->getCPUOutputBuffer(0);
+                    if (!buf) THROW_EXCEPTION_ARGS(FynException,"No output buffer in download layer %s", dl->getName().c_str());
+                    if (dl->isAsync()) {
 #ifdef FYUSENET_MULTITHREADING
-                                //-----------------------------------------------------------
-                                // For async download layers we enter the layer as a download
-                                // dependency, then invoke async processing on the layer
-                                // before we continue execution...
-                                //-----------------------------------------------------------
-                                int fd = dl->firstAsyncDependency();
-                                asyncStateLock_.lock();
-                                if (fd >= 0) {
-                                    asyncDownloadDependencies_.push_back(Dependency<AsyncLayer>(fd, static_cast<AsyncLayer *>(dl), 1, state.sequenceNo));
-                                    if (asyncDependencies_.find(fd) != asyncDependencies_.end()) asyncDependencies_.insert(fd);
-                                }
-                                numBackgroundTasks_++;                      // the async forward below creates a background task
-                                asyncStateLock_.unlock();
-                                dl->asyncForward(state.sequenceNo, std::bind(&Engine::asyncDownloadDone, this, dl, std::placeholders::_1));
-#else
-                                THROW_EXCEPTION_ARGS(FynException,"No multithreading support compiled in");
-#endif
-                            } else dl->forward(state.sequenceNo);
-                            if (timings_) {
-                                end = fy_get_stamp();
-                                if (runs_ == 0) timingData_[idx] = 0;
-                                timingData_[idx] += fy_elapsed_micros(start, end);
-                            }
-                            if ((writeResults_) && (!dl->isAsync())) {
-                                // TODO (mw) missing handling of asynchronous stuff elsewhere
-                                buf->write<float>(fname.c_str());
-                            }
-                        } else {
-                            //-------------------------------------------------------
-                            // Handle (standard) GPU layers...
-                            //-------------------------------------------------------
-                            if (timings_) start = fy_get_stamp();
-                            layer->forward(state.sequenceNo);
-                            if (timings_) {
-                                end = fy_get_stamp();
-                                if (runs_ == 0) timingData_[idx] = 0;
-                                timingData_[idx] += fy_elapsed_micros(start, end);
-                            }
-                            if (writeResults_) {
-                                (dynamic_cast<GPULayerBase *>(layer))->writeResult(fname.c_str());
-                            }
+                        //-----------------------------------------------------------
+                        // For async download layers we enter the layer as a download
+                        // dependency, then invoke async processing on the layer
+                        // before we continue execution...
+                        //-----------------------------------------------------------
+                        int fd = dl->firstAsyncDependency();
+                        asyncStateLock_.lock();
+                        if (fd >= 0) {
+                            asyncDownloadDependencies_.emplace_back(fd, dynamic_cast<AsyncLayer *>(dl), 1, state.sequenceNo);
+                            if (asyncDependencies_.find(fd) != asyncDependencies_.end()) asyncDependencies_.insert(fd);
                         }
+                        numBackgroundTasks_++;                      // the async forward below creates a background task
+                        asyncStateLock_.unlock();
+                        dl->asyncForward(state.sequenceNo, stoken, std::bind(&Engine::asyncDownloadDone, this, dl, std::placeholders::_1));
+#else
+                        THROW_EXCEPTION_ARGS(FynException,"No multithreading support compiled in");
+#endif
+                    } else dl->forward(state.sequenceNo, stoken);
+                    if (timings_) {
+                        end = fy_get_stamp();
+                        if (runs_ == 0) timingData_[idx] = 0;
+                        timingData_[idx] += fy_elapsed_micros(start, end);
+                    }
+                    if ((writeResults_) && (!dl->isAsync())) {
+                        // TODO (mw) missing handling of asynchronous stuff elsewhere
+                        buf->write<float>(fname.c_str());
+                    }
+                } else if (!masked) {
+                    //-------------------------------------------------------
+                    // Handle (standard) GPU layers...
+                    //-------------------------------------------------------
+                    if (timings_) start = fy_get_stamp();
+                    layer->forward(state.sequenceNo, stoken);
+                    if (timings_) {
+                        end = fy_get_stamp();
+                        if (runs_ == 0) timingData_[idx] = 0;
+                        timingData_[idx] += fy_elapsed_micros(start, end);
+                    }
+                    if (writeResults_) {
+                        (dynamic_cast<GPULayerBase *>(layer))->writeResult(fname.c_str(), false);
+                    }
+                }
             }
 #ifdef FYUSENET_MULTITHREADING
             asyncStateLock_.lock();
@@ -675,9 +679,9 @@ Engine::state Engine::execute(ExecutionState& state, const GfxContextLink & cont
             }
             asyncStateLock_.unlock();
 #endif
-        }
+        } // if (layer)
         ++(state.current);
-    }
+    } // while
     runs_++;
     return state::DONE;
 }
@@ -969,7 +973,7 @@ void Engine::looper(const GfxContextLink & context) {
                 sequenceDone_.notify_one();
                 sequenceLock_.unlock();
                 if (sequenceCallback_) sequenceCallback_(estate.sequenceNo);
-            } else if (rc == state::ERROR) {
+            } else if (rc == state::NET_ERROR) {
                 // TODO (mw) handle error here
             }
         }
@@ -978,7 +982,6 @@ void Engine::looper(const GfxContextLink & context) {
 }
 #endif
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
 
 // vim: set expandtab ts=4 sw=4:

@@ -32,7 +32,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 NonMaxSuppression2D::NonMaxSuppression2D(const GPULayerBuilder & builder, int layerNumber) : FunctionLayer(builder, layerNumber) {
     if (flags_ & LayerFlags::RESIDUAL_INPUT) THROW_EXCEPTION_ARGS(FynException,"This layer does not support residual input");
@@ -88,7 +88,7 @@ void NonMaxSuppression2D::setupShaders() {
     char preproc[1024] = {0};
     for (int i=1; i <= maxRenderTargets_; i++) {
         snprintf(preproc, sizeof(preproc), "#define NUM_LANES %d\n",i);
-        handlePreprocFlags(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
+        preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
         shaders_[i-1] = compileShader(preproc);
         shaderStates_[i-1] = initShader(shaders_[i-1],i);
     }

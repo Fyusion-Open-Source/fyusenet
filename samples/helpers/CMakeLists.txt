@@ -1,0 +1,5 @@
+file(GLOB HELPER_SOURCES CONFIGURE_DEPENDS *.cpp *.h)
+
+set(HELPER_SOURCES ${HELPER_SOURCES} PARENT_SCOPE)
+
+# vim: set expandtab ts=2 sw=2:

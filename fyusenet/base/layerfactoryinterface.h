@@ -16,23 +16,38 @@
 //-------------------------------------- Project  Headers ------------------------------------------
 
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 struct LayerBuilder;
+
+namespace builder_internal {
+   class Pusher;
+}
+
 
 /**
  * @brief Interface for the layer factory to be used by the builders
  */
 class LayerFactoryInterface {
- public:
+    friend class builder_internal::Pusher;
+ protected:
     virtual void pushBuilder(LayerBuilder *) = 0;
 };
 
 
-} // fyusenet namespace
-} // fyusion namespace
+namespace builder_internal {
+    class Pusher {
+     public:
+        static void push(LayerFactoryInterface * factory, LayerBuilder * builder) {
+            factory->pushBuilder(builder);
+        }
+    };
+}
+
+
+} // fyusion::fyusenet namespace
 
 // vim: set expandtab ts=4 sw=4:
 

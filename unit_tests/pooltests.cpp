@@ -28,7 +28,6 @@
 #include <fyusenet/gpu/deep/deepmaxpoollayer.h>
 #include <fyusenet/gpu/deep/deepglobalpoollayer.h>
 
-
 //-------------------------------------- Global Variables ------------------------------------------
 
 //-------------------------------------- Local Definitions -----------------------------------------
@@ -182,9 +181,9 @@ TEST_P(ParamAvgPoolTest, AvgTestShallow) {
     std::vector<const float *> inputs{input};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     float * result = new float[param.channels * param.width * param.height];
-    layer.copyResult(result);
+    layer.copyResult(result, false);
     layer.cleanup();
     int twidth = param.width / param.stride;
     int theight = param.height / param.stride;
@@ -208,9 +207,9 @@ TEST_P(ParamMaxPoolTest, MaxTestShallow) {
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     int twidth = param.width / param.stride;
     int theight = param.height / param.stride;
@@ -233,9 +232,9 @@ TEST_P(ParamAvgPoolTest, AvgTestDeep) {
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     int twidth = param.width / param.stride;
     int theight = param.height / param.stride;
@@ -258,9 +257,9 @@ TEST_P(ParamMaxPoolTest, MaxTestDeep) {
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     int twidth = param.width / param.stride;
     int theight = param.height / param.stride;
@@ -283,9 +282,9 @@ TEST_P(ParamGlobalAvgPoolTest, GlobAvgTestDeep) {
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     const float * resptr = result.get();
     const float * refptr = ref.get();
@@ -306,9 +305,9 @@ TEST_P(ParamGlobalMaxPoolTest, GlobMaxTestDeep) {
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     const float * resptr = result.get();
     const float * refptr = ref.get();

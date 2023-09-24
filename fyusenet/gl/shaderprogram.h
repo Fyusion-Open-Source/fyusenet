@@ -22,8 +22,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
 
 class UniformState;
 class ShaderProgram;
@@ -51,7 +50,7 @@ typedef std::shared_ptr<ShaderProgram> programptr;
  * prog->link();
  * @endcode
  *
- * %Shader programs can not be used immediately after linking, they have to be bound first by
+ * %Shader programs cannot be used immediately after linking, they have to be bound first by
  * using the bind() method. Make sure to unbind() a shader after it has been used, as there
  * is an internal flag that keeps track of the bound status.
  *
@@ -134,6 +133,19 @@ class ShaderProgram : public fyusenet::GfxContextTracker {
     static programptr createInstance(const fyusenet::GfxContextLink& link = fyusenet::GfxContextLink());
 
     /**
+     * @brief Check if shader program is bound as indicatedd by its internal state flag
+     *
+     * @retval true Program is currently bound
+     * @retval false otherwise
+     *
+     * @warning In case the internal state is out-of-sync with the actual GL binding, this function
+     *          may return a wrong result.
+     */
+    bool isBound() const {
+        return bound_;
+    }
+
+    /**
      * @brief Retrieve custom user flags
      *
      * @return 32-bit integer user flags (default is 0)
@@ -187,7 +199,7 @@ class ShaderProgram : public fyusenet::GfxContextTracker {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    ShaderProgram(const fyusenet::GfxContextLink & context);
+    explicit ShaderProgram(const fyusenet::GfxContextLink & context);
     void logError() const;
     void ensureExistence();
     std::vector<GLuint> getShaderHandles() const;
@@ -204,13 +216,11 @@ class ShaderProgram : public fyusenet::GfxContextTracker {
     unsigned int userFlags_;                        //!< Storage for user-defined flags
     std::vector<shaderptr> shaders_;                //!< Shaders which are backing the shader program
     std::unordered_map<int, GLint> symbolMap_;      //!< Mapping for symbol lookup
-    mutable uint64_t hash_;                         //!< Hash code
+    mutable uint64_t hash_;                         //!< Hash code, used for content-based addressing / identity check of shader programs
 };
 
 
-
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
 
 
 // vim: set expandtab ts=4 sw=4:

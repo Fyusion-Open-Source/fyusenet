@@ -64,6 +64,11 @@
 #include <GLES3/gl3.h>
 #endif
 
+#if defined(WIN32) || defined(WIN64)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <wingdi.h>
+#endif
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
@@ -74,7 +79,7 @@ class TestContextManager;
 namespace fyusion {
 
 namespace fyusenet {
-    class GfxContextManager;
+class GfxContextManager;
 }
 
 namespace opengl {
@@ -96,11 +101,13 @@ namespace opengl {
  */
 class GLContext : public GLContextInterface {
     friend class fyusenet::GfxContextManager;
+
     friend class ::TestContextManager;
+
 #ifdef FYUSENET_USE_EGL
     friend class EGLHelper;
 #endif
- public:
+public:
     enum {
 #if defined(FYUSENET_USE_GLFW)
         DEFAULT_WIDTH = 256,
@@ -114,26 +121,30 @@ class GLContext : public GLContextInterface {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
-    GLContext(int idx, int device, fyusenet::GfxContextManager * manager, int width=DEFAULT_WIDTH, int height=DEFAULT_HEIGHT);
+    GLContext(int idx, int device, fyusenet::GfxContextManager *manager, int width = DEFAULT_WIDTH, int height = DEFAULT_HEIGHT);
+
 #ifdef FYUSENET_USE_WEBGL
-    GLContext(char *canvasID, int idx, fyusenet::GfxContextManager * manager, int width, int height);
+
+    GLContext(char *canvasID, int idx, fyusenet::GfxContextManager *manager, int width, int height);
+
 #endif
-    virtual ~GLContext();
+    ~GLContext() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual PBOPool * getWritePBOPool() const override;
-    virtual PBOPool * getReadPBOPool() const override;
-    virtual bool makeCurrent() const override;
-    virtual bool releaseCurrent() const override;
-    virtual void init() override;
-    virtual void sync() const override;
-    virtual void useDefaultSurface() override;
-    virtual bool isCurrent() const override;
-    virtual bool isDerivedFrom(const GLContextInterface * main) const override;
-    virtual uint64_t hash() const override;
-    virtual GLContextInterface * getMain() const override;
+    [[nodiscard]] PBOPool * getWritePBOPool() const override;
+    [[nodiscard]] PBOPool * getReadPBOPool() const override;
+    bool makeCurrent() const override;
+    [[nodiscard]] bool releaseCurrent() const override;
+    void init() override;
+    void sync() const override;
+    void useDefaultSurface() override;
+    [[nodiscard]] bool isCurrent() const override;
+    [[nodiscard]] bool isDerivedFrom(const GLContextInterface * main) const override;
+    [[nodiscard]] uint64_t hash() const override;
+    [[nodiscard]] GLContextInterface * getMain() const override;
+    [[nodiscard]] ScopedTexturePool *texturePool() const override;
 
 #if !defined(FYUSENET_USE_EGL) && defined(__linux__) && defined(FYUSENET_MULTITHREADING)
     static void initMultiThreading();
@@ -145,7 +156,7 @@ class GLContext : public GLContextInterface {
      * @retval true if context object wraps an externally supplied GL context
      * @retval false if context object wraps a managed GL context
      */
-    bool isExternal() const {
+    [[nodiscard]] bool isExternal() const {
         return external_;
     }
 
@@ -197,6 +208,7 @@ class GLContext : public GLContextInterface {
         return (ctx == context_);
     }
 #elif defined(FYUSENET_USE_WEBGL) // WebGL
+
     /**
      * @brief Check if context matches WebGL context
      *
@@ -205,10 +217,11 @@ class GLContext : public GLContextInterface {
      * @retval true if context matches the supplied GLX context
      * @retval false otherwise
      */
-    bool matches(EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx) const {
+    [[nodiscard]] bool matches(EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx) const {
         return (ctx == context_);
     }
-#else // not WebGL
+
+#elif defined(__APPLE__)// not WebGL
     /**
      * @brief Check if context matches CGL context
      *
@@ -220,18 +233,30 @@ class GLContext : public GLContextInterface {
     bool matches(CGLContextObj ctx) const {
         return (ctx == context_);
     }
+#else
+    /**
+     * @brief Check if context matches WGL context
+     *
+     * @param ctx WGLContext to check for equality to this context
+     *
+     * @retval true if context matches the supplied GLX context
+     * @retval false otherwise
+     */
+    bool matches(HGLRC ctx) const {
+        return (ctx == context_);
+    }
 #endif
 #endif
 #endif
 #ifdef ANDROID
     void setNativeWindow(NativeWindowType win);
 #endif
- private:
+private:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    static GLContext * createFromCurrent(int idx, fyusenet::GfxContextManager *mgr);
-    GLContext * derive(int idx, int dIdx) const;
+    [[nodiscard]] static GLContext *createFromCurrent(int idx, fyusenet::GfxContextManager *mgr);
+    [[nodiscard]] GLContext *derive(int idx, int dIdx) const;
 #ifdef FYUSENET_USE_GLFW
     GLContext(GLFWwindow *win, const GLContext *from, int idx, int dIdx, fyusenet::GfxContextManager *mgr);
 #else
@@ -246,6 +271,9 @@ class GLContext : public GLContextInterface {
     GLContext(CGLContextObj ctx, const GLContext *from, int idx, int dIdx, fyusenet::GfxContextManager *mgr);
 #elif defined(FYUSENET_USE_WEBGL)
     GLContext(EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx, const GLContext *from, int idx, int dIdx, fyusenet::GfxContextManager *mgr);
+#else
+    GLContext(HGLRC ctx, HDC device, int idx, fyusenet::GfxContextManager *mgr);
+    GLContext(HGLRC ctx, const GLContext *from, int idx, int dIdx, fyusenet::GfxContextManager *mgr);
 #endif
 #endif
 #endif
@@ -274,17 +302,22 @@ class GLContext : public GLContextInterface {
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE context_ = 0;       //!< Underlying WebGL context
     char *canvasID_ = nullptr;                          //!< Target HTML canvas name
     int version_ = 1;                                   //!< WebGL (major) version to use
+#elif !defined(FYUSENET_USE_GLFW)
+    HMODULE instance_ = nullptr;
+    HWND window_ = nullptr;
+    HDC device_ = nullptr;
+    HGLRC context_ = nullptr;
 #endif
 #endif
 #ifdef FYUSENET_USE_GLFW
     GLFWwindow * context_ = nullptr;                    //!< Underlying GLFW window (context)
 #endif
-    const GLContext * derivedFrom_ = nullptr;           //!< For derived contexts, this points to the main context
+    const GLContext *derivedFrom_ = nullptr;            //!< For derived contexts, this points to the main context
     int width_ = 0;                                     //!< Width of the surface
     int height_ = 0;                                    //!< Height of the surface
     mutable std::atomic<int> derivedCounter_{0};        //!< Counter for the number of derived contexts from this context
     bool external_ = false;                             //!< Indicator if this object wraps an externally supplied context
-    fyusenet::GfxContextManager * manager_ = nullptr;   //!< Pointer to context manager object that manages this context
+    fyusenet::GfxContextManager *manager_ = nullptr;    //!< Pointer to context manager object that manages this context
 };
 
 } // opengl namespace

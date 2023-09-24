@@ -18,11 +18,12 @@
 #include "glcontext.h"
 #include "glexception.h"
 #include "../gpu/gfxcontextmanager.h"
+#include "../common/miscdefs.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //-------------------------------------- Local Definitions -----------------------------------------
 
 const GfxContextLink GfxContextLink::EMPTY = GfxContextLink(true);
@@ -148,9 +149,7 @@ GfxContextLink& GfxContextLink::operator=(const GfxContextLink& src) {
 GfxContextLink::syncid GfxContextLink::issueSync() const {
     if (!context_) THROW_EXCEPTION_ARGS(opengl::GLException,"No context associated with link");
     assert(isCurrent());
-#ifdef DEBUG
-    glGetError();
-#endif
+    CLEAR_GFXERR_DEBUG
     GLsync sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 #ifdef DEBUG
     int err = glGetError();
@@ -184,9 +183,7 @@ void GfxContextLink::removeSync(syncid sync) const {
 void GfxContextLink::waitSync(syncid sync) const {
     if (!context_) THROW_EXCEPTION_ARGS(opengl::GLException,"No context associated with link");
     assert(isCurrent());
-#ifdef DEBUG
-    glGetError();
-#endif
+    CLEAR_GFXERR_DEBUG
     glWaitSync(sync,0,GL_TIMEOUT_IGNORED);
 #ifdef DEBUG
     int err = glGetError();
@@ -212,9 +209,7 @@ void GfxContextLink::waitSync(syncid sync) const {
 bool GfxContextLink::waitClientSync(syncid sync, GLuint64 timeoutNS) const {
     if (!context_) THROW_EXCEPTION_ARGS(opengl::GLException,"No context associated with link");
     assert(isCurrent());
-#ifdef DEBUG
-    glGetError();
-#endif
+    CLEAR_GFXERR_DEBUG
     GLenum rc = glClientWaitSync(sync,GL_SYNC_FLUSH_COMMANDS_BIT,timeoutNS);
 #ifdef DEBUG
     int err = glGetError();
@@ -224,6 +219,16 @@ bool GfxContextLink::waitClientSync(syncid sync, GLuint64 timeoutNS) const {
     if (rc == GL_WAIT_FAILED) THROW_EXCEPTION_ARGS(opengl::GLException,"Error while waiting for GL sync");
     if (rc == GL_CONDITION_SATISFIED || rc == GL_ALREADY_SIGNALED) return true;
     return false;
+}
+
+
+/**
+ * @brief Obtain pointer to texture pool usable with the context
+ *
+ * @return Pointer to texture pool or \c nullptr if no pool exists
+ */
+opengl::ScopedTexturePool * GfxContextLink::texturePool() const {
+    return interface()->texturePool();
 }
 
 
@@ -272,6 +277,7 @@ int GfxContextLink::device() const {
     return context_->device();
 }
 
+
 /*##################################################################################################
 #                               N O N -  P U B L I C  F U N C T I O N S                            #
 ##################################################################################################*/
@@ -284,7 +290,6 @@ int GfxContextLink::device() const {
 GfxContextLink::GfxContextLink(bool empty) : context_(nullptr) {
 }
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
 
 // vim: set expandtab ts=4 sw=4:

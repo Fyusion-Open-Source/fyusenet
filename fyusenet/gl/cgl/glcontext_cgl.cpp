@@ -33,6 +33,8 @@ static CGLPixelFormatAttribute pixelFormatAttributes[] = {
     kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute) kCGLOGLPVersion_GL4_Core,
     kCGLPFAColorSize, (CGLPixelFormatAttribute) 32,
     kCGLPFAAlphaSize, (CGLPixelFormatAttribute) 8,
+    kCGLPFADepthSize, (CGLPixelFormatAttribute) 24,
+    kCGLPFAStencilSize, (CGLPixelFormatAttribute) 8,
     kCGLPFAAccelerated,
     kCGLPFADoubleBuffer,
     kCGLPFASampleBuffers, (CGLPixelFormatAttribute) 1,
@@ -189,6 +191,16 @@ GLContextInterface * GLContext::getMain() const {
     assert(manager_);
     return manager_->getMain();
 }
+
+
+/**
+ * @copydoc GLContextInterface::texturePool()
+ */
+ScopedTexturePool * GLContext::texturePool() const {
+    assert(manager_);
+    return manager_->texturePool();
+}
+
 
 /*##################################################################################################
 #                               N O N -  P U B L I C  F U N C T I O N S                            #

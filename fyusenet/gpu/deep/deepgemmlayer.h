@@ -37,6 +37,7 @@ namespace deep {
  *
  * @see deep::DeepConvLayerBase
  */
+ // TODO (mw) the performance of this layer can be improved
 class DeepGEMMLayer : public DeepConvLayerBase {
  public:
     // ------------------------------------------------------------------------
@@ -47,15 +48,15 @@ class DeepGEMMLayer : public DeepConvLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void forward(uint64_t sequence) override;
-    virtual void cleanup() override;
+    void forward(uint64_t sequenceNo, StateToken *state) override;
+    void cleanup() override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupNetworkPolygons(VAO *vao) override;
-    virtual void compileConvolutionShaders(const char *preproc) override;
+    void setupNetworkPolygons(VAO *vao) override;
+    void compileConvolutionShaders(const char *preproc) override;
     unistateptr initShader(programptr shader);
 
     // ------------------------------------------------------------------------

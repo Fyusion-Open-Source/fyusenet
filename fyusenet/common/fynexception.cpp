@@ -30,7 +30,7 @@ namespace fyusion {
 /**
  * @brief Constructor
  */
-FynException::FynException():std::exception() {
+FynException::FynException() : std::exception() {
 }
 
 
@@ -53,18 +53,22 @@ FynException::FynException(const char *function, const char *file, int line, con
 
 
 /**
- * @brief Destructor
+ * @brief Copy constructor
+ *
+ * @param ex Source object to copy from
  */
-FynException::~FynException() throw() {
+FynException::FynException(const FynException& ex) noexcept {
+    message_ = ex.message_;
 }
+
 
 /**
  * @brief Retrieve exception message
  *
  * @return Pointer to null-terminated string with information about the exception
  */
-const char * FynException::what() const throw() {
-    if (message_.size()>0) return message_.c_str();
+const char * FynException::what() const noexcept {
+    if (!message_.empty()) return message_.c_str();
     else return nullptr;
 }
 

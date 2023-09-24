@@ -17,13 +17,12 @@
 
 #include "../../gl/glinfo.h"
 #include "../../common/logging.h"
+#include "../../common/miscdefs.h"
 #include "convlayerbase_vanilla.h"
 #include "../convweightarrayKxKxNxM.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+namespace fyusion::fyusenet::gpu::vanilla {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -33,6 +32,23 @@ namespace vanilla {
 /*##################################################################################################
 #                                   P U B L I C  F U N C T I O N S                                 #
 ##################################################################################################*/
+
+/**
+ * @brief Constructor
+ *
+ * @param builder Builder object that contains parameterization for the layer
+ *
+ * @throws FynException in case the layer is initialized with invalid/unsupported parameters
+ *
+ * @pre The constructor must be called with the GL context supplied in \p builder as the active
+ *      context
+ *
+ * This constructor parses basic information from the supplied \p builder and initializes the
+ * layer with the parsed data.
+ */
+ConvLayerBase::ConvLayerBase(const ConvLayerBuilder & builder) : ConvLayerBase(builder, builder.number_) {
+}
+
 
 /**
  * @brief Constructor
@@ -132,10 +148,8 @@ ConvLayerBase::ConvLayerBase(const GPULayerBuilder & builder,int layerNumber) : 
  * @copydoc GPULayerBase::~GPULayerBase
  */
 ConvLayerBase::~ConvLayerBase() {
-    delete weights_;
-    weights_ = nullptr;
-    delete [] zeroBias_;
-    zeroBias_ = nullptr;
+    FNET_DEL_AND_CLEAR(weights_);
+    FNET_DEL_AND_CLEAR(zeroBias_);
     if ((vertexBuffer_) || (indexBuffer_) || (vertexArray_)) {
         FNLOGW("Cleanup was not called prior to destruction");
 #ifdef DEBUG
@@ -149,14 +163,10 @@ ConvLayerBase::~ConvLayerBase() {
  * @copydoc GPULayerBase::cleanup
  */
 void ConvLayerBase::cleanup() {
-    delete vertexBuffer_;
-    delete indexBuffer_;
-    delete vertexArray_;
-    delete residualBuffer_;
-    vertexBuffer_ = nullptr;
-    indexBuffer_ = nullptr;
-    vertexArray_ = nullptr;
-    residualBuffer_ = nullptr;
+    FNET_DEL_AND_CLEAR(vertexBuffer_);
+    FNET_DEL_AND_CLEAR(indexBuffer_);
+    FNET_DEL_AND_CLEAR(vertexArray_);
+    FNET_DEL_AND_CLEAR(residualBuffer_);
     gpu::ConvLayerBase::cleanup();
 }
 
@@ -167,7 +177,7 @@ void ConvLayerBase::cleanup() {
  * @brief Perform setup of layer code
  *
  * @pre The GL context that is to be used for running the inference must be current to the calling
- *      thread and loadWeightsAndBiases() has been called prior to this function.
+ *      thread and loadParameters() has been called prior to this function.
  *
  * @post Layer is marked as valid
  *
@@ -186,7 +196,7 @@ void ConvLayerBase::setup() {
     setupNetworkPolygons(vertexArray_,kernel_);
     vertexArray_->unbind();
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
         THROW_EXCEPTION_ARGS(FynException,"Failed to setup network layer (glerr=0x%x)",err);
     }
@@ -205,14 +215,14 @@ std::vector<BufferSpec> ConvLayerBase::getRequiredInputBuffers() const {
     if (rem < PIXEL_PACKING) {
         // for input textures, we support textures with less than 4 channels (might be from upload)
         auto format = BufferSpec::formatByChannels(inputChannels_, TEXTURE_TYPE_DEFAULT);
-        result.push_back(BufferSpec(channel++, 0, width_+2*inputPadding_, height_+2*inputPadding_,
-                                    format.first, format.second, TEXTURE_TYPE_DEFAULT,
-                                    BufferSpec::CONVOLUTION_SOURCE));
+        result.emplace_back(channel, 0, width_ + 2*inputPadding_, height_ + 2*inputPadding_,
+                            format.first, format.second, TEXTURE_TYPE_DEFAULT,
+                            BufferSpec::FUNCTION_SOURCE);
     } else {
         while (rem > 0) {
-            result.push_back(BufferSpec(channel++, 0, width_+2*inputPadding_, height_+2*inputPadding_,
-                                        TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                        BufferSpec::CONVOLUTION_SOURCE));
+            result.emplace_back(channel++, 0, width_ + 2*inputPadding_, height_ + 2*inputPadding_,
+                                TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
+                                BufferSpec::FUNCTION_SOURCE);
             rem -= PIXEL_PACKING;
         }
     }
@@ -220,9 +230,9 @@ std::vector<BufferSpec> ConvLayerBase::getRequiredInputBuffers() const {
         channel = 0;
         rem = outputChannels_;
         while (rem > 0) {
-            result.push_back(BufferSpec(channel++, 1, residualViewport_[0], residualViewport_[1],
-                                        TEXTURE_IFORMAT_4,TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                        BufferSpec::RESIDUAL_SOURCE));
+            result.emplace_back(channel++, 1, residualViewport_[0], residualViewport_[1],
+                                TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
+                                BufferSpec::RESIDUAL_SOURCE);
             rem -= PIXEL_PACKING;
         }
     }
@@ -238,9 +248,9 @@ std::vector<BufferSpec> ConvLayerBase::getRequiredOutputBuffers() const {
     std::vector<BufferSpec> result;
     int rem = outputChannels_;
     while (rem > 0) {
-        result.push_back(BufferSpec(channel++, 0, viewport_[0], viewport_[1],
-                                    TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                    BufferSpec::CONVOLUTION_DEST));
+        result.emplace_back(channel++, 0, viewport_[0], viewport_[1],
+                            TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
+                            BufferSpec::FUNCTION_DEST);
         rem -= PIXEL_PACKING;
     }
     return result;
@@ -248,16 +258,21 @@ std::vector<BufferSpec> ConvLayerBase::getRequiredOutputBuffers() const {
 
 
 /**
- * @copydoc ConvLayerInterface::loadWeightsAndBiases
+ * @copydoc gpu::ConvLayerBase::loadParameters
  */
-void ConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, size_t offset) {
+void ConvLayerBase::loadParameters(const ParameterProvider *weights) {
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
     weights_ = new ConvWeightArrayKxKxNxM(kernel_, inputChannels_, outputChannels_, maxRenderTargets_);
-    weights_->extractBiasData(biasAndWeights, offset);
-    weights_->extractWeightData(biasAndWeights, offset + outputChannels_);
+    weights->map(getName()+std::string(".bias"), getNumber(), 1).with([&](const std::any & data) {
+        weights_->extractBiasData(std::any_cast<const float *>(data));
+    });
+    weights->map(getName()+std::string(".weights"), getNumber(), 0).with([&](const std::any & data) {
+        weights_->extractWeightData(std::any_cast<const float *>(data));
+    });
     if (flags_ & LayerFlags::POST_BATCHNORM) {
-        int bnoffset = offset + outputChannels_ + (kernel_*kernel_) * inputChannels_ * outputChannels_;
-        weights_->extractBatchnormData(biasAndWeights, bnoffset);
+        weights->map(getName()+std::string(".bn"), getNumber(), 2).with([&](const std::any & data) {
+            weights_->extractBatchnormData(std::any_cast<const float *>(data));
+        });
     }
 }
 
@@ -273,7 +288,7 @@ void ConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, size_t off
  * @param outPass Output rendering pass
  * @param bias Pointer to weight array that stored biases and weights
  *
- * Depending on whether or not output padding is selected, this preloads the target fraembuffers
+ * Depending on whether an output padding is selected, this preloads the target fraembuffers
  * with the bias values in case the output padding was zero. For non-zero paddings, the bias is
  * handled within the shader itself.
  */
@@ -309,29 +324,32 @@ void ConvLayerBase::setBias(int outPass, const UniformWeightArray *bias) {
  *  - dilation for <i>a trous</i> convolution
  */
 size_t ConvLayerBase::shaderPreprocessing(char *preproc, size_t maxChars) {
+#if defined(WIN32) || defined(WIN64)
+    using ssize_t = int64_t;
+#endif
     char extra[80];
-    ssize_t mc = (ssize_t)handlePreprocFlags(flags_, preproc, maxChars);
+    ssize_t mc = (ssize_t)preprocessor_.generatePreprocessorPreamble(flags_, preproc, maxChars);
     if (outputPadding_ > 0) {
         strncat(preproc, "#define USE_BIAS\n", mc);
-        mc = maxChars-strlen(preproc);
+        mc = (ssize_t)maxChars - (ssize_t)strlen(preproc);
     }
     snprintf(extra, sizeof(extra), "#define CONVSIZE %d\n",kernel_);
     strncat(preproc, extra, mc);
-    mc -= strlen(extra);
+    mc -= (ssize_t)strlen(extra);
     assert(mc > 0);
     snprintf(extra, sizeof(extra), "#define CONVMID %d\n",(kernel_-1)/2);
     strncat(preproc, extra, mc);
-    mc -= strlen(extra);
+    mc -= (ssize_t)strlen(extra);
     assert(mc > 0);
     snprintf(extra, sizeof(extra), "#define DILATION %d\n",dilation_[0]);       // TODO (mw) support anisotropic dilation
     strncat(preproc, extra, mc);
-    mc -= strlen(extra);
+    mc -= (ssize_t)strlen(extra);
     return (size_t)std::max((ssize_t)0, mc);
 }
 
 
 /**
- * @brief Setup a set of proxy polygons that are used to drive the fragment shaders
+ * @brief Setup set of proxy polygons that are used to drive the fragment shaders
  *
  * @param vao Pointer to VAO object that tracks the geometry definition
  * @param kernel Kernel size of the convolution
@@ -349,9 +367,9 @@ void ConvLayerBase::setupNetworkPolygons(VAO *vao, int kernel) {
     int offset0 = 0, offset1 = 0;
     float * attrs0 = new float[vertsize*4*kernel];
     float * attrs1 = new float[rvertsize*4*kernel];
-    float posleft = -1.0f + ((float)(2*outputPadding_) / (float)viewport_[0]);
-    float posright = 1.0f - ((float)(2*outputPadding_) / (float)viewport_[0]);
-    float postop = -1.0f + ((float)(2*outputPadding_) / (float)viewport_[1]);
+    float posleft  = -1.0f + ((float)(2*outputPadding_) / (float)viewport_[0]);
+    float posright =  1.0f - ((float)(2*outputPadding_) / (float)viewport_[0]);
+    float postop  =  -1.0f + ((float)(2*outputPadding_) / (float)viewport_[1]);
     float posbottom = 1.0f - ((float)(2*outputPadding_) / (float)viewport_[1]);
     float restop = (float)outputPadding_ / (float)viewport_[1];
     float resbottom = (float)(viewport_[1] - outputPadding_) / (float)viewport_[1];
@@ -407,13 +425,13 @@ void ConvLayerBase::setupNetworkPolygons(VAO *vao, int kernel) {
     }
     vertexBuffer_ = new VBO(context_);
     vao->enableArray(0);
-    vertexBuffer_->setBufferData(attrs0, vertsize*4*kernel*sizeof(float), GL_STATIC_DRAW);
+    vertexBuffer_->setBufferData(attrs0, (int)(vertsize * 4 * kernel * sizeof(float)), GL_STATIC_DRAW);
     vertexBuffer_->bind();
-    vao->setVertexAttributeBuffer(0,vertsize,GL_FLOAT,GL_FALSE,0,0);
+    vao->setVertexAttributeBuffer(0, vertsize, GL_FLOAT, GL_FALSE, 0, 0);
     if (flags_ & LayerFlags::RESIDUAL_INPUT) {
         vao->enableArray(1);
         residualBuffer_ = new VBO(context_);
-        residualBuffer_->setBufferData(attrs1, rvertsize*4*kernel*sizeof(float), GL_STATIC_DRAW);
+        residualBuffer_->setBufferData(attrs1, (int)(rvertsize * 4 * kernel * sizeof(float)), GL_STATIC_DRAW);
         residualBuffer_->bind();
         vao->setVertexAttributeBuffer(1, rvertsize, GL_FLOAT, GL_FALSE, 0, 0);
     }
@@ -426,14 +444,14 @@ void ConvLayerBase::setupNetworkPolygons(VAO *vao, int kernel) {
     indexBuffer_ = new IBO(context_);
     for (int i=0; i < kernel; i++) {
         int offset = i*4;
-        indices[i*6+0] = offset+0;
-        indices[i*6+1] = offset+1;
-        indices[i*6+2] = offset+2;
-        indices[i*6+3] = offset+0;
-        indices[i*6+4] = offset+2;
-        indices[i*6+5] = offset+3;
+        indices[i*6+0] = (GLshort)(offset+0);
+        indices[i*6+1] = (GLshort)(offset+1);
+        indices[i*6+2] = (GLshort)(offset+2);
+        indices[i*6+3] = (GLshort)(offset+0);
+        indices[i*6+4] = (GLshort)(offset+2);
+        indices[i*6+5] = (GLshort)(offset+3);
     }
-    indexBuffer_->setBufferData(indices, 6*kernel*sizeof(GLshort), GL_STATIC_DRAW);
+    indexBuffer_->setBufferData(indices, (int)(6 * kernel * sizeof(GLshort)), GL_STATIC_DRAW);
     indexBuffer_->bind();
     delete [] indices;
 }
@@ -483,13 +501,9 @@ void ConvLayerBase::updateFBOs() {
         }
         fbo->unbind();
     }
-    outputChanged_=false;
+    outputChanged_ = false;
 }
 
-
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

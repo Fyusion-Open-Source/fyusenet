@@ -10,7 +10,9 @@ else()
       else()
         set(GL_CTX_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/cgl/glcontext_cgl.cpp)
       endif()
-    else(APPLE)
+    elseif(WIN32)
+      set(GL_CTX_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/wgl/glcontext_wgl.cpp)
+    else()
       if (USE_GLFW)
         set(GL_CTX_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/glfw/glcontext_glfw.cpp)
       else()
@@ -31,10 +33,18 @@ if (NOT USE_MULTITHREADING)
   list(REMOVE_ITEM GL_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/asyncpool.h)
 endif()
 
+if (APPLE OR BUILD_TARGET STREQUAL "Web" OR ANDROID_ABI)
+  list(REMOVE_ITEM GL_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/computedispatch.cpp)
+endif()
+
 set(GL_SOURCES ${GL_SOURCES})
 set(GL_CTX_SOURCES ${GL_CTX_SOURCES})
 
 add_library(opengl STATIC ${GL_SOURCES} ${GL_CTX_SOURCES})
+
+if (WIN32)
+  add_dependencies(opengl glew)
+endif()
 
 #----------------------------------------------------------------------------
 # Installation files

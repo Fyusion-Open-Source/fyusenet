@@ -17,6 +17,7 @@
 
 #include "stylenet3x3.h"
 #include <fyusenet/gl/fbo.h>
+#include "../helpers/stylenet_provider.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
 
@@ -51,13 +52,14 @@ StyleNetBase::StyleNetBase(int width, int height, bool upload, bool download, co
  * Deallocates resources
  */
 StyleNetBase::~StyleNetBase() {
-    inputTexture_ = 0;
     for (int i=0; i < ASYNC_BUFFERS; i++) {
         delete inBuffers_[i];
         inBuffers_[i] = nullptr;
         delete asyncDLBuffers_[i];
         asyncDLBuffers_[i] = nullptr;
     }
+    delete parameters_;
+    parameters_ = nullptr;
 }
 
 
@@ -65,19 +67,19 @@ StyleNetBase::~StyleNetBase() {
 /**
  * @copydoc fyusion::fyusenet::NeuralNetwork::forward()
  */
-fyusion::fyusenet::NeuralNetwork::execstate StyleNetBase::forward() {
+fyusion::fyusenet::NeuralNetwork::execstate StyleNetBase::forward(fyusion::fyusenet::StateToken * token) {
 #ifdef FYUSENET_MULTITHREADING
     if (async_) {
         std::unique_lock<std::mutex> lck(downloadBufferLock_);
         downloadBufferAvail_.wait(lck, [this]() { return (usedDownloadBuffers_ < ASYNC_BUFFERS);});
         usedDownloadBuffers_++;
         lck.unlock();
-        return fyusion::fyusenet::NeuralNetwork::forward();
+        return fyusion::fyusenet::NeuralNetwork::forward(token);
     } else {
-        return fyusion::fyusenet::NeuralNetwork::forward();
+        return fyusion::fyusenet::NeuralNetwork::forward(token);
     }
 #else
-    return fyusion::fyusenet::NeuralNetwork::forward();
+    return fyusion::fyusenet::NeuralNetwork::forward(token);
 #endif
 }
 
@@ -121,10 +123,10 @@ void StyleNetBase::setInputBuffer(const float *data) {
     // -------------------------------------------------------
     for (int i=0; i < numbuffers; i++) {
         if (!inBuffers_[i]) {
-            inBuffers_[i] = new cpu::CPUBuffer(cpu::CPUBufferShape(height_, width_, 3, 0, cpu::CPUBufferShape::type::FLOAT32, BufferSpec::order::GPU_SHALLOW));
+            inBuffers_[i] = new cpu::CPUBuffer(BufferShape(height_, width_, 3, 0, BufferShape::type::FLOAT32, BufferSpec::order::GPU_SHALLOW));
         }
     }
-    gpu::UploadLayer * upload = static_cast<gpu::UploadLayer *>(engine_->getLayers()["upload"]);
+    gpu::UploadLayer * upload = dynamic_cast<gpu::UploadLayer *>(engine_->getLayers()["upload"]);
     assert(upload);
     CPUBuffer * buf = nullptr;
     {
@@ -136,8 +138,8 @@ void StyleNetBase::setInputBuffer(const float *data) {
         // -------------------------------------------------------
         std::unique_lock<std::mutex> lck(uploadBufferLock_);
         uploadBufferAvail_.wait(lck, [this]() { return (uploadBusy_ == false) && (usedUploadBuffers_ < ASYNC_BUFFERS); });
-        if (upload->getInputBuffer()) {
-            buf = (upload->getInputBuffer() == inBuffers_[0]) ? inBuffers_[1] : inBuffers_[0];
+        if (upload->getCPUInputBuffer()) {
+            buf = (upload->getCPUInputBuffer() == inBuffers_[0]) ? inBuffers_[1] : inBuffers_[0];
         } else buf = inBuffers_[0];
         usedUploadBuffers_++;
         uploadBusy_ = true;
@@ -149,9 +151,9 @@ void StyleNetBase::setInputBuffer(const float *data) {
     float * tgt = buf->map<float>();
     assert(tgt);
     // NOTE (mw) it would be cleaner to perform a RGB -> RGBA conversion here and upload 4-channel data
-    memcpy(tgt, data, buf->shape().bytes(CPUBufferShape::order::CHANNELWISE));
+    memcpy(tgt, data, buf->shape().bytes(BufferShape::order::CHANNELWISE));
     buf->unmap();
-    upload->setInputBuffer(buf, 0);
+    upload->setCPUInputBuffer(buf, 0);
 }
 
 
@@ -172,28 +174,25 @@ void StyleNetBase::setInputBuffer(const float *data) {
 fyusion::fyusenet::cpu::CPUBuffer * StyleNetBase::getOutputBuffer() {
     using namespace fyusion::fyusenet;
     if ((!download_) || (!setup_)) return nullptr;
-    gpu::DownloadLayer * dwn = static_cast<gpu::DownloadLayer *>(engine_->getLayers()["download"]);
-    return dwn->getOutputBuffer(0);
+    gpu::DownloadLayer * dwn = dynamic_cast<gpu::DownloadLayer *>(engine_->getLayers()["download"]);
+    return dwn->getCPUOutputBuffer(0);
 }
 
-
 /**
- * @brief Set input GL texture (OES or regular) for style net
+ * @brief Set input GPU buffer (GL texture) for style net
  *
- * @param texture GL handle that identifies texture to process
+ * @param buffer Pointer to GPU input buffer to set
  *
- * @note No (real) ownership over the input texture is taken. It is up to the caller to delete
- *       the texture from GL memory if it is no longer needed.
+ * @note No ownership over the input buffer is taken. It is up to the caller to delete the buffer
+ *       from memory.
  */
-void StyleNetBase::setInputTexture(GLuint texture) {
+void StyleNetBase::setInputGPUBuffer(fyusion::fyusenet::gpu::GPUBuffer * buffer) {
     using namespace fyusion::fyusenet;
-    if (inputTexture_ == texture) return;
-    inputTexture_ = texture;
-    if (inputTexture_) {
-        int idx = (oesInput_) ? UNPACK : CONV1;
-        gpu::GPULayerBase * layer = static_cast<gpu::GPULayerBase *>(engine_->getLayers()[idx]);
-        if (layer->hasInputTexture(0)) layer->updateInputTexture(texture, 0);
-        else layer->addInputTexture(texture, 0);
+    using layer_ids = StyleNetProvider::layer_ids;
+    if (buffer) {
+        int idx = (oesInput_) ? layer_ids::UNPACK : layer_ids::CONV1;
+        auto * layer = dynamic_cast<gpu::GPULayerBase *>(engine_->getLayers()[idx]);
+        layer->setGPUInputBuffer(buffer, 0);
     }
 }
 
@@ -213,30 +212,26 @@ GLuint StyleNetBase::getOutputTexture() const {
     assert(engine_->getLayers()["sigmoid"]);
     gpu::GPULayerBase * layer = static_cast<gpu::GPULayerBase *>(engine_->getLayers()["sigmoid"]);
     assert(layer);
-    return layer->getOutputTexture(0);
-
+    auto * buf = layer->getGPUOutputBuffer(0);
+    assert(buf);
+    return buf->getSlice(0).getHandle();
 }
-
-
-/**
- * @brief Retrieve GL handle for the last GPU layer %FBO
- *
- * @return GL handle of %FBO that is written to by the last layer (contains 0..1 RGB data)
- */
-GLuint StyleNetBase::getOutputFBO() const {
-    using namespace fyusion::fyusenet;
-    assert(engine_);
-    assert(engine_->getLayers()["sigmoid"]);
-    gpu::GPULayerBase * layer = static_cast<gpu::GPULayerBase *>(engine_->getLayers()["sigmoid"]);
-    assert(layer);
-    return layer->getFBO(0)->getHandle();
-}
-
 
 
 /*##################################################################################################
 #                               N O N -  P U B L I C  F U N C T I O N S                            #
 ##################################################################################################*/
+
+/**
+ * @copydoc NeuralNetwork::initializeWeights
+ */
+void StyleNetBase::initializeWeights(fyusion::fyusenet::CompiledLayers & layers) {
+    using namespace fyusion::fyusenet;
+    assert(parameters_);
+    for (auto it = layers.begin(); it != layers.end(); ++it) {
+        it.second->loadParameters(parameters_);
+    }
+}
 
 
 
@@ -254,13 +249,13 @@ GLuint StyleNetBase::getOutputFBO() const {
 void StyleNetBase::internalDLCallback(uint64_t seqNo, fyusion::fyusenet::cpu::CPUBuffer *buffer, fyusion::fyusenet::AsyncLayer::state state) {
     using namespace fyusion::fyusenet;
     assert(engine_);
-    gpu::DownloadLayer * down = static_cast<gpu::DownloadLayer *>(engine_->getLayers()["download"]);
+    gpu::DownloadLayer * down = dynamic_cast<gpu::DownloadLayer *>(engine_->getLayers()["download"]);
     assert(down);
     // --------------------------------------------
     // Perform buffer swap...
     // ---------------------------------------------
     if (state == fyusion::fyusenet::AsyncLayer::state::DOWNLOAD_COMMENCED) {
-        down->updateOutputBuffer((down->getOutputBuffer() == asyncDLBuffers_[0]) ? asyncDLBuffers_[1] : asyncDLBuffers_[0]);
+        down->updateOutputBuffer((down->getCPUOutputBuffer() == asyncDLBuffers_[0]) ? asyncDLBuffers_[1] : asyncDLBuffers_[0]);
     }
     // ---------------------------------------------
     // Run external callback if download is done
@@ -292,7 +287,7 @@ void StyleNetBase::internalULCallback(uint64_t seqNo, fyusion::fyusenet::cpu::CP
     assert(engine_);
     assert(usedUploadBuffers_ <= ASYNC_BUFFERS);
     uploadBufferLock_.lock();
-    gpu::UploadLayer * up = static_cast<gpu::UploadLayer *>(engine_->getLayers()["upload"]);
+    gpu::UploadLayer * up = dynamic_cast<gpu::UploadLayer *>(engine_->getLayers()["upload"]);
     assert(up);
     if (state == AsyncLayer::UPLOAD_COMMENCED) {
         uploadBusy_ = false;

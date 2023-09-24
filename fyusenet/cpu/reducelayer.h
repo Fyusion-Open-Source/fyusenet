@@ -18,9 +18,7 @@
 #include "cpulayerbase.h"
 #include "reducelayerbuilder.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace cpu {	
+namespace fyusion::fyusenet::cpu {
 //------------------------------------- Public Declarations ----------------------------------------
 
 
@@ -43,14 +41,14 @@ class ReduceLayer : public CPULayerBase {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     ReduceLayer(const ReduceLayerBuilder& builder, int layerNumber);
-    virtual ~ReduceLayer();
+    ~ReduceLayer() override = default;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual void forward(uint64_t sequence) override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
 
  protected:
     // ------------------------------------------------------------------------
@@ -67,8 +65,6 @@ class ReduceLayer : public CPULayerBase {
 
 
 
-} // cpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::cpu namespace
 
 // vim: set expandtab ts=4 sw=4:

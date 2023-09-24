@@ -65,7 +65,11 @@
 #include <emscripten.h>
 #include <emscripten/html5.h>
 #include <emscripten/html5_webgl.h>
+#include <GLES/gl.h>
 #include <GLES3/gl3.h>
+#endif
+#if defined(WIN32) || defined(WIN64)
+#include <GL/glew.h>
 #endif
 
 // vim: set expandtab ts=4 sw=4:

@@ -9,15 +9,12 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <netinet/in.h>
-
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "floatconversion.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 unsigned short FloatConversion::baseTable_[512];
@@ -120,8 +117,6 @@ FloatConversion::FloatConversion() {
 }
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

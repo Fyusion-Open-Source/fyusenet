@@ -27,10 +27,7 @@
 #include "deeplayerbase.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 
 /**
@@ -60,21 +57,22 @@ class DeepConcatLayer : public DeepLayerBase {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
+    explicit DeepConcatLayer(const ConcatLayerBuilder & builder);
     DeepConcatLayer(const ConcatLayerBuilder & builder,int layerNumber);
-    virtual ~DeepConcatLayer();
+    ~DeepConcatLayer() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
-    virtual void setup() override;
-    virtual void forward(uint64_t sequence) override;
+    void cleanup() override;
+    void setup() override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
     virtual void addInput(int inputDepth,int inputPadding);
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual int numInputPorts() const override;
-    virtual int getPortChannelIndex(int port) const override;
-    virtual int numInputChannels(int port=0) const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    [[nodiscard]] int numInputPorts() const override;
+    [[nodiscard]] int getPortChannelIndex(int port) const override;
+    [[nodiscard]] int numInputChannels(int port=0) const override;
 
  protected:
 
@@ -142,9 +140,6 @@ class DeepConcatLayer : public DeepLayerBase {
     std::vector<RenderPassTexEnv> passEnvironments_;
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

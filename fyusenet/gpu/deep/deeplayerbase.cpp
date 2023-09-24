@@ -15,15 +15,14 @@
 
 
 #include "../../common/logging.h"
+#include "../../common/miscdefs.h"
 #include "../../gl/glinfo.h"
 #include "../../gl/fbo.h"
 #include "deeptiler.h"
 #include "deeplayerbase.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -37,6 +36,13 @@ namespace deep {
 
 /**
  * @copydoc GPULayerBase::GPULayerBase
+ */
+DeepLayerBase::DeepLayerBase(const GPULayerBuilder& builder) : DeepLayerBase(builder, builder.number_) {
+}
+
+
+/**
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepLayerBase::DeepLayerBase(const GPULayerBuilder& builder, int layerNumber) : GPULayerBase(builder,layerNumber),
     tiler_(new DeepTiler(builder.type_, builder.width(), builder.height(), builder.in(), builder.out(), (float)builder.upsample_[0]/(float)builder.downsample_[0], (float)builder.upsample_[1]/(float)builder.downsample_[1] ,builder.inputPadding_, builder.outputPadding_, builder.downsample_[0], builder.downsample_[1], builder.upsample_[0], builder.upsample_[1])) {
@@ -61,8 +67,7 @@ DeepLayerBase::DeepLayerBase(const GPULayerBuilder& builder, int layerNumber) : 
  * @copydoc GPULayerBase::~GPULayerBase
  */
 DeepLayerBase::~DeepLayerBase() {
-    delete tiler_;
-    tiler_ = nullptr;
+    FNET_DEL_AND_CLEAR(tiler_);
 }
 
 
@@ -82,7 +87,7 @@ void DeepLayerBase::writeResult(const char *fileName,bool includePadding) {
         lheight += 2*inputPadding_;
     }
 #ifndef FYUSENET_USE_WEBGL
-    FILE *out = fopen(fileName,"w");
+    FILE *out = fopen(fileName,"wb");
     if (out) {
 #else
     uint8_t * download = new uint8_t[lwidth * lheight * outputChannels_];
@@ -95,7 +100,7 @@ void DeepLayerBase::writeResult(const char *fileName,bool includePadding) {
         for (int fb = 0 ; fb < numFBOs(); fb++ ) {
             memset(data, 0, owidth*oheight*PIXEL_PACKING*sizeof(float));
             FBO *fbo = getFBO(fb);
-            fbo->writeToMemory<float,GL_FLOAT>(data,PIXEL_PACKING,owidth*oheight*PIXEL_PACKING*sizeof(float));
+            fbo->writeToMemory<float,GL_FLOAT>(data,PIXEL_PACKING, (GLsizei)(owidth * oheight * PIXEL_PACKING * sizeof(float)));
             for (int ty=0; ty< tiler_->numOutputTiles(DeepTiler::VERTICAL); ty++) {
                 for (int tx=0; tx < tiler_->numOutputTiles(DeepTiler::HORIZONTAL); tx++) {
                     int rem = ((outputChannels_-layernum)>PIXEL_PACKING) ? PIXEL_PACKING : outputChannels_-layernum;
@@ -199,14 +204,17 @@ void DeepLayerBase::copyResult(float *memory, bool includePadding) {
  *  - definition of \c PRE_G71 preprocessor item in case an older Mali GPU has been found (T-series)
  */
 size_t DeepLayerBase::shaderPreprocessing(char *preproc, size_t maxChars) {
-    ssize_t mc = (ssize_t)handlePreprocFlags(flags_, preproc, maxChars);
+#if defined(WIN32) || defined(WIN64)
+        using ssize_t = int64_t;
+#endif
+    ssize_t mc = (ssize_t)preprocessor_.generatePreprocessorPreamble(flags_, preproc, maxChars);
     if (mali_) {
         strncat(preproc, "#define MALI\n", mc);
-        mc = maxChars-strlen(preproc);  // ouch
+        mc = (ssize_t)maxChars - (ssize_t)strlen(preproc);  // ouch
     }
     if (preG71_) {
         strncat(preproc, "#define PRE_G71\n", mc);
-        mc = maxChars-strlen(preproc);  // ouch
+        mc = (ssize_t)maxChars - (ssize_t)strlen(preproc);  // ouch
     }
     return (size_t)mc;
 }
@@ -217,7 +225,7 @@ size_t DeepLayerBase::shaderPreprocessing(char *preproc, size_t maxChars) {
  */
 void DeepLayerBase::setupFBOs() {
     if (outputTextures_.empty()) THROW_EXCEPTION_ARGS(FynException,"No output texture set in layer %s",getName().c_str());
-    FBO * fbo = new FBO(context_,viewport_[0],viewport_[1],outputTextures_.at(0));
+    FBO * fbo = new FBO(context_, viewport_[0], viewport_[1], outputTextures_.at(0));
     fbo->unbind();
     framebuffers_.push_back(fbo);
     outputChanged_=false;
@@ -237,10 +245,21 @@ void DeepLayerBase::updateFBOs() {
     outputChanged_=false;
 }
 
+/**
+ * @copydoc GPULayerBase::getInputOrder
+ */
+BufferSpec::order DeepLayerBase::getInputOrder(int port) const {
+    return BufferSpec::order::GPU_DEEP;
+}
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+/**
+ * @copydoc GPULayerBase::getOutputOrder
+ */
+BufferSpec::order DeepLayerBase::getOutputOrder(int port) const {
+    return BufferSpec::order::GPU_DEEP;
+}
+
+
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

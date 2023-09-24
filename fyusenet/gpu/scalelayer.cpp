@@ -9,6 +9,8 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include <cstring>
 #include <cassert>
 
@@ -19,9 +21,8 @@
 #include "../common/logging.h"
 #include "scalelayer.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -33,7 +34,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&,int)
  */
 ScaleLayer::ScaleLayer(const ScaleLayerBuilder& builder, int layerNumber) :
       FunctionLayer((const GPULayerBuilder &)builder, layerNumber) {
@@ -164,7 +165,7 @@ void ScaleLayer::setupShaders() {
     char preproc[1024] = {0};
     for (int i=1; i <= maxRenderTargets_; i++) {
         snprintf(preproc, sizeof(preproc), "#define NUM_LANES %d\n",i);
-        handlePreprocFlags(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
+        preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
         shaders_[i-1] = compileShader(preproc);
         shaders_[i-1]->bind();
         shaderStates_[i-1] = initShader(shaders_[i-1],i);
@@ -240,8 +241,6 @@ void ScaleLayer::rotate(int degrees) {
 }
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

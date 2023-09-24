@@ -5,8 +5,9 @@
 // Creator: Martin Wawro
 // SPDX-License-Identifier: MIT
 //--------------------------------------------------------------------------------------------------
-#ifndef _I_FYN_DEEPSIGMOIDLAYER_H
-#define _I_FYN_DEEPSIGMOIDLAYER_H
+
+#pragma once
+
 //--------------------------------------------------------------------------------------------------
 
 //--------------------------------------- System Headers -------------------------------------------
@@ -26,10 +27,7 @@
 #include "../scalelayerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 
 /**
@@ -52,15 +50,15 @@ class DeepSigmoidLayer : public DeepFunctionLayer {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;    
+    void cleanup() override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupShaders() override;
-    virtual void renderChannelBatch() override;
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
+    void setupShaders() override;
+    void renderChannelBatch() override;
+    void beforeRender() override;
+    void afterRender() override;
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
@@ -68,10 +66,7 @@ class DeepSigmoidLayer : public DeepFunctionLayer {
     unistateptr shaderState_;     //!< UniformState object for the #shader_
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
-#endif
+} // fyusion::fyusenet::gpu::deep namespace
+
 
 // vim: set expandtab ts=4 sw=4:

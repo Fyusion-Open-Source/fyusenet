@@ -35,7 +35,7 @@
 //------------------------------------- Public Declarations ----------------------------------------
 
 using fyusion::fyusenet::cpu::CPUBuffer;
-using fyusion::fyusenet::cpu::CPUBufferShape;
+using fyusion::fyusenet::BufferShape;
 
 namespace fyusion {
 
@@ -43,8 +43,7 @@ namespace opengl {
   class PBO;
 }
 
-namespace fyusenet {
-namespace gpu {
+namespace fyusenet::gpu {
 
 /**
  * @brief Download layer from GPU to CPU for shallow tensor data
@@ -96,25 +95,25 @@ class DownloadLayer : public GPULayerBase, public cpu::CPULayerInterface, public
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     DownloadLayer(const UpDownLayerBuilder& builder, int layerNo);
-    virtual ~DownloadLayer();
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void setup() override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual void forward(uint64_t sequence) override;
+    void setup() override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
 #ifdef FYUSENET_MULTITHREADING
-    virtual void asyncForward(uint64_t sequenceNo, const std::function<void(uint64_t)>& callback) override;
+    virtual void asyncForward(uint64_t sequenceNo, StateToken *token, const std::function<void(uint64_t)>& callback) override;
 #endif
-    virtual void updateFBOs() override;
-    virtual void addOutputBuffer(CPUBuffer *buf, int port=0) override;
-    virtual bool hasOutputBuffer(int port=0) const override;
-    virtual CPUBuffer * getOutputBuffer(int port=0) const override;
-    virtual void clearOutputBuffers(int port = -1) override;
-    virtual void wait(uint64_t sequenceNo) override;
+    void updateFBOs() override;
+    void addCPUOutputBuffer(CPUBuffer *buf, int port=0) override;
+    [[nodiscard]] bool hasCPUOutputBuffer(int port=0) const override;
+    [[nodiscard]] CPUBuffer * getCPUOutputBuffer(int port=0) const override;
+    void clearCPUOutputBuffers(int port = -1) override;
+    void wait(uint64_t sequenceNo) override;
     void updateOutputBuffer(CPUBuffer *buf, int port=0);
+    [[nodiscard]] BufferShape getOutputShape(int port) const override;
 
     /**
      * @brief Check if download layer is asynchronous
@@ -122,7 +121,7 @@ class DownloadLayer : public GPULayerBase, public cpu::CPULayerInterface, public
      * @retval true if layer is asynchronous
      * @retval false otherwise
      */
-    virtual bool isAsync() const override {
+    [[nodiscard]] bool isAsync() const override {
         return async_;
     }
 
@@ -135,21 +134,21 @@ class DownloadLayer : public GPULayerBase, public cpu::CPULayerInterface, public
      *
      * As this layer does not support input buffers, this function will always throw an exception
      */
-    virtual void clearInputBuffers(int port = -1) override {
+    void clearCPUInputBuffers(int port = -1) override {
         THROW_EXCEPTION_ARGS(FynException,"Not supported for download layer");
     }
 
     /**
-     * @copydoc cpu::CPULayerInterface::setInputBuffer
+     * @copydoc cpu::CPULayerInterface::setCPUInputBuffer
      */
-    virtual void setInputBuffer(CPUBuffer * buf, int port) override {
+    void setCPUInputBuffer(CPUBuffer * buf, int port) override {
         THROW_EXCEPTION_ARGS(FynException,"Not supported for download layer");
     }
 
     /**
-     * @copydoc cpu::CPULayerInterface::setResidualBuffer
+     * @copydoc cpu::CPULayerInterface::setCPUResidualBuffer
      */
-    virtual void setResidualBuffer(CPUBuffer * buf) override {
+    void setCPUResidualBuffer(CPUBuffer * buf) override {
         THROW_EXCEPTION_ARGS(FynException,"Not supported for download layer");
     }
 
@@ -163,7 +162,7 @@ class DownloadLayer : public GPULayerBase, public cpu::CPULayerInterface, public
      *
      * @throw FynException always
      */
-    virtual CPUBuffer * getInputBuffer(int port=0) const override {
+    [[nodiscard]] CPUBuffer * getCPUInputBuffer(int port=0) const override {
         THROW_EXCEPTION_ARGS(FynException,"Input buffers are not supported for this layer type");
     }
 
@@ -171,18 +170,25 @@ class DownloadLayer : public GPULayerBase, public cpu::CPULayerInterface, public
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupFBOs() override;
+    void setupFBOs() override;
     ManagedPBO pboBlit();
+    static BufferSpec::sizedformat bufferFormat(BufferSpec::dtype type, int packing);
+    static bool isInt(BufferSpec::dtype type);
 #ifdef FYUSENET_MULTITHREADING
     void readoutPBO(opengl::AsyncPool::GLThread& myThread, opengl::ManagedPBO& pbo, GLsync sync, uint64_t sequence, cpu::CPUBuffer * target, const std::function<void(uint64_t)> & callback);
 #endif
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
-    uint8_t bytesPerChan_ = 4;                          //!< Number of bytes per channel (defaults to 4 bytes for a single-precision floating point number)
-    bool async_ = false;                                //!< Indicator if this is an asynchronous download layer
-    int maxRenderTargets_ = 1;                          //! Maximum number of render targets for a single run
-    std::vector<CPUBuffer *> outputs_;                  //!< Output CPU buffer(s)
+    int bytesPerChan_ = 4;                                //!< Number of bytes per channel (defaults to 4 bytes for a single-precision floating point number)
+    bool async_ = false;                                  //!< Indicator if this is an asynchronous download layer
+    int maxRenderTargets_ = 1;                            //! Maximum number of render targets for a single run
+    int maxSequence_ = 0;
+    int sequenceLen_ = 0;
+    int chanPacking_ = PIXEL_PACKING;                     //!< Element packing mode for texture data
+    std::vector<CPUBuffer *> outputs_;                    //!< Output CPU buffer(s)
+    BufferSpec::dtype dataType_ = TEXTURE_TYPE_DEFAULT;   //!< Input data type for this layer
+
     /**
      * Optional user callback function for asynchronous operation
      */
@@ -198,8 +204,7 @@ class DownloadLayer : public GPULayerBase, public cpu::CPULayerInterface, public
 #endif
 };
 
-} // gpu namespace
-} // fyusenet namespace
+} // fyusenet::gpu namespace
 } // fyusion namespace
 
 // vim: set expandtab ts=4 sw=4:

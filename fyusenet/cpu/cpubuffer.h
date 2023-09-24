@@ -22,9 +22,11 @@
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
+#ifdef FYUSENET_GL_BACKEND
 #include "../gl/gl_sys.h"
+#endif
 #include "../common/fynexception.h"
-#include "cpubuffershape.h"
+#include "../base/buffershape.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
 namespace fyusion {
@@ -34,6 +36,8 @@ namespace opengl {
 }
 
 namespace fyusenet {
+
+class BufferShape;
 
 namespace gpu {
     class DownloadLayer;
@@ -48,7 +52,7 @@ namespace cpu {
 /**
  * @brief General CPU buffer class to wrap tensor data accessible by CPU
  *
- * This class is always used in conjunction with a CPUBufferShape object, which assigns structural
+ * This class is always used in conjunction with a BufferShape object, which assigns structural
  * information to the buffer. As FyuseNet is not aimed at running too much things on the CPU, the
  * CPU buffers main functionality is to provide a means of access to texture data, either by
  * first downloading into main memory directly in a synchronized fashion, or by downloading into
@@ -67,14 +71,14 @@ namespace cpu {
  * source PBO as soon as possible, but this may change in the future.
  */
 class CPUBuffer {
-    friend class CPUBufferShape;
+    friend class fyusion::fyusenet::BufferShape;
     friend class gpu::DownloadLayer;
     friend class gpu::deep::DeepDownloadLayer;
  public:
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
-    CPUBuffer(const CPUBufferShape& shape);
+    explicit CPUBuffer(const BufferShape& shape);
     CPUBuffer(const CPUBuffer&) = delete;
     CPUBuffer& operator=(const CPUBuffer&) = delete;
     ~CPUBuffer();
@@ -115,9 +119,9 @@ class CPUBuffer {
     /**
      * @brief Retrieve shape for this buffer
      *
-     * @return CPUBufferShape instance that stores the buffer shape
+     * @return BufferShape instance that stores the buffer shape
      */
-    const CPUBufferShape & shape() const {
+    const BufferShape & shape() const {
         return shape_;
     }
 
@@ -227,8 +231,9 @@ class CPUBuffer {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    bool readFromPBO(opengl::PBO *pbo, CPUBufferShape::type type, uint64_t sequenceNo);
-    static GLuint typeToGLType(CPUBufferShape::type type);
+#ifdef FYUSENET_GL_BACKEND
+    bool readFromPBO(opengl::PBO *pbo, BufferShape::type type, uint64_t sequenceNo, size_t bytes=0);
+#endif
     template<typename T>
     void shallowToChannelWise(const T *src, T *tgt, int channelOffset=0) const;
     template<typename T>
@@ -237,17 +242,20 @@ class CPUBuffer {
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
-    CPUBufferShape shape_;                    //!< Shape for this buffer
+    BufferShape shape_;                    //!< Shape for this buffer
     void * memory_ = nullptr;                 //!< Pointer to buffer memory
     uint64_t sequenceNo_ = 0;                 //!< Sequence number that the contents of this buffer are associated to (optional)
     /**
      * Lock/Indicator if buffer is mapped
      */    
     mutable std::mutex mapped_;               // TODO (mw) think about using R/W locks here instead
+
+#ifdef FYUSENET_GL_BACKEND
     /**
      * Deep-tensor tile computation used in conversion code
      */
     mutable gpu::deep::DeepTiler *tiler_ = nullptr;
+#endif
 };
 
 
@@ -315,7 +323,7 @@ extern template void CPUBuffer::deepToChannelWise<int16_t>(const int16_t *src, i
 extern template void CPUBuffer::deepToChannelWise<int8_t>(const int8_t *src, int8_t *tgt) const;
 #endif
 
-extern template void CPUBuffer::shallowToChannelWise<float>(const float * src, float *tgt, int channelOffset=0) const;
+extern template void CPUBuffer::shallowToChannelWise<float>(const float * src, float *tgt, int channelOffset) const;
 #ifndef FYUSENET_CPU_FLOAT_ONLY
 extern template void CPUBuffer::shallowToChannelWise<uint32_t>(const uint32_t * src, uint32_t *tgt, int channelOffset=0) const;
 extern template void CPUBuffer::shallowToChannelWise<uint16_t>(const uint16_t * src, uint16_t *tgt, int channelOffset=0) const;
