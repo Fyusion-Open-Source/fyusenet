@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------------------------------
 // FyuseNet                                                               (c) Fyusion Inc. 2016-2022
 //--------------------------------------------------------------------------------------------------
-// Explicit Add Layer
+// Explicit Add/Sub Layer
 // Creator: Martin Wawro
 // SPDX-License-Identifier: MIT
 //--------------------------------------------------------------------------------------------------
@@ -14,12 +14,8 @@
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "addsublayer.h"
-#include "../gl/glexception.h"
-#include "../gl/glinfo.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -31,7 +27,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 AddSubLayer::AddSubLayer(const GPULayerBuilder & builder, int layerNumber) :
     FunctionLayer(builder, layerNumber) {
@@ -73,16 +69,16 @@ std::vector<BufferSpec> AddSubLayer::getRequiredInputBuffers() const {
         if (rem < PIXEL_PACKING) {
             // for input textures, we support textures with less than 4 channels (might be from upload)
             auto format = BufferSpec::formatByChannels(inputChannels_, TEXTURE_TYPE_DEFAULT);
-            result.push_back(BufferSpec(channel++, port, width_+2*inputPadding_, height_ + 2*inputPadding_,
-                                        format.first, format.second, TEXTURE_TYPE_DEFAULT,
-                                        BufferSpec::FUNCTION_SOURCE));
+            result.emplace_back(channel++, port, width_+2*inputPadding_, height_ + 2*inputPadding_,
+                                format.first, format.second, TEXTURE_TYPE_DEFAULT,
+                                BufferSpec::FUNCTION_SOURCE);
             if (port == 0) texturesPerPort_++;
         } else {
             while (rem > 0) {
-                result.push_back(BufferSpec(channel++, port,
-                                            width_ + 2*inputPadding_, height_ + 2*inputPadding_,
-                                            TEXTURE_IFORMAT_4,TEXTURE_FORMAT_4,TEXTURE_TYPE_DEFAULT,
-                                            BufferSpec::FUNCTION_SOURCE));
+                result.emplace_back(channel++, port,
+                                    width_ + 2*inputPadding_, height_ + 2*inputPadding_,
+                                    TEXTURE_IFORMAT_4,TEXTURE_FORMAT_4,TEXTURE_TYPE_DEFAULT,
+                                    BufferSpec::FUNCTION_SOURCE);
                 rem -= PIXEL_PACKING;
                 if (port == 0) texturesPerPort_++;
             }
@@ -145,7 +141,7 @@ void AddSubLayer::setupShaders() {
     char preproc[1024] = {0};
     for (int rt=1; rt <= maxRenderTargets_; rt++) {
         snprintf(preproc, sizeof(preproc), "#define NUM_LANES %d\n#define SIGNED %d\n",rt, (negative_) ? 1 : 0);
-        handlePreprocFlags(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
+        preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
         shaders_[rt-1] = compileShader(preproc);
         unistateptr state = UniformState::makeShared(shaders_[rt-1]);
         for (int j=0; j < rt ; j++) {
@@ -181,8 +177,6 @@ programptr AddSubLayer::compileShader(const char *preproc) {
 
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

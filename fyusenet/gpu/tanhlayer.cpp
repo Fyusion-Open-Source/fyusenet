@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------------------------------
 // FyuseNet                                                               (c) Fyusion Inc. 2016-2022
 //--------------------------------------------------------------------------------------------------
-// Isolated/Explicit tanh Layer Class
+// Isolated/Explicit tanh Layer
 // Creator: Martin Wawro
 // SPDX-License-Identifier: MIT
 //--------------------------------------------------------------------------------------------------
@@ -31,7 +31,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 TanhLayer::TanhLayer(const GPULayerBuilder & builder, int layerNumber) : SigmoidLayer(builder, layerNumber) {
     if (builder.getFlags() & LayerFlags::POST_BATCHNORM) THROW_EXCEPTION_ARGS(FynException,"Batchnorm not supported fo this layer");
@@ -48,7 +48,7 @@ void TanhLayer::setupShaders() {
     char preproc[1024] = {0};
     for (int i=1; i <= maxRenderTargets_; i++) {
         snprintf(preproc, sizeof(preproc), "#define NUM_LANES %d\n", i);
-        handlePreprocFlags(flags_, preproc, sizeof(preproc) - strlen(preproc)-1);
+        preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc) - strlen(preproc)-1);
         shaders_[i-1] = compileShaderPair("shaders/default.vert", "shaders/tanh.frag", preproc, typeid(this));
         try {
             shaders_[i-1]->bindAttributeLocation("attributes0",0);

@@ -28,9 +28,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Convert shallow tensor format to deep tensor format
@@ -47,16 +45,16 @@ class Shallow2DeepLayer : public deep::DeepLayerBase {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     Shallow2DeepLayer(const GPULayerBuilder & builder, int layerNumber);
-    virtual ~Shallow2DeepLayer();
+    ~Shallow2DeepLayer() override = default;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void forward(uint64_t sequence = 0) override;
-    virtual void setup() override;
-    virtual void cleanup() override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
+    void setup() override;
+    void cleanup() override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
@@ -78,9 +76,6 @@ class Shallow2DeepLayer : public deep::DeepLayerBase {
 };
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
-
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

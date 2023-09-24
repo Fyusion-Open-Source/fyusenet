@@ -62,14 +62,14 @@ class DeepDepthwiseConvLayer3x3 : public DeepDepthwiseConvLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void forward(uint64_t sequence) override;
-    virtual void cleanup() override;
+    void forward(uint64_t sequence, StateToken * state) override;
+    void cleanup() override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupNetworkPolygons(VAO *vao) override;
-    virtual void compileConvolutionShaders(const char *preproc) override;
+    void setupNetworkPolygons(VAO *vao) override;
+    void compileConvolutionShaders(const char *preproc) override;
     unistateptr initShader(programptr shader);
 
     // ------------------------------------------------------------------------

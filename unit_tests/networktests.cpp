@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 #include <fyusenet/fyusenet.h>
 #include "gltesthelpers.h"
+#include "layertestbase.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
 
@@ -81,24 +82,25 @@ class TestNet01 : public fyusion::fyusenet::NeuralNetwork {
 
  protected:
 
-     virtual void initializeWeights(fyusion::fyusenet::CompiledLayers& layers) override {
-         float filter[3*3] = {-1,1,-1,1,0,1,-1,1,-1};
-         float wb[3*3*4*8+8]={0};         
-         using namespace fyusion::fyusenet;
-         int wbidx=8;
-         for (int o=0; o<8; o++) {
-             for (int y=0; y<3; y++) {
-                 for (int x=0; x<3; x++) {
-                     float v = filter[y*3+x];
-                     for (int i=0; i<4; i++) wb[wbidx++] = v;
-                     assert(wbidx < (int)sizeof(wb));
-                 }
-             }
-         }
-         ConvLayerInterface * layer = dynamic_cast<ConvLayerInterface *>(layers["conv3x3"]);
-         ASSERT_NE(layer, nullptr);
-         layer->loadWeightsAndBiases(wb, 0);
-     }
+    virtual void initializeWeights(fyusion::fyusenet::CompiledLayers& layers) override {
+        float filter[3*3] = {-1,1,-1,1,0,1,-1,1,-1};
+        float wb[3*3*4*8+8]={0};
+        using namespace fyusion::fyusenet;
+        int wbidx=8;
+        for (int o=0; o<8; o++) {
+            for (int y=0; y<3; y++) {
+                for (int x=0; x<3; x++) {
+                    float v = filter[y*3+x];
+                    for (int i=0; i<4; i++) wb[wbidx++] = v;
+                    assert(wbidx < (int)sizeof(wb));
+                }
+            }
+        }
+        auto * layer = layers["conv3x3"];
+        ASSERT_NE(layer, nullptr);
+        SingleWeightProvider wsource(wb + 8, wb);
+        layer->loadParameters(&wsource);
+    }
 
     void setInputOutput() {
         using namespace fyusion::fyusenet;
@@ -111,14 +113,14 @@ class TestNet01 : public fyusion::fyusenet::NeuralNetwork {
         ASSERT_EQ(specs.size(), 1u);
         const BufferSpec & inspec = specs[0];
 
-        inputBuffer = new CPUBuffer(CPUBufferShape(inspec.height_, inspec.width_, inspec.channels_, 0, CPUBufferShape::FLOAT32, CPUBufferShape::order::GPU_SHALLOW));
+        inputBuffer = new CPUBuffer(BufferShape(inspec.height_, inspec.width_, inspec.channels_, 0, BufferShape::type::FLOAT32, BufferShape::order::GPU_SHALLOW));
         float * in = inputBuffer->map<float>();
         ASSERT_NE(nullptr, in);
         for (int i=0; i < inspec.width_*inspec.height_*inspec.channels_; i++) in[i] = 1.0f;
         inputBuffer->unmap();
 
         ASSERT_NE(dynamic_cast<cpu::CPULayerInterface *>(layer), nullptr);
-        (dynamic_cast<cpu::CPULayerInterface *>(layer))->setInputBuffer(inputBuffer, 0);
+        (dynamic_cast<cpu::CPULayerInterface *>(layer))->setCPUInputBuffer(inputBuffer, 0);
 
         layer = layers["download"];
         ASSERT_NE(layer, nullptr);
@@ -126,14 +128,14 @@ class TestNet01 : public fyusion::fyusenet::NeuralNetwork {
         ASSERT_EQ(specs.size(), 1ul);
         const BufferSpec & outspec = specs[0];
 
-        outputBuffer = new CPUBuffer(CPUBufferShape(outspec.height_, outspec.width_, outspec.channels_, 0, CPUBufferShape::FLOAT32, CPUBufferShape::order::GPU_SHALLOW));
+        outputBuffer = new CPUBuffer(BufferShape(outspec.height_, outspec.width_, outspec.channels_, 0, BufferShape::type::FLOAT32, BufferShape::order::GPU_SHALLOW));
         float * out = outputBuffer->map<float>();
         ASSERT_NE(nullptr, in);
         for (int i=0; i < outspec.width_*outspec.height_*outspec.channels_; i++) out[i] = 1.0f;
         outputBuffer->unmap();
 
         ASSERT_NE(dynamic_cast<cpu::CPULayerInterface *>(layer), nullptr);
-        (dynamic_cast<cpu::CPULayerInterface *>(layer))->addOutputBuffer(outputBuffer, 0);
+        (dynamic_cast<cpu::CPULayerInterface *>(layer))->addCPUOutputBuffer(outputBuffer, 0);
     }
 
     virtual fyusion::fyusenet::CompiledLayers buildLayers() override {

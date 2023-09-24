@@ -22,12 +22,10 @@
 #include "poolinglayer.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
- * @brief Max-pooling layer for shallwo tensor data
+ * @brief Max-pooling layer for shallow tensor data
  *
  * This class implement a 2D max-pooling layer for shallow tensor data. Maximum pooling simply
  * computes the maximum over all values inside a defined window along the spatial domain of a
@@ -51,16 +49,14 @@ class MaxPoolLayer : public PoolingLayer {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
-    virtual void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
-    virtual unistateptr initShader(programptr shader,int renderTargets) override;
-    virtual programptr compileShader(const char *preproc) override;
+    void beforeRender() override;
+    void afterRender() override;
+    void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
+    unistateptr initShader(programptr shader,int renderTargets) override;
+    programptr compileShader(const char *preproc) override;
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

@@ -33,7 +33,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepPoolingLayer::DeepPoolingLayer(const PoolLayerBuilder& builder,int layerNumber) : DeepLayerBase((const GPULayerBuilder &)builder,layerNumber) {
     if (builder.global_) {
@@ -86,7 +86,7 @@ std::vector<BufferSpec> DeepPoolingLayer::getRequiredInputBuffers() const {
     std::vector<BufferSpec> result;
     result.push_back(BufferSpec(0, 0, tiler_->getInputTextureWidth(), tiler_->getInputTextureHeight(),
                                 TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                BufferSpec::POOLING_SOURCE).dataOrder(BufferSpec::order::GPU_DEEP));
+                                BufferSpec::FUNCTION_SOURCE).dataOrder(BufferSpec::order::GPU_DEEP));
     return result;
 }
 
@@ -98,7 +98,7 @@ std::vector<BufferSpec> DeepPoolingLayer::getRequiredOutputBuffers() const {
     std::vector<BufferSpec> result;
     result.push_back(BufferSpec(0 ,0, viewport_[0], viewport_[1],
                                 TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                BufferSpec::POOLING_DEST).dataOrder(BufferSpec::order::GPU_DEEP));
+                                BufferSpec::FUNCTION_DEST).dataOrder(BufferSpec::order::GPU_DEEP));
     return result;
 }
 
@@ -106,13 +106,13 @@ std::vector<BufferSpec> DeepPoolingLayer::getRequiredOutputBuffers() const {
 /**
  * @copydoc LayerBase::forward
  */
-void DeepPoolingLayer::forward(uint64_t sequence) {
+void DeepPoolingLayer::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);

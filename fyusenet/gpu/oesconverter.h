@@ -22,9 +22,7 @@
 #include "../base/bufferspec.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 #ifdef FYUSENET_USE_EGL
 
@@ -66,8 +64,6 @@ class OESConverter : public FunctionLayer {
 
 #endif
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

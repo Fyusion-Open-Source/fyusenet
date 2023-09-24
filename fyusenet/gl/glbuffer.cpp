@@ -14,15 +14,14 @@
 
 #include "glbuffer.h"
 #include "glexception.h"
-#include "../common/logging.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
 
 
 //-------------------------------------- Local Definitions -----------------------------------------
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 
 /*##################################################################################################
 #                                   P U B L I C  F U N C T I O N S                                 #
@@ -83,7 +82,9 @@ void GLBuffer::bind() {
     // NOTE (mw) we do not assert a specific context here, since buffer objects may be shared
     // between (shared) contexts and we assume that we only pass those buffers between shared
     // contexts
-    if (bound_) FNLOGW("Buffer was already bound, please check your code if you missed an unbind");
+    if (bound_) {
+        FNLOGW("Buffer was already bound, please check your code if you missed an unbind");
+    }
     glGetError();
 #endif
     bind(target_);
@@ -148,6 +149,7 @@ void GLBuffer::unbind(GLenum target) {
 
 /**
  * @brief Write data to buffer object
+ *
  * @param data Pointer to data that should be written to the buffer object, \c nullptr will clear
  *             the buffer
  * @param dataSize Number of bytes to write into the buffer
@@ -159,12 +161,12 @@ void GLBuffer::unbind(GLenum target) {
  *
  * @see https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glBufferData.xhtml
  */
-void GLBuffer::setBufferData(void *data,int dataSize,GLenum usage) {
+void GLBuffer::setBufferData(void *data, int dataSize, GLenum usage) {
     if (!bound_) bind();
 #ifdef DEBUG
     glGetError();
 #endif
-    glBufferData(target_,dataSize,data,usage);
+    glBufferData(target_, dataSize, data, usage);
 #ifdef DEBUG
     GLenum err = glGetError();
     if (err != GL_NO_ERROR) THROW_EXCEPTION_ARGS(GLException,"Cannot set buffer data for buffer %d target 0x%X (glerr=0x%X)",handle_,target_,err);
@@ -189,7 +191,6 @@ void GLBuffer::genBuffer() {
     if (handle_ == 0) THROW_EXCEPTION_ARGS(GLException,"Cannot generate buffer object handle");
 }
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
 
 // vim: set expandtab ts=4 sw=4:

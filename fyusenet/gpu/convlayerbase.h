@@ -19,14 +19,11 @@
 #include "gfxcontextlink.h"
 #include "convlayerbuilder.h"
 #include "../base/bufferspec.h"
-#include "../base/convlayerinterface.h"
 #include "gpulayerbase.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Base class for (shallow) 2D convolution layers running on the GPU
@@ -40,20 +37,20 @@ namespace gpu {
  *
  * @see vanilla::ConvLayerBase
  */
-class ConvLayerBase : public GPULayerBase, public ConvLayerInterface {
+class ConvLayerBase : public GPULayerBase {
  public:
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     ConvLayerBase(const ConvLayerBuilder & builder, int layerNumber);
     ConvLayerBase(const GPULayerBuilder & builder, int layerNumber);
-    virtual ~ConvLayerBase();
+    ~ConvLayerBase() override = default;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
-
+    void cleanup() override;
+    void loadParameters(const ParameterProvider * weights) override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
@@ -76,8 +73,6 @@ class ConvLayerBase : public GPULayerBase, public ConvLayerInterface {
     int dilation_[2] = {1,1};       //!< Dilation per spatial dimension (for a trous convolutions), 1 means no dilation / use the direct neighbor
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

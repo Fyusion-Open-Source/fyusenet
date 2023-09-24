@@ -14,7 +14,7 @@ __author__ = "Martin Wawro"
 
 
 import sys,datetime,platform
-from optparse import OptionParser
+from argparse import ArgumentParser
 
 VERBOSE=False
 PREFIX=None
@@ -95,45 +95,41 @@ def preprocess(inFileName,outFileName):
       print("Writing file %s ..." % outFileName)
     out = open(outFileName,"w")
     writePreamble(out,inFileName)
-    symbol = generateSymbol(inFileName);
-    writeShader(out,shader,symbol)
+    symbol = generateSymbol(inFileName)
+    writeShader(out, shader, symbol)
     out.close()
     return True
   except IOError as ex:
-    print("Unable to open file %s for writing" % fileName)
+    print("Unable to open file %s for writing" % outFileName)
     return False
 
 
 
 if __name__ == "__main__":
 
-  parser = OptionParser(usage = "%prog [options] <inputshader> <outputfile>",
-                        description = "Preprocessor for GLSL shaders to be included in a C/C++ binary")
+  parser = ArgumentParser(description = "Preprocessor for GLSL shaders to be included in a C/C++ binary")
 
-  parser.add_option("-v","--verbose",action = "store_true", dest="verbose", help="Verbose output")
-  parser.add_option("-p","--prefix",action = "store", dest="prefix", help="Set shader path prefix (will be stripped from symbols)")
-  parser.add_option("-n","--namespace",action = "store", dest="prefix", help="Set namespace of ShaderResource object")
-  parser.add_option("-i","--includedir",action = "store", dest="headerprefix", help="Add include directory prefix to include statement for shaderresource.h")
+  parser.add_argument("-v","--verbose",action = "store_true", dest="verbose", help="Verbose output")
+  parser.add_argument("-p","--prefix",action = "store", dest="prefix", help="Set shader path prefix (will be stripped from symbols)")
+  parser.add_argument("-n","--namespace",action = "store", dest="prefix", help="Set namespace of ShaderResource object")
+  parser.add_argument("-i","--includedir",action = "store", dest="headerprefix", help="Add include directory prefix to include statement for shaderresource.h")
+  parser.add_argument("input_file", type=str, help="Path to input file.")
+  parser.add_argument("output_file", type=str, help="Path to output file.")
   parser.set_defaults(verbose=False)
   parser.set_defaults(prefix=None)
   parser.set_defaults(namespace="fyusion::opengl")
   parser.set_defaults(headerprefix=None)
 
-  options, args = parser.parse_args()
+  args = parser.parse_args()
 
-  if len(args) < 2:
-    parser.error("Insufficient arguments") 
+  VERBOSE = args.verbose
+  PREFIX = args.prefix.strip()
+  NAMESPACE = args.namespace.strip()
+  HEADERPREFIX = args.headerprefix.strip()
+
+  if not preprocess(args.input_file,args.output_file):
+    print("*** Shader preprocessing of %s failed" % args.input_file)
     sys.exit(1)
 
-  VERBOSE = options.verbose
-  PREFIX = options.prefix.strip()
-  NAMESPACE = options.namespace.strip()
-  HEADERPREFIX = options.headerprefix.strip()
-
-  if not preprocess(args[0],args[1]):
-    print("*** Shader preprocessing of %s failed" % args[0])
-    sys.exit(1)
-  sys.exit(0)
-    
-# vim: set ts=2 sw=2 :
+# vim: set ts=2 sw=2:
 

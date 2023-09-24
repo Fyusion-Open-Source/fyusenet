@@ -58,21 +58,22 @@ class DeepLayerBase : public GPULayerBase {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
+    explicit DeepLayerBase(const GPULayerBuilder& builder);
     DeepLayerBase(const GPULayerBuilder& builder,int layerNumber);
-    virtual ~DeepLayerBase();
+    ~DeepLayerBase() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void writeResult(const char *fileName, bool includePadding) override;
-    virtual void copyResult(float *memory, bool includePadding=false) override;
+    void writeResult(const char *fileName, bool includePadding) override;
+    void copyResult(float *memory, bool includePadding) override;
 
     /**
      * @brief Obtain pointer to data tiler that is used for this object
      *
      * @return Pointer to DeepTiler object that is used to compute the tiling for this layer
      */
-    DeepTiler * getTiler() const {
+    [[nodiscard]] DeepTiler * getTiler() const {
         return tiler_;
     }
 
@@ -83,6 +84,8 @@ class DeepLayerBase : public GPULayerBase {
     virtual void setupFBOs() override;
     virtual void updateFBOs() override;
     virtual size_t shaderPreprocessing(char *preproc, size_t maxChars);
+    [[nodiscard]] BufferSpec::order getInputOrder(int port) const override;
+    [[nodiscard]] BufferSpec::order getOutputOrder(int port) const override;
 
     // ------------------------------------------------------------------------
     // Member variables

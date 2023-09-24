@@ -29,6 +29,7 @@ namespace fyusion {
 
 namespace opengl {
     class GLContext;
+    class ScopedTexturePool;
 }
 
 namespace fyusenet {
@@ -80,9 +81,21 @@ class GfxContextManager {
     fyusenet::GfxContextLink createDerived(const fyusenet::GfxContextLink& ctx);
     fyusenet::GfxContextLink getDerived(const fyusenet::GfxContextLink& ctx, int derivedIndex) const;
     void setupPBOPools(int readPoolSize, int writePoolSize);
+    void setupTexturePool();
     static std::shared_ptr<GfxContextManager> instance(int device=0);
     static void tearDown();
     void cleanup();
+
+    /**
+     * @brief Retrieve pointer to texture pool (if it exists)
+     *
+     * @return Pointer to BasicTexturePool instance or \c nullptr if no pool exists
+     *
+     * @see setupTexturePool(), #texturePool_
+     */
+    opengl::ScopedTexturePool * texturePool() const {
+        return texturePool_;
+    }
 
     /**
      * @brief Retrieve pointer to read-type PBOPool instance for texture download
@@ -132,6 +145,7 @@ class GfxContextManager {
     opengl::GLContext * mainContext_ = nullptr;           //!< Pointer to main (first) OpenGL context
     opengl::PBOPool * pboReadPool_ = nullptr;             //!< Pointer to PBOPool used for reading/downloading textures
     opengl::PBOPool * pboWritePool_ = nullptr;            //!< Pointer to PBOPool used for writing/uploading textures
+    opengl::ScopedTexturePool * texturePool_ = nullptr;   //!< Pointer to optional texture pool
 
     /**
      * List of manager singletons, indexed by device ID (starting at 0)

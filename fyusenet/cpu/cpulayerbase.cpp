@@ -46,18 +46,9 @@ CPULayerBase::CPULayerBase(const LayerBuilder& builder, int layerNumber) : Layer
 
 
 /**
- * @brief Destructor
- *
- * Deallocates all (CPU) resources used (and owned) by the layer object.
+ * @copydoc CPULayerInterface::addCPUOutputBuffer
  */
-CPULayerBase::~CPULayerBase() {   
-}
-
-
-/**
- * @copydoc CPULayerInterface::addOutputBuffer
- */
-void CPULayerBase::addOutputBuffer(CPUBuffer * buf, int port) {
+void CPULayerBase::addCPUOutputBuffer(CPUBuffer * buf, int port) {
     assert(port >= 0);
     if ((int)outputs_.size() == port) outputs_.push_back(buf);
     else if ((int)outputs_.size() > port) outputs_[port] = buf;
@@ -69,9 +60,9 @@ void CPULayerBase::addOutputBuffer(CPUBuffer * buf, int port) {
 
 
 /**
- * @copydoc CPULayerInterface::setInputBuffer
+ * @copydoc CPULayerInterface::setCPUInputBuffer
  */
-void CPULayerBase::setInputBuffer(CPUBuffer * buf, int port) {
+void CPULayerBase::setCPUInputBuffer(CPUBuffer * buf, int port) {
     assert(port >= 0);
     if ((int)inputs_.size() == port) inputs_.push_back(buf);
     else if ((int)inputs_.size() > port) inputs_[port] = buf;
@@ -83,27 +74,27 @@ void CPULayerBase::setInputBuffer(CPUBuffer * buf, int port) {
 
 
 /**
- * @copydoc CPULayerInterface::clearInputBuffers
+ * @copydoc CPULayerInterface::clearCPUInputBuffers
  */
-void CPULayerBase::clearInputBuffers(int port) {
+void CPULayerBase::clearCPUInputBuffers(int port) {
     if (port == -1) inputs_.clear();
     else if ((int)inputs_.size() > port) inputs_[port] = nullptr;
 }
 
 
 /**
- * @copydoc CPULayerInterface::clearOutputBuffers
+ * @copydoc CPULayerInterface::clearCPUOutputBuffers
  */
-void CPULayerBase::clearOutputBuffers(int port) {
+void CPULayerBase::clearCPUOutputBuffers(int port) {
     if (port == -1) outputs_.clear();
     else if ((int)outputs_.size() > port) outputs_[port] = nullptr;
 }
 
 
 /**
- * @copydoc CPULayerInterface::setResidualBuffer
+ * @copydoc CPULayerInterface::setCPUResidualBuffer
  */
-void CPULayerBase::setResidualBuffer(CPUBuffer * buf) {
+void CPULayerBase::setCPUResidualBuffer(CPUBuffer * buf) {
     residuals_.push_back(buf);
 }
 

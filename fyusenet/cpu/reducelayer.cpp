@@ -15,9 +15,8 @@
 
 #include "reducelayer.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace cpu {
+namespace fyusion::fyusenet::cpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -29,7 +28,7 @@ namespace cpu {
 ##################################################################################################*/
 
 /**
- * @copydoc LayerBase::LayerBase
+ * @copydoc LayerBase::LayerBase(const LayerBuilder&, int)
  */
 ReduceLayer::ReduceLayer(const ReduceLayerBuilder &builder, int layerNumber):CPULayerBase((const LayerBuilder&)builder,layerNumber) {
     norm_ = builder.norm_;
@@ -37,16 +36,9 @@ ReduceLayer::ReduceLayer(const ReduceLayerBuilder &builder, int layerNumber):CPU
 
 
 /**
- * @copydoc LayerBase::~LayerBase
- */
-ReduceLayer::~ReduceLayer() {
-}
-
-
-/**
  * @copydoc LayerBase::forward
  */
-void ReduceLayer::forward(uint64_t sequence) {
+void ReduceLayer::forward(uint64_t sequenceNo, StateToken * state) {
     float * output = outputs_.at(0)->map<float>();
     const float * input = inputs_.at(0)->map<float>();
     switch (norm_) {
@@ -69,9 +61,9 @@ void ReduceLayer::forward(uint64_t sequence) {
 std::vector<BufferSpec> ReduceLayer::getRequiredInputBuffers() const {
     std::vector<BufferSpec> ret;
     ret.push_back(BufferSpec(0, 0, width_ + 2*inputPadding_, height_ + 2*inputPadding_,
-                             BufferSpec::SINGLE32F, BufferSpec::SINGLE, BufferSpec::FLOAT,
+                             BufferSpec::sizedformat::SINGLE32F, BufferSpec::genericformat::SINGLE, BufferSpec::dtype::FLOAT,
                              BufferSpec::FUNCTION_SOURCE,
-                             inputChannels_).device(BufferSpec::COMP_STOR_CPU).dataOrder(BufferSpec::order::CHANNELWISE));
+                             inputChannels_).device(BufferSpec::csdevice::COMP_STOR_CPU).dataOrder(BufferSpec::order::CHANNELWISE));
     return ret;
 }
 
@@ -82,9 +74,9 @@ std::vector<BufferSpec> ReduceLayer::getRequiredInputBuffers() const {
 std::vector<BufferSpec> ReduceLayer::getRequiredOutputBuffers() const {
     std::vector<BufferSpec> ret;
     ret.push_back(BufferSpec(0,0,width_+2*outputPadding_, height_+2*outputPadding_,
-                             BufferSpec::SINGLE32F, BufferSpec::SINGLE, BufferSpec::FLOAT,
+                             BufferSpec::sizedformat::SINGLE32F, BufferSpec::genericformat::SINGLE, BufferSpec::dtype::FLOAT,
                              BufferSpec::FUNCTION_DEST,
-                             outputChannels_).device(BufferSpec::COMP_STOR_CPU).dataOrder(BufferSpec::order::CHANNELWISE));
+                             outputChannels_).device(BufferSpec::csdevice::COMP_STOR_CPU).dataOrder(BufferSpec::order::CHANNELWISE));
     return ret;
 }
 
@@ -150,8 +142,6 @@ void ReduceLayer::reduceL2AcrossChannels(const float *input, float *output) {
 }
 
 
-} // cpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::cpu namespace
 
 // vim: set expandtab ts=4 sw=4:

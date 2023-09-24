@@ -30,14 +30,29 @@ constexpr int LayerBase::PIXEL_PACKING;
 /**
  * @brief Constructor
  *
- * @param builder
- * @param layerNumber
+ * @param builder Reference to builder object that contains layer parameters
+ *
+ * Perform basic initialization of the instance with data obtained from the supplied \p builder
+ * object. Each builder also contains a layer number which has to be unique and in order of inference.
+ * It is up to the user to make sure that the layer numbering is correct and that there are no
+ * clashes where more than one layer uses the same layer number.
+ */
+LayerBase::LayerBase(const LayerBuilder& builder) : LayerBase(builder, builder.number_) {
+}
+
+/**
+ * @brief Constructor
+ *
+ * @param builder Reference to builder object that contains layer parameters
+ * @param layerNumber Unique number / index to be assigned to the layer
  *
  * Perform basic initialization of the instance with data obtained from the supplied \p builder
  * object. The provided \p layerNumber if important for the order of execution of the layers,
  * as they are executed sequentially based on that number. It is up to the user to make sure
  * that the layer numbering is correct and that there are no clashes where more than one layer
  * uses the same layer number.
+ *
+ * @deprecated Do not use this constructor anymore, it will be deprecated in the next major version
  */
 LayerBase::LayerBase(const LayerBuilder& builder, int layerNumber) {
     width_ = builder.width();
@@ -50,9 +65,6 @@ LayerBase::LayerBase(const LayerBuilder& builder, int layerNumber) {
     outputPadding_ = builder.outputPadding_;
     residualPadding_ = builder.residualPadding_;
     name_ = builder.name_;
-    leakyReLU_ = builder.leakyReLU_;
-    lowClip_ = builder.clipLow_;
-    highClip_ = builder.clipHigh_;
     device_ = builder.device_;
     assert(device_ != compute_device::DEV_ILLEGAL);
 }
@@ -127,7 +139,7 @@ void LayerBase::addOutputConnection(int port, LayerBase *receiver, int receiverP
  * @brief Check if layer is properly connected (i.e. all input and output ports are connected)
  *
  * @retval true If all input and output ports are connected
- * @retval false If there are missing connection
+ * @retval false If there are missing connections
  *
  * The \e presence of connections is tracked separately from the buffer/texture assignment. As
  * in the case of GPU layers, a single port-to-port connection may consist of several textures
@@ -140,7 +152,7 @@ bool LayerBase::isConnected() const {
     for (auto it = ins.begin(); it != ins.end(); ++it) {
         if (!isConnected((*it).port_)) return false;
     }
-    if (inConnections_ < getRequiredInputBuffers().size()) return false;
+    if ((size_t)inConnections_ < getRequiredInputBuffers().size()) return false;
     return true;
 }
 

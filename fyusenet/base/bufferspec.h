@@ -15,15 +15,13 @@
 #include <cstdint>
 #include <cassert>
 
-
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "../gl/gl_sys.h"
 #include "layerflags.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
 
 /**
  * @brief Computation buffer specification
@@ -36,7 +34,7 @@ namespace fyusenet {
  * the query criteria that are provided in the BufferSpec object. As such, the specification is
  * not the buffer itself but a descriptor for the buffer.
  *
- * Due to the way that data is laid out, network layers require a set of buffers to handle
+ * Due to the way that data is laid out, network layers \e may require a set of buffers to handle
  * data that has more than 4 channels (in the GPU case). Using multiple textures for high-channel
  * buffers is accomplished by using the #channelIndex_. Providing a specifier with a channel index
  * of 0 refers to the first 4 channels in the GPU buffer case, whereas a channel index of 2 refers
@@ -61,18 +59,11 @@ class BufferSpec {
 
     /**
      * @brief Enumerator that broadly categorizes buffer usage
-     *
-     * @note Though these definitions are used, they are somewhat of a leftover of the initial
-     *       versions of the software. They should be cleaned up.
      */
     enum usage {
-        CONVOLUTION_SOURCE,         //!< Buffer serves as input for a convolution operation
-        CONVOLUTION_DEST,           //!< Buffer serves as output for a convolution operation
         RESIDUAL_SOURCE,            //!< Buffer serves as input for a residual block (add buffer to input of this layer)
-        FUNCTION_SOURCE,            //!< Buffer serves as input for a function layer (scaling, transpose, add etc.)
-        FUNCTION_DEST,              //!< Buffer serves as output of a function layer (scaling, transpose, add etc.)
-        POOLING_SOURCE,             //!< Buffer serves as input of a pooling layer
-        POOLING_DEST,               //!< Buffer serves as output of a pooling layer
+        FUNCTION_SOURCE,            //!< Buffer serves as input for a layer that executes a function (convolution, add, pooling etc.)
+        FUNCTION_DEST,              //!< Buffer serves as output of a function layer (convolution, add, pooling etc.)
         CONCAT_SOURCE,              //!< Buffer serves as input of a concatenation layer
         CONCAT_DEST,                //!< Buffer serves as output of a concatenation layer
         OES_DEST,                   //!< Buffer serves as destination for OES converter
@@ -84,7 +75,7 @@ class BufferSpec {
     /**
      * @brief Enumerator for image interpolation types
      */
-    enum interp {
+    enum class interp : uint8_t {
         ANY = 0,                    //!< Interpolation not specified / not relevant
         NEAREST,                    //!< Use nearest-neighbor interpolation
         LINEAR                      //!< Use linear interpolation
@@ -92,45 +83,70 @@ class BufferSpec {
 
 
     /**
-     * @brief Enumerator that maps some \e internal (or sized) GL formats to generic formats
+     * @brief Enumerator that defines \e internal (or sized) GL texture formats on the GPU
      */
-    enum sizedformat {
-        RGBA32F   = GL_RGBA32F,     //!< 32-bit 4-channel floating-point elements
-        RGB32F    = GL_RGB32F,      //!< 32-bit 3-channel floating-point elements
-        RG32F     = GL_RG32F,       //!< 32-bit two-channel floating-point elements
-        RED32F    = GL_R32F,        //!< 32-bit single-channel floating-point elements
-        RGBA16F   = GL_RGBA16F,     //!< 16-bit 4-channel half-precision floating-point elements
-        RGB16F    = GL_RGB16F,      //!< 16-bit 3-channel floating-point elements
-        RG16F     = GL_RG16F,       //!< 16-bit two-channel floating-point elements
-        RED16F    = GL_R16F,        //!< 16-bit single-channel floating-point elements
-        RGBA8     = GL_RGBA8,       //!< 8-bit 4-channel unsigned byte elements
-        RGB8      = GL_RGB8,        //!< 8-bit 3-channel unsigned byte elements
-        RG8       = GL_RG8,         //!< 8-bit two-channel unsigned byte elements
-        RED8      = GL_R8,          //!< 8-bit single-channel unsigned byte elements
-        SINGLE32F = GL_R32F,        //!< 32-bit single-channel floating-point elements (alias for #RED32F )
-        SINGLE16F = GL_R32F         //!< 16-bit single-channel floating-point elements (alias for #RED16F )
+    enum class sizedformat : GLint {
+        RGBA32F   = GL_RGBA32F,       //!< 32-bit 4-channel floating-point elements
+        RGB32F    = GL_RGB32F,        //!< 32-bit 3-channel floating-point elements
+        RG32F     = GL_RG32F,         //!< 32-bit two-channel floating-point elements
+        RED32F    = GL_R32F,          //!< 32-bit single-channel floating-point elements
+        RGBA16F   = GL_RGBA16F,       //!< 16-bit 4-channel half-precision floating-point elements
+        RGB16F    = GL_RGB16F,        //!< 16-bit 3-channel floating-point elements
+        RG16F     = GL_RG16F,         //!< 16-bit two-channel floating-point elements
+        RED16F    = GL_R16F,          //!< 16-bit single-channel floating-point elements
+        RGBA8     = GL_RGBA8,         //!< 8-bit 4-channel unsigned byte elements
+        RGB8      = GL_RGB8,          //!< 8-bit 3-channel unsigned byte elements
+        RG8       = GL_RG8,           //!< 8-bit two-channel unsigned byte elements
+        RED8      = GL_R8,            //!< 8-bit single-channel unsigned byte elements
+        SINGLE32F = GL_R32F,          //!< 32-bit single-channel floating-point elements (alias for \c RED32F )
+        SINGLE16F = GL_R32F,          //!< 16-bit single-channel floating-point elements (alias for \c RED16F )
+#ifdef GL_R32UI
+        SINGLE32UI = GL_R32UI,        //!< 32-bit single-channel integer (unsigned)
+        RG32UI     = GL_RG32UI,       //!< 32-bit 2-channel integer (unsigned)
+        RGB32UI    = GL_RGB32UI,      //!< 32-bit 3-channel integer (unsigned)
+        RGBA32UI   = GL_RGBA32UI      //!< 32-bit 4-channel integer (unsigned)
+#else
+        SINGLE32UI = GL_R32UI_EXT     //!< 32-bit single-channel integer (unsigned)
+        RG32UI     = GL_RG32UI_EXT,   //!< 32-bit 2-channel integer (unsigned)
+        RGB32UI    = GL_RGB32UI_EXT,  //!< 32-bit 3-channel integer (unsigned)
+        RGBA32UI   = GL_RGBA32UI_EXT  //!< 32-bit 4-channel integer (unsigned)
+#endif
     };
 
     /**
      * @brief Enumerator that maps some GL formats to generic formats
+     *
+     * Generic formats in texture up/download operations specify the format of the data that is
+     * passed to the texture up/download functions. The generic format is not necessarily the same
+     * as the internal format, but it is the format that is used to interpret the data that is
+     * passed to the texture up/download functions.
      */
-    enum genericformat {
-        RGBA   = GL_RGBA,
-        RGB    = GL_RGB,
-        RG     = GL_RG,
-        RED    = GL_RED,
-        SINGLE = GL_RED
+    enum class genericformat : GLenum {
+        RGBA       = GL_RGBA,
+        RGB        = GL_RGB,
+        RG         = GL_RG,
+        RED        = GL_RED,
+        SINGLE     = GL_RED,
+        RGBA_INT   = GL_RGBA_INTEGER,
+        RGB_INT    = GL_RGB_INTEGER,
+        RG_INT     = GL_RG_INTEGER,
+        RED_INT    = GL_RED_INTEGER,
+        SINGLE_INT = GL_RED_INTEGER
     };
 
     /**
      * @brief Enumerator that maps some GL types to generic types
      */
-    enum dtype {
+    enum class dtype : GLenum {
         FLOAT16 = GL_HALF_FLOAT,
         FLOAT   = GL_FLOAT,
         FLOAT32 = GL_FLOAT,
-        UINT    = GL_UNSIGNED_INT,
-        UBYTE   = GL_UNSIGNED_BYTE
+        UINT32  = GL_UNSIGNED_INT,
+        INT32   = GL_INT,
+        UINT16  = GL_UNSIGNED_SHORT,
+        INT16   = GL_SHORT,
+        UBYTE   = GL_UNSIGNED_BYTE,
+        UINT8   = GL_UNSIGNED_BYTE
     };
 
     /**
@@ -138,7 +154,7 @@ class BufferSpec {
      *
      * Currently supported are CPU and GPU, with the latter being the preferred one.
      */
-    enum csdevice {
+    enum class csdevice : uint8_t {
         COMP_STOR_GPU = 0,
         COMP_STOR_CPU
     };
@@ -147,14 +163,15 @@ class BufferSpec {
      * @brief Specifier for the data order
      *
      * This defines the data storage order, which is device-specific as well as tensor-format
-     * specific. Espcially for GPU-based storage, we differentiate between \e shallow and \e deep
+     * specific. Especially for GPU-based storage, we differentiate between \e shallow and \e deep
      * tensor storage order, as they are vastly different.
      *
      * @see GPULayerBase
      */
-    enum order {
+    enum class order : uint8_t {
         GPU_SHALLOW,        //!< Data is in GPU shallow format
-        GPU_DEEP,           //!< Data is in GPU deep format
+        GPU_DEEP,           //!< Data is in GPU deep format (uses tiles to make the most of the texture cache)
+        GPU_SEQUENCE,       //!< Data is in GPU sequence format (uses lines, not optimal but easier to process for attention layers)
         CHANNELWISE         //!< Data is in CPU 3D tensor format, stored as 3D array with the channels being the outermost index (w,h,c)
     };
 
@@ -208,7 +225,7 @@ class BufferSpec {
     }
 
     /**
-     * @brief Set target storage/compute device for the buffer spoecifier
+     * @brief Set target storage/compute device for the buffer specifier
      *
      * @param dev Device to set for computing and/or storage
      *
@@ -229,7 +246,7 @@ class BufferSpec {
      *
      * @return Reference to current BufferSpec object
      *
-     * Pasthrough buffers are usually not allocated by the BufferMnaager, instead the original
+     * Passthrough buffers are usually not allocated by the BufferManager, instead the original
      * buffer is used. This happens on layers that do not alter the data at all. An example would
      * be a concatenation layer for GPU-based shallow tensors, where some textures (each texture is
      * a single buffer) may just be passed unaltered.
@@ -279,7 +296,7 @@ class BufferSpec {
      */
     BufferSpec& multi(int multiplier) {
         multiplicity_ = multiplier;
-        lock_ |= (multiplier > 1) ? true : false;
+        lock_ |= (multiplier > 1);
         return *this;
     }
 
@@ -299,31 +316,66 @@ class BufferSpec {
      * @param channels Number of channels, must be in {1,2,3,4}
      * @param type Data type, currently only \c FLOAT and \c UBYTE are supported
      *
-     * @return Pair of sized and generic format that fufils supplied channel/type criteria
+     * @return Pair of sized and generic format that fulfils supplied channel/type criteria
      *
      * This function is helpful in conjunction with texture upload and download, to determine
      * the sized and generic format for a BufferSpec structure.
      */
     static std::pair<sizedformat, genericformat> formatByChannels(int channels, dtype type) {
-        static sizedformat flt32sfmt[4] = {RED32F, RG32F, RGB32F, RGBA32F};
-        static sizedformat flt16sfmt[4] = {RED16F, RG16F, RGB16F, RGBA16F};
-        static sizedformat bytesfmt[4] = {RED8, RG8, RGB8, RGBA8};
-        static genericformat gfmt[4] = {RED, RG, RGB, RGBA};
+        using sz = sizedformat;
+        using gn = genericformat;
+        // NOTE (mw) we skip RGB texture formats due to OpenGL ES limitations
+        static sizedformat flt32sfmt[4] = {sz::SINGLE32F, sz::RG32F, sz::RGBA32F, sz::RGBA32F};
+        static sizedformat flt16sfmt[4] = {sz::SINGLE16F, sz::RG16F, sz::RGBA16F, sz::RGBA16F};
+        static sizedformat uintsfmt[4] = {sz::SINGLE32UI, sz::RG32UI, sz::RGBA32UI, sz::RGBA32UI};
+        static sizedformat bytesfmt[4] = {sz::RED8, sz::RG8, sz::RGBA8, sz::RGBA8};
+        static genericformat gfmt[4] = {gn::RED, gn::RG, gn::RGB, gn::RGBA};
+        static genericformat gifmt[4] = {gn::RED_INT, gn::RG_INT, gn::RGB_INT, gn::RGBA_INT};
         assert((channels > 0) && (channels <= 4));
-        assert(type == UBYTE || type == FLOAT || type == FLOAT16);
         sizedformat sf;
         genericformat gf = gfmt[channels-1];
         switch (type) {
-            case UBYTE:
+            case dtype::UBYTE:
                 sf = bytesfmt[channels-1];
                 break;
-            case FLOAT16:
+            case dtype::FLOAT16:
                 sf = flt16sfmt[channels-1];
+                break;
+            case dtype::UINT32:
+                sf = uintsfmt[channels-1];
+                gf = gifmt[channels-1];
                 break;
             default:  // we assume float32 by default
                 sf = flt32sfmt[channels-1];
         }
         return std::pair<sizedformat, genericformat>(sf, gf);
+    }
+
+    /**
+     * @brief Retrieve atomic (channel) size of a datatype
+     *
+     * @param type Data type to retrieve size for
+     *
+     * @param fp16To32 Flag that when set to \c true will assume FP16 to be 32-bit
+     *
+     * @return Atomic (channel) size of data type (in bytes)
+     */
+    static int typeSize(BufferSpec::dtype type, bool fp16To32 = true) {
+        switch (type) {
+            case dtype::FLOAT16:
+                return (fp16To32) ? 4 : 2;
+            case dtype::FLOAT32:
+            case dtype::UINT32:
+            case dtype::INT32:
+                return 4;
+            case dtype::UINT16:
+            case dtype::INT16:
+                return 2;
+            case dtype::UINT8:
+                return 1;
+            default:
+                return 4;
+        }
     }
 
     usage usage_;                     //!< What the buffer is supposed to be used for
@@ -335,10 +387,18 @@ class BufferSpec {
     sizedformat internalFormat_;      //!< Sized buffer/texture format (matches OpenGL internal texture format as of now)
     genericformat format_;            //!< Generic buffer/texture format (matches OpenGL texture format as of now)
     dtype type_;                      //!< Data type for this buffer (matches OpenGL data types)
-    interp interpolation_ = NEAREST;  //!< Spatial interpolation for the buffer (either linear or nearest-neighbor)
-    csdevice device_ = COMP_STOR_GPU; //!< Device type where the buffer should be allocated on (GPU or CPU)
     bool async_ = false;              //!< Flag that indicates that the buffer is subject to an asynchronous read or write operation (texture uploads and downloads)
     bool lock_ = false;               //!< Flag that indicates that the buffer should be exempt from re-use and only be used for this layer's (output)
+
+    /**
+     * Spatial interpolation for the buffer (either linear or nearest-neighbor)
+     */
+    interp interpolation_ = interp::NEAREST;
+
+    /**
+     * Device type where the buffer should be allocated on (GPU or CPU)
+     */
+    csdevice device_ = csdevice::COMP_STOR_GPU;
 
     /**
      * In case multiple sets of the same textures are required, this defines how many sets will
@@ -350,9 +410,10 @@ class BufferSpec {
 
     /**
      * Flag that indicates that the buffer specifier was created by a layer that does not
-     * write to that buffer, but the buffer is merely an unmodified input buffer or a part
-     * of an unmodified input buffer. This can happen in concatenation layers in \e shallow
-     * mode.
+     * write to that buffer, but the buffer is merely a passed-through input buffer or a part
+     * of such. This can happen in concatenation layers in \e shallow mode or in layers that are
+     * using some internal textures and are able to overwrite the input texture (for example in
+     * more complex sequence processing layers).
      */
     bool passThrough_ = false;
 
@@ -360,14 +421,16 @@ class BufferSpec {
      * Data order for the buffer, can be:
      *   - \c GPU_SHALLOW
      *   - \c GPU_DEEP
+     *   - \c GPU_SEQUENCE
      *   - \c CHANNELWISE
      *
+     * Defaults to \c GPU_SHALLOW.
+     * 
      * @see CPUBuffer
      */
     order dataOrder_ = order::GPU_SHALLOW;
 };
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
 
 // vim: set expandtab ts=4 sw=4:

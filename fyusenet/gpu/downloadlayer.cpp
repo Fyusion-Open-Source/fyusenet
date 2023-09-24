@@ -9,22 +9,16 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <algorithm>
 #include <cassert>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "downloadlayer.h"
-#include "../common/fynexception.h"
 #include "../gl/fbo.h"
-#include "../cpu/cpubuffer.h"
-#include "../base/bufferspec.h"
-#include "../gl/pbo.h"
 #include "../gl/pbopool.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -36,13 +30,21 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&,int)
  */
 DownloadLayer::DownloadLayer(const UpDownLayerBuilder& builder, int layerNumber) :
     GPULayerBase((const GPULayerBuilder &)builder,layerNumber), CPULayerInterface(), DownloadLayerInterface() {
+    if (flags_ & LayerFlags::PRE_ACT_MASK) THROW_EXCEPTION_ARGS(FynException,"Activation on download not implemented yet");
+    if (flags_ & LayerFlags::RESIDUAL_INPUT) THROW_EXCEPTION_ARGS(FynException,"Residual add on download not implemented yet");
     assert(inputPadding_ == outputPadding_);
     assert(builder.direction_ == UpDownLayerBuilder::DOWNLOAD);
     assert(LayerBase::inputPadding_ == LayerBase::outputPadding_);      // NOTE (mw) for now we do not allow padding change in this layer
+    if (builder.isSequence()) {
+        maxSequence_ = builder.maxSequenceLen_;
+        dataType_ = builder.dataType_;              // TODO (mw) also support different types for non-sequence data:
+        chanPacking_ = builder.seqPacking_;
+        bytesPerChan_ = BufferSpec::typeSize(dataType_, true);      // NOTE (mw) we assume that we never download FP16 without converting it to FP32
+    }
 #ifdef FYUSENET_MULTITHREADING
     if (builder.callback_) userCallback_ = builder.callback_;
     async_ = builder.async_;
@@ -51,9 +53,15 @@ DownloadLayer::DownloadLayer(const UpDownLayerBuilder& builder, int layerNumber)
 
 
 /**
- * @copydoc GPULayerBase::~GPULayerBase
+ * @copydoc DownloadLayerInterface::getOutputShape
  */
-DownloadLayer::~DownloadLayer() {
+BufferShape DownloadLayer::getOutputShape(int port) const {
+    assert(port == 0);
+    if (maxSequence_> 0) {
+        return {width_, maxSequence_, dataType_, chanPacking_};
+    } else {
+        return {width_, height_, inputChannels_, inputPadding_, dataType_, BufferShape::order::GPU_SHALLOW};
+    }
 }
 
 
@@ -61,15 +69,27 @@ DownloadLayer::~DownloadLayer() {
  * @copydoc LayerBase::getRequiredInputBuffers
  */
 std::vector<BufferSpec> DownloadLayer::getRequiredInputBuffers() const {
+    static BufferSpec::genericformat genint[4] = {BufferSpec::genericformat::SINGLE_INT, BufferSpec::genericformat::RG_INT,
+                                                  BufferSpec::genericformat::RGB_INT, BufferSpec::genericformat::RGBA_INT};
+    static BufferSpec::genericformat genfp[4] = {BufferSpec::genericformat::SINGLE, BufferSpec::genericformat::RG,
+                                                 BufferSpec::genericformat::RGB, BufferSpec::genericformat::RGBA};
     std::vector<BufferSpec> result;
-    int channel = 0;
-    int rem = inputChannels_;
-    while (rem > 0) {
-        result.push_back(BufferSpec(channel++, 0,
-                                    width_ + 2*inputPadding_, height_ + 2*inputPadding_,
-                                    TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                    BufferSpec::FUNCTION_SOURCE));
-        rem -= PIXEL_PACKING;
+    if (maxSequence_ > 0) {
+        // TODO (mw) support other integral data types here
+        auto genfmt = (isInt(dataType_)) ? genint[chanPacking_ - 1] : genfp[chanPacking_ - 1];
+        auto spec = BufferSpec(0, 0, width_, maxSequence_, bufferFormat(dataType_, chanPacking_), genfmt, dataType_, BufferSpec::GPU_DEST,
+                               inputChannels_).device(BufferSpec::csdevice::COMP_STOR_GPU).dataOrder(BufferSpec::order::GPU_SEQUENCE);
+        result.push_back(spec);
+    } else {
+        int channel = 0;
+        int rem = inputChannels_;
+        while (rem > 0) {
+            result.emplace_back(channel++, 0,
+                                width_ + 2 * inputPadding_, height_ + 2 * inputPadding_,
+                                TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
+                                BufferSpec::FUNCTION_SOURCE);
+            rem -= PIXEL_PACKING;
+        }
     }
     return result;
 }
@@ -80,18 +100,32 @@ std::vector<BufferSpec> DownloadLayer::getRequiredInputBuffers() const {
  */
 std::vector<BufferSpec> DownloadLayer::getRequiredOutputBuffers() const {
     std::vector<BufferSpec> result;
-    result.push_back(BufferSpec(0, 0,
-                                width_ + 2*outputPadding_, height_ + 2*outputPadding_,
-                                BufferSpec::SINGLE32F, BufferSpec::SINGLE, BufferSpec::FLOAT, BufferSpec::CPU_DEST,
-                                outputChannels_).interpolation(BufferSpec::NEAREST).device(BufferSpec::COMP_STOR_CPU).dataOrder(BufferSpec::order::GPU_SHALLOW));
+    if (maxSequence_ > 0) {
+        bool isint = isInt(dataType_);
+        // TODO (mw) support other integral data types here
+        result.push_back(BufferSpec(0, 0, width_ * chanPacking_, maxSequence_, (isint) ? BufferSpec::sizedformat::SINGLE32UI : BufferSpec::sizedformat::SINGLE32F,
+                                    (isint) ? BufferSpec::genericformat::SINGLE_INT : BufferSpec::genericformat::SINGLE,
+                                    dataType_, BufferSpec::CPU_DEST, 1)
+                                   .device(BufferSpec::csdevice::COMP_STOR_CPU)
+                                   .dataOrder(BufferSpec::order::GPU_SEQUENCE));
+
+    } else {
+        result.push_back(BufferSpec(0, 0,
+                                    width_ + 2 * outputPadding_, height_ + 2 * outputPadding_,
+                                    BufferSpec::sizedformat::SINGLE32F, BufferSpec::genericformat::SINGLE, BufferSpec::dtype::FLOAT,
+                                    BufferSpec::CPU_DEST,
+                                    outputChannels_)
+                                   .device(BufferSpec::csdevice::COMP_STOR_CPU)
+                                   .dataOrder(BufferSpec::order::GPU_SHALLOW));
+    }
     return result;
 }
 
 
 /**
- * @copydoc cpu::CPULayerInterface::clearOutputBuffers
+ * @copydoc cpu::CPULayerInterface::clearCPUOutputBuffers
  */
-void DownloadLayer::clearOutputBuffers(int port) {
+void DownloadLayer::clearCPUOutputBuffers(int port) {
     assert(port == 0);
     outputs_.clear();
 }
@@ -109,11 +143,12 @@ void DownloadLayer::setup() {
 /**
  * @copydoc LayerBase::forward
  */
-void DownloadLayer::forward(uint64_t sequence) {
+void DownloadLayer::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     assert(outputs_.size() == 1);
     // TODO (mw) implement optional rendering step here (for ReLU)
-    if (flags_ & LayerFlags::PRE_ACT_MASK) THROW_EXCEPTION_ARGS(FynException,"Activation on download not implemented yet");
-    if (flags_ & LayerFlags::RESIDUAL_INPUT) THROW_EXCEPTION_ARGS(FynException,"Residual add on download not implemented yet");
+    if ((maxSequence_ > 0) && (!state)) THROW_EXCEPTION_ARGS(FynException, "Download layer requires state state in sequenceNo processing");
+    sequenceLen_ = (state) ? state->seqLength : 0;
     ManagedPBO pbo = pboBlit();
 #ifndef FYUSENET_MULTITHREADING
     if (true) {
@@ -124,7 +159,9 @@ void DownloadLayer::forward(uint64_t sequence) {
         // Synchronous part, we still use a PBO here though there is no
         // advantage doing that. It just makes the code easier.
         //-------------------------------------------------------------
-        outputs_[0]->readFromPBO(*pbo, CPUBufferShape::type::FLOAT32, sequence);        
+        // FIXME (mw) we actually don't need to download all tokens here, just one, make this a builder flag
+        size_t read = (maxSequence_ > 0) ? sequenceLen_ * width_ * chanPacking_ * bytesPerChan_: 0;
+        outputs_[0]->readFromPBO(*pbo, dataType_, sequenceNo, read);
     } else {
 #ifdef FYUSENET_MULTITHREADING
         THROW_EXCEPTION_ARGS(FynException, "Layer is not synchronous");
@@ -136,10 +173,8 @@ void DownloadLayer::forward(uint64_t sequence) {
 /**
  * @copydoc DownloadLayerInterface::asyncForward
  */
-void DownloadLayer::asyncForward(uint64_t sequenceNo, const std::function<void (uint64_t)> &callback) {
+void DownloadLayer::asyncForward(uint64_t sequenceNo, StateToken * token, const std::function<void (uint64_t)> &callback) {
     // TODO (mw) implement optional rendering step here (for ReLU)
-    if (flags_ & LayerFlags::PRE_ACT_MASK) THROW_EXCEPTION_ARGS(FynException,"Activation on download not implemented yet");
-    if (flags_ & LayerFlags::RESIDUAL_INPUT) THROW_EXCEPTION_ARGS(FynException,"Residual add on download not implemented yet");
     if (!async_) THROW_EXCEPTION_ARGS(FynException, "Layer is not asynchronous");
     ManagedPBO pbo = pboBlit();
     //-------------------------------------------------------------
@@ -186,12 +221,12 @@ void DownloadLayer::updateFBOs() {
 
 
 /**
- * @copydoc cpu::CPULayerInterface::addOutputBuffer
+ * @copydoc cpu::CPULayerInterface::addCPUOutputBuffer
  */
-void DownloadLayer::addOutputBuffer(CPUBuffer *buf, int port) {
+void DownloadLayer::addCPUOutputBuffer(CPUBuffer *buf, int port) {
     assert(buf);
     if (port != 0) THROW_EXCEPTION_ARGS(FynException, "Ports other than 0 are not supported");
-    if (outputs_.size() > 0) THROW_EXCEPTION_ARGS(FynException,"Only one output buffer is supported for this layer type");
+    if (!outputs_.empty()) THROW_EXCEPTION_ARGS(FynException,"Only one output buffer is supported for this layer type");
     outputs_.push_back(buf);   
     outputChanged_ = true;
 }
@@ -222,9 +257,9 @@ void DownloadLayer::updateOutputBuffer(CPUBuffer *buf, int port) {
 
 
 /**
- * @copydoc cpu::CPULayerInterface::hasOutputBuffer
+ * @copydoc cpu::CPULayerInterface::hasCPUOutputBuffer
  */
-bool DownloadLayer::hasOutputBuffer(int port) const {
+bool DownloadLayer::hasCPUOutputBuffer(int port) const {
     assert(port >= 0);
     if ((int)outputs_.size() <= port) return false;
     return (outputs_.at(port) != nullptr);
@@ -232,9 +267,9 @@ bool DownloadLayer::hasOutputBuffer(int port) const {
 
 
 /**
- * @copydoc cpu::CPULayerInterface::getOutputBuffer
+ * @copydoc cpu::CPULayerInterface::getCPUOutputBuffer
  */
-CPUBuffer * DownloadLayer::getOutputBuffer(int port) const {
+CPUBuffer * DownloadLayer::getCPUOutputBuffer(int port) const {
     assert(port >= 0);
     if ((int)outputs_.size() <= port) return nullptr;
     return outputs_.at(port);
@@ -258,20 +293,25 @@ ManagedPBO DownloadLayer::pboBlit() {
     // a lot of PBO binds/unbinds here, maybe consolidate when there is time
     PBOPool *pool = context_.interface()->getReadPBOPool();
     assert(pool);
-    int paddedwidth = width_ + 2*inputPadding_;
-    int paddedheight = height_ + 2*inputPadding_;
-    int paddedchannels = LayerBase::PIXEL_PACKING * ((outputChannels_ + LayerBase::PIXEL_PACKING - 1) / LayerBase::PIXEL_PACKING);
+    bool seq = (maxSequence_ > 0);
+    int paddedwidth = (seq) ? width_ : width_ + 2*inputPadding_;
+    int paddedheight = (seq) ? maxSequence_ : height_ + 2*inputPadding_;
+    int paddedchannels = (seq) ? chanPacking_ : LayerBase::PIXEL_PACKING * ((outputChannels_ + LayerBase::PIXEL_PACKING - 1) / LayerBase::PIXEL_PACKING);
     ManagedPBO pbo = pool->getAvailablePBO(paddedwidth, paddedheight, paddedchannels, bytesPerChan_);
     pbo->prepareForRead(paddedwidth * paddedheight * paddedchannels * bytesPerChan_);
     int readchans = 0;
     pbo->bind(GL_PIXEL_PACK_BUFFER);
-    for (int fb = 0 ; fb < numFBOs(); fb++ ) {
-        // NOTE (mw) we assume that the FBOs are putting out all 4 channels
+    for (int fb = 0 ; fb < numFBOs(); fb++) {
         size_t offset = readchans * paddedwidth * paddedheight * bytesPerChan_;
         FBO *fbo = getFBO(fb);
         fbo->bind();
-        int chans = LayerBase::PIXEL_PACKING * fbo->numAttachments();
-        fbo->copyToPBO(*pbo, GL_FLOAT, LayerBase::PIXEL_PACKING, offset);
+        int chans = chanPacking_ * fbo->numAttachments();
+        if (maxSequence_ > 0) {
+            fbo->copyToPBO(*pbo, width_, sequenceLen_, (GLenum)dataType_, chanPacking_, offset, false, isInt(dataType_));
+        } else {
+            // TODO (mw) support for different data types here too
+            fbo->copyToPBO(*pbo, GL_FLOAT, chanPacking_, offset);
+        }
         fbo->unbind();
         readchans += chans;
     }
@@ -310,7 +350,7 @@ void DownloadLayer::readoutPBO(AsyncPool::GLThread& myThread, opengl::ManagedPBO
     bool rc = ctx.waitClientSync(sync, 5000000000);        // wait 5s max  (TODO (mw) configurable timeout)
     if (!rc) THROW_EXCEPTION_ARGS(FynException, "Cannot read out texture within 5s for sequence %ld", sequence);
     ctx.removeSync(sync);
-    target->readFromPBO(*pbo, CPUBufferShape::type::FLOAT32, sequence);
+    target->readFromPBO(*pbo, BufferShape::type::FLOAT32, sequence);
     pbo.clearPending();
     if (callback) callback(sequence);
     if (userCallback_) userCallback_(sequence, target, AsyncLayer::DOWNLOAD_DONE);
@@ -332,7 +372,7 @@ void DownloadLayer::setupFBOs() {
     if (flags_ & LayerFlags::RESIDUAL_INPUT) THROW_EXCEPTION_ARGS(FynException,"Residual add on download not implemented yet");
     // we can directly connect the input textures to the FBOs here for now, as we
     // currently only support downloading float data without any flags
-    int numpasses = (inputTextures_.size()  + maxRenderTargets_ - 1) / maxRenderTargets_;
+    int numpasses = ((int)inputTextures_.size()  + maxRenderTargets_ - 1) / maxRenderTargets_;
     int texoffset = 0;
     for (int pass=0; pass < numpasses; pass++) {
         FBO * fbo = new FBO(context_, viewport_[0], viewport_[1], inputTextures_.at(texoffset++));
@@ -348,9 +388,58 @@ void DownloadLayer::setupFBOs() {
 }
 
 
+/**
+ * @brief Determine (sized) buffer format specified for given data type and packing
+ *
+ * @param type Data type in the buffer (per atom / channel)
+ * @param packing Number of atoms packed into a single item (# of channels)
+ *
+ * @return Sized buffer format specifier
+ *
+ * This function computes a sized buffer format specifier which is to be used to create buffer
+ * objects or provide information to the buffer manager. Depending on the data type of each
+ * atom and the number of atoms per item (channel packing), different sized formats are required.
+ */
+BufferSpec::sizedformat DownloadLayer::bufferFormat(BufferSpec::dtype type, int packing) {
+    assert(packing >= 1 && packing <= PIXEL_PACKING);
+    using fmt = BufferSpec::sizedformat;
+#ifndef FYUSENET_USE_EGL
+    static fmt fmtfp32[4] = {fmt::SINGLE32F, fmt::RG32F, fmt::RGB32F, fmt::RGBA32F};
+    static fmt fmtui32[4] = {fmt::SINGLE32UI, fmt::RG32UI, fmt::RGB32UI, fmt::RGBA32UI};
+#else // EGL and WebGL
+    static fmt fmtfp32[4] = {fmt::SINGLE32F, fmt::RG32F, fmt::RGBA32F, fmt::RGBA32F};
+    static fmt fmtui32[4] = {fmt::SINGLE32UI, fmt::RG32UI, fmt::RGBA32UI, fmt::RGBA32UI};
+#endif
+    switch (type) {
+        case BufferSpec::dtype::FLOAT16:
+            // currently not supported, fallback to float
+        case BufferSpec::dtype::FLOAT32:
+            return fmtfp32[packing-1];
+        case BufferSpec::dtype::INT32:
+            // currently not supported, fallback to uint32
+        case BufferSpec::dtype::UINT32:
+            return fmtui32[packing-1];
+        default:
+            THROW_EXCEPTION_ARGS(FynException,"Unsupported combination of datatype %d and packing %d", (int)type, packing);
+    }
+}
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+
+/**
+ * @brief Determine if given data type is an integral type
+ *
+ * @param type Data type to check
+ *
+ * @retval true Data type is integral
+ * @retval false Otherwise
+ */
+inline bool DownloadLayer::isInt(BufferSpec::dtype type) {
+    // TODO (mw) support other integral data types here
+    return (type == BufferSpec::dtype::UINT32) || (type == BufferSpec::dtype::INT32) ||
+           (type == BufferSpec::dtype::UINT16) || (type == BufferSpec::dtype::INT16);
+}
+
+
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

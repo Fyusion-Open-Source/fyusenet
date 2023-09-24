@@ -30,7 +30,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&,int)
  */
 RGB2BGRLayer::RGB2BGRLayer(const GPULayerBuilder & builder,int layerNumber):FunctionLayer(builder,layerNumber) {
     currentShader_ = nullptr;

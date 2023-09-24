@@ -23,9 +23,11 @@
 #include "layerbase.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
 
+namespace gpu {
+    class GPULayerFactoryBackend;
+}
 
 /**
  * @brief Compounding object for a set of neural network layers
@@ -49,7 +51,7 @@ namespace fyusenet {
  */
 class CompiledLayers {
     friend class CPULayerFactoryBackend;
-    friend class GPULayerFactoryBackend;
+    friend class gpu::GPULayerFactoryBackend;
     friend class LayerFactory;
  public:
     /**
@@ -181,10 +183,10 @@ class CompiledLayers {
     ~CompiledLayers() {
         // TODO (mw) thread-safety
         if (layers_.unique()) {
-            for (auto * layer : *(layers_.get())) {
-                if (layer) delete layer;
+            for (auto * layer : *(layers_)) {
+                delete layer;
             }
-            layers_.get()->clear();
+            layers_->clear();
             layersByName_.clear();
         }
     }
@@ -200,16 +202,16 @@ class CompiledLayers {
      */
     LayerBase * operator[](int idx) {
 #ifdef DEBUG
-        if ((*(layers_.get()))[idx] == nullptr) THROW_EXCEPTION_ARGS(FynException,"Layer number %d does not exist in collection", idx);
+        if ((*(layers_))[idx] == nullptr) THROW_EXCEPTION_ARGS(FynException,"Layer number %d does not exist in collection", idx);
 #endif
-        return (*(layers_.get()))[idx];
+        return (*(layers_))[idx];
     }
 
 
     /**
      * @brief Access layer by layer name
      *
-     * @param name Name of layer to fetc
+     * @param name Name of layer to fetch
      *
      * @return Pointer to layer
      *
@@ -291,8 +293,8 @@ class CompiledLayers {
 };
 
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
+
 
 // vim: set expandtab ts=4 sw=4:
 

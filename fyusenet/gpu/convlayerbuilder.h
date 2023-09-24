@@ -19,9 +19,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Templatized anchor for convolution layer builders for GPU 2D convolution layers
@@ -116,8 +114,6 @@ struct ConvLayerBuilder : ConvLayerBuilderTempl<ConvLayerBuilder> {
   ConvLayerBuilder(short kernel, const std::string& name) : ConvLayerBuilderTempl<ConvLayerBuilder>(kernel, name) {}
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

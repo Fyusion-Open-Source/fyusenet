@@ -27,16 +27,14 @@
 #include "poollayerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Base class for shallow tensor-data pooling layers
  *
  * This class provides an interface for all kinds of pooling layers. It contains a few default
  * initializations and a simple render loop which makes use of an internal interface to which the
- * actual pooling layers have to be taylored.
+ * actual pooling layers have to be tailored.
  *
  * @see MaxPoolLayer, AvgPoolLayer
  */
@@ -50,11 +48,12 @@ class PoolingLayer : public GPULayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void setup() override;
-    virtual void cleanup() override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual void forward(uint64_t sequence) override;
+    void setup() override;
+    void cleanup() override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
@@ -130,8 +129,8 @@ class PoolingLayer : public GPULayerBase {
     virtual void setupShaders();
     void setupVBO(VAO *vao);
     void setupIBO(VAO *vao);
-    virtual void setupFBOs() override;
-    virtual void updateFBOs() override;
+    void setupFBOs() override;
+    void updateFBOs() override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -142,13 +141,11 @@ class PoolingLayer : public GPULayerBase {
     VAO *vertexArray_ = nullptr;                        //!< Pointer to vertex-array object which maintains the VBO / IBO config
     VBO *vertexBuffer_ = nullptr;                       //!< Pointer to VBO for the polygons used in the layer
     IBO *indexBuffer_ = nullptr;                        //!< Pointer to IBO used for the polygons
-    int maxRenderTargets_ = 1;                          //!< Maximim number of render targets that can be used by this layer
+    int maxRenderTargets_ = 1;                          //!< Maximum number of render targets that can be used by this layer
     programptr shaders_[FBO::MAX_DRAWBUFFERS];          //!< Shared pointers to shader programs used for rendering
     unistateptr shaderStates_[FBO::MAX_DRAWBUFFERS];    //!< States that are attached to the #shaders_
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

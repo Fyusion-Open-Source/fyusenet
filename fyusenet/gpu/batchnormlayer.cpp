@@ -17,9 +17,7 @@
 #include "../gl/glexception.h"
 #include "../gl/glinfo.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -31,15 +29,16 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
-BatchNormLayer::BatchNormLayer(const GPULayerBuilder & builder, int layerNumber):FunctionLayer(builder, layerNumber) {
+BatchNormLayer::BatchNormLayer(const GPULayerBuilder & builder, int layerNumber): FunctionLayer(builder, layerNumber) {
     currentShader_ = nullptr;
     vertexArray_ = nullptr;
     vertexBuffer_ = nullptr;
     indexBuffer_ = nullptr;
     for (int i = 0; i < FBO::MAX_DRAWBUFFERS; i++) shaders_[i] = nullptr;
     maxRenderTargets_ = GLInfo::getMaximumRecommendedDrawBuffers();
+    hasParameters_ = true;
 }
 
 /**
@@ -66,16 +65,30 @@ void BatchNormLayer::cleanup() {
 
 
 /**
- * @copydoc BatchNormInterface::loadScaleAndBias()
+ * @brief Load batchnorm data from a parameter provider
+ *
+ * @param source ParameterProvider instance to load the data from
+ *
+ * This function retrieves the batch-norm data from a supplied ParameterProvider instances using
+ * the layer name suffixed with \c ".bn" as the name and the \c subIndex set to 0. The batchnorm
+ * data is supposed to be in the following format:
+ *  1. all scales (single value per output channel for a total of \c \#output values)
+ *  2. all offsets (single value per output channel for a total of \c \#output values)
+ *
+ *  @see ParameterProvider
  */
-void BatchNormLayer::loadScaleAndBias(const float *scaleBias, size_t sbOffset) {
+void BatchNormLayer::loadParameters(const ParameterProvider * source) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     int rem = outputChannels_;
     int offset = 0;
-    const float *scale = scaleBias + sbOffset;
+    auto blob = source->get(getName()+std::string(".bn"), getNumber(), 0);
+    const float *scale = std::any_cast<const float *>(blob.get());
+    assert(scale);
     const float *bias = scale + outputChannels_;
+    assert(bias);
     while (rem > 0) {
         int remunits = std::min(maxRenderTargets_, (rem + (PIXEL_PACKING - 1)) / PIXEL_PACKING);
-        BiasScaleBlock *block = new BiasScaleBlock(remunits * PIXEL_PACKING);
+        auto *block = new BiasScaleBlock(remunits * PIXEL_PACKING);
         int remelems = std::min(rem, remunits * PIXEL_PACKING);
         block->fill(bias + offset, scale + offset, remelems);
         blocks_.push_back(block);
@@ -148,8 +161,6 @@ void BatchNormLayer::setupShaders() {
     }
 }
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

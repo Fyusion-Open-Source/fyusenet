@@ -18,15 +18,11 @@
 #include "../../gl/glinfo.h"
 #include "../../gl/vertexshader.h"
 #include "../../gl/fragmentshader.h"
-#include "../../gl/shaderprogram.h"
-#include "../../gl/glexception.h"
-
+#include "../../common/miscdefs.h"
 #include "transconvlayerbase_vanilla.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+namespace fyusion::fyusenet::gpu::vanilla {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -38,7 +34,7 @@ namespace vanilla {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 TransConvLayerBase::TransConvLayerBase(const ConvLayerBuilder & builder, int layerNumber) : ConvLayerBase(builder, layerNumber) {
     if (upsample_ != 2) THROW_EXCEPTION_ARGS(FynException, "Only stride 2 transpose conv layers are supported for now");
@@ -67,8 +63,7 @@ TransConvLayerBase::TransConvLayerBase(const ConvLayerBuilder & builder, int lay
  * @copydoc GPULayerBase::~GPULayerBase
  */
 TransConvLayerBase::~TransConvLayerBase() {
-    if (weights_) delete weights_;
-    weights_ = nullptr;
+    FNET_DEL_AND_CLEAR(weights_);
 }
 
 
@@ -76,16 +71,12 @@ TransConvLayerBase::~TransConvLayerBase() {
  * @copydoc GPULayerBase::cleanup
  */
 void TransConvLayerBase::cleanup() {
-    if (coordBuffer_) delete coordBuffer_;
-    if (textureBuffer_) delete textureBuffer_;
-    if (indexBuffer_) delete indexBuffer_;
-    if (vertexArray_) delete vertexArray_;
-    coordBuffer_ = nullptr;
-    textureBuffer_ = nullptr;
-    indexBuffer_ = nullptr;
-    vertexArray_ = nullptr;
+    FNET_DEL_AND_CLEAR(coordBuffer_);
+    FNET_DEL_AND_CLEAR(textureBuffer_);
+    FNET_DEL_AND_CLEAR(indexBuffer_);
+    FNET_DEL_AND_CLEAR(vertexArray_);
     if ((context_.isCurrent()) && (stencilBuffer_ != 0)) {
-        glDeleteTextures(1,&stencilBuffer_);
+        glDeleteTextures(1, &stencilBuffer_);
     }
     stencilBuffer_ = 0;
     for (int i=0; i < NUM_STRATA; i++) {
@@ -100,7 +91,7 @@ void TransConvLayerBase::cleanup() {
 /**
  * @brief Setup layer by allocating and initializing required GL resources
  *
- * @pre OpenGL context that is to be used for rendering must be current to the calling thread
+ * @pre The OpenGL context that is to be used for rendering must be current to the calling thread
  *
  * This function performs the required setup for layer operation. It allocates GL resources like
  * FBOs and VBOs, pre-computes the proxy-polygons used for rendering and also compiles all required
@@ -121,7 +112,7 @@ void TransConvLayerBase::setup() {
     setupNetworkPolygons(vertexArray_, kernel_);
     vertexArray_->unbind();
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
         THROW_EXCEPTION_ARGS(FynException, "Failed to setup network layer (glerr=0x%x)", err);
     }
@@ -133,13 +124,13 @@ void TransConvLayerBase::setup() {
 /**
  * @copydoc LayerBase::forward
  */
-void TransConvLayerBase::forward(uint64_t sequence) {
+void TransConvLayerBase::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_CULL_FACE);
     glEnable(GL_BLEND);
@@ -188,7 +179,7 @@ void TransConvLayerBase::forward(uint64_t sequence) {
  *   - binds attribute locations
  *   - creates a uniform state object that has the correct settings for the shader uniforms
  */
-unistateptr TransConvLayerBase::configureShader(programptr shader,int stratum) const {
+unistateptr TransConvLayerBase::configureShader(const programptr& shader,int stratum) const {
     shader->bindAttributeLocation("attributes0", 0);
     shader->bindAttributeLocation("attributes1", 1);
     shader->link();
@@ -225,7 +216,7 @@ void TransConvLayerBase::performInputPasses(UniformWeightArray *weights, int out
     assert(upsample_ == 2);
     ShaderProgram *shader = nullptr;
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
     int ibooffset=0;
@@ -233,7 +224,7 @@ void TransConvLayerBase::performInputPasses(UniformWeightArray *weights, int out
         glStencilFuncSeparate(GL_FRONT_AND_BACK, GL_EQUAL, stratum+1, 0xFF);
         int xindex = stratum & 1;
         int yindex= (stratum & 2)>>1;
-        ibooffset = stratum * 6 * sizeof(GLshort);
+        ibooffset = (int)(stratum * 6 * sizeof(GLshort));
         shader = shaders_[stratum].at(weights->numRenderTargets(outputPass)).get();
         shader->bind(shaderStates_[stratum].at(weights->numRenderTargets(outputPass)).get());
         glActiveTexture(GL_TEXTURE0);
@@ -241,7 +232,7 @@ void TransConvLayerBase::performInputPasses(UniformWeightArray *weights, int out
             glBindTexture(GL_TEXTURE_2D,inputTextures_.at(inpass));
             const float *coeffs = weights->getPackageWeights(inpass,outputPass,xindex,yindex);
             shader->setMappedUniformMat4Array(COEFFICIENTS, coeffs, weights->numRenderTargets(outputPass));
-            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, (const char *)0+ibooffset);
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, (const char *)nullptr + ibooffset);
         }
     }
     if (shader) shader->unbind();
@@ -253,7 +244,7 @@ void TransConvLayerBase::performInputPasses(UniformWeightArray *weights, int out
  * @param outPass Output rendering pass
  * @param bias Pointer to weight array that stored biases and weights
  *
- * Depending on whether or not output padding is selected, this preloads the target fraembuffers
+ * Depending on whether the output padding is selected, this preloads the target framebuffers
  * with the bias values in case the output padding was zero. For non-zero paddings, the bias is
  * handled within the shader itself.
  */
@@ -286,18 +277,23 @@ void TransConvLayerBase::setBias(int outPass, const UniformWeightArray *bias) {
  *  - shader-controller bias
  */
 size_t TransConvLayerBase::shaderPreprocessing(char *preproc, size_t maxChars) {
-    ssize_t mc = handlePreprocFlags(flags_, preproc, maxChars);
+#if defined(WIN32) || defined(WIN64)
+        using ssize_t = int64_t;
+#endif
+    ssize_t mc = (ssize_t)(preprocessor_.generatePreprocessorPreamble(flags_, preproc, maxChars));
     if (outputPadding_ > 0) {
         strncat(preproc, "#define USE_BIAS\n", mc);
-        mc -= maxChars - strlen(preproc);  // ouch
+        mc -= (ssize_t)(maxChars - strlen(preproc));  // ouch
+        assert(mc >= 0);
     }
-    return mc;
+    return (size_t)mc;
 }
 
 
 /**
  * @copydoc GPULayerBase::setupFBOs
  */
+
 void TransConvLayerBase::setupFBOs() {
     if (outputTextures_.empty()) THROW_EXCEPTION_ARGS(FynException, "No output texture set in convlayer %s", getName().c_str());
     if (!weights_) THROW_EXCEPTION_ARGS(FynException, "No weights loaded");
@@ -389,6 +385,9 @@ void TransConvLayerBase::setupNetworkPolygons(VAO *vao, int kernel) {
         case 3:
             depth=0.500f+0.0625f;
             break;
+        default:
+            // unreachable code by construction
+            break;
         }
         attrs0[offset0 + 0*vertsize + 0] = posleft;
         attrs0[offset0 + 0*vertsize + 1] = postop;
@@ -418,12 +417,12 @@ void TransConvLayerBase::setupNetworkPolygons(VAO *vao, int kernel) {
     textureBuffer_ = new VBO(context_);
     vao->enableArray(0);
     vao->enableArray(1);
-    coordBuffer_->setBufferData(attrs0,vertsize*4*NUM_STRATA*sizeof(float),GL_STATIC_DRAW);
+    coordBuffer_->setBufferData(attrs0, (int)(vertsize * 4 * NUM_STRATA * sizeof(float)), GL_STATIC_DRAW);
     coordBuffer_->bind();
-    vao->setVertexAttributeBuffer(0,vertsize,GL_FLOAT,GL_FALSE,0,0);
-    textureBuffer_->setBufferData(attrs1,texsize*4*NUM_STRATA*sizeof(float),GL_STATIC_DRAW);
+    vao->setVertexAttributeBuffer(0, vertsize, GL_FLOAT, GL_FALSE, 0 , 0);
+    textureBuffer_->setBufferData(attrs1, (int)(texsize * 4 * NUM_STRATA * sizeof(float)), GL_STATIC_DRAW);
     textureBuffer_->bind();
-    vao->setVertexAttributeBuffer(1,texsize,GL_FLOAT,GL_FALSE,0,0);
+    vao->setVertexAttributeBuffer(1, texsize, GL_FLOAT, GL_FALSE, 0 , 0);
     delete [] attrs0;
     delete [] attrs1;
     //---------------------------------------------
@@ -433,12 +432,12 @@ void TransConvLayerBase::setupNetworkPolygons(VAO *vao, int kernel) {
     indexBuffer_ = new IBO(context_);
     for (int i=0;i<NUM_STRATA;i++) {
         int offset=i*4;
-        indices[i*6 + 0] = offset + 0;
-        indices[i*6 + 1] = offset + 1;
-        indices[i*6 + 2] = offset + 2;
-        indices[i*6 + 3] = offset + 0;
-        indices[i*6 + 4] = offset + 2;
-        indices[i*6 + 5] = offset + 3;
+        indices[i*6 + 0] = (GLshort)(offset + 0);
+        indices[i*6 + 1] = (GLshort)(offset + 1);
+        indices[i*6 + 2] = (GLshort)(offset + 2);
+        indices[i*6 + 3] = (GLshort)(offset + 0);
+        indices[i*6 + 4] = (GLshort)(offset + 2);
+        indices[i*6 + 5] = (GLshort)(offset + 3);
     }
     indexBuffer_->setBufferData(indices, 6*NUM_STRATA*sizeof(GLshort), GL_STATIC_DRAW);
     indexBuffer_->bind();
@@ -450,9 +449,9 @@ void TransConvLayerBase::setupNetworkPolygons(VAO *vao, int kernel) {
 /**
  * @brief Setup stencil buffer to aid in broadcasting of convolution weights
  *
- * The transpose convolution is eseentially a scatter operation that adds the convolution kernel
+ * The transpose convolution is essentially a scatter operation that adds the convolution kernel
  * to the target tensor in a regular fashion Currently ths transpose convolution layers in this
- * code only support stride-2 transpose-convolutions, wnich performs a "convoluted upsampling" of
+ * code only support stride-2 transpose-convolutions, which performs a "convoluted upsampling" of
  * the input tensor by a factor of 2 along both spatial dimensions. The fixed 2-fold upsampling
  * basically leads to 4 different configurations which are encoded in a stencil-buffer and 4
  * specialized shaders for each of the configurations.
@@ -463,7 +462,7 @@ void TransConvLayerBase::setupStencilBuffer() {
     using namespace opengl;
     assert(upsample_ == 2);
     glGenRenderbuffers(1, &stencilBuffer_);
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) THROW_EXCEPTION_ARGS(FynException,"Cannot setup stencil renderbuffer (err=0x%X)",err);
     //-----------------------------------------------
     // Setup FBO for rendering
@@ -625,9 +624,6 @@ void TransConvLayerBase::setupStencilBuffer() {
 }
 
 
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

@@ -10,6 +10,7 @@
 //--------------------------------------- System Headers -------------------------------------------
 
 #include <cstring>
+#define _USE_MATH_DEFINES
 #include <cmath>
 
 //-------------------------------------- Project  Headers ------------------------------------------
@@ -19,9 +20,8 @@
 #include "../common/logging.h"
 #include "blurlayer.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -33,7 +33,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  *
  * @throws FynException in case the kernel size supplied in the \p builder is not supported
  */
@@ -42,6 +42,7 @@ BlurLayer::BlurLayer(const BlurLayerBuilder & builder, int layerNumber) : Functi
     kernelWeights_ = nullptr;
     blurType_ = builder.blurType_;
     kernelSize_ = builder.kernel_;
+    if (kernelSize_ > MAX_KERNEL_SIZE) THROW_EXCEPTION_ARGS(FynException, "Maximum kernel size for blurs is %d, wanted: %d", MAX_KERNEL_SIZE, kernelSize_);
 }
 
 
@@ -88,7 +89,7 @@ void BlurLayer::setup() {
  * @brief Precompute weights for Gaussian blur
  */
 void BlurLayer::computeGaussianWeights() {
-    float gauss1d[kernelSize_];
+    float gauss1d[MAX_KERNEL_SIZE];
     float fac = 1.0/sqrt((2.0*M_PI));
     for (int i=0; i < kernelSize_; i++) {
         float x = (float)(i-(kernelSize_-1)/2);
@@ -143,7 +144,7 @@ void BlurLayer::setupShaders() {
     // TODO (mw) use preproc part and check shader if it supports activation
     for (int i=1; i <= maxRenderTargets_; i++) {
         snprintf(preproc,sizeof(preproc),"#define NUM_LANES %d\n#define KERNEL_SIZE %d\n", i, kernelSize_);
-        handlePreprocFlags(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
+        preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
         shaders_[i-1] = compileShader(preproc);
         shaders_[i-1]->mapUniformLocation("kernelCoeffs", SHADER_WEIGHTS);
         unistateptr state = UniformState::makeShared(shaders_[i-1]);
@@ -198,8 +199,6 @@ void BlurLayer::afterRender() {
 }
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

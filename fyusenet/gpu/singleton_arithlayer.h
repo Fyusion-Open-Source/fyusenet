@@ -25,9 +25,7 @@
 #include "singleton_arithlayerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Layer that performs a static arithmetic operation with a singleton and a shallow tensor
@@ -38,27 +36,27 @@ namespace gpu {
  *   - multiplying/dividing \e all elements of a tensor by a single value
  *
  * Note that in contrast to most other layers, the 2nd operand (the single value) is provided via
- * the SinglethonArithLayerBuilder in the constructor of this layer.
+ * the SingletonArithLayerBuilder in the constructor of this layer.
  */
 class SingletonArithmeticLayer : public FunctionLayer {
  public:
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
-    SingletonArithmeticLayer(const SingletonArithLayerBuilder & builder,int layerNumber);
+    SingletonArithmeticLayer(const SingletonArithLayerBuilder & builder, int layerNumber);
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
+    void cleanup() override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
-    virtual void setupShaders() override;
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
+    void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
+    void setupShaders() override;
+    void beforeRender() override;
+    void afterRender() override;
     programptr compileShader(const char *preproc);
     unistateptr initShader(programptr shader,int renderTargets);
 
@@ -72,9 +70,7 @@ class SingletonArithmeticLayer : public FunctionLayer {
     float operand_ = 0.0f;                              //!<
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

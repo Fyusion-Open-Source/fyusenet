@@ -25,12 +25,10 @@
 #include "../base/layerflags.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
- * @brief Layer that maps input data with a sigmoid (tanh) function for shallow tensors
+ * @brief Layer that maps input data with a sigmoid (tanh) function for shallow & sequence tensors
  *
  * This layer maps all input data element-wise using the tanh function, using the following
  * mapping:
@@ -54,7 +52,7 @@ class TanhLayer : public SigmoidLayer {
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupShaders() override;
+    void setupShaders() override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -62,9 +60,7 @@ class TanhLayer : public SigmoidLayer {
 
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

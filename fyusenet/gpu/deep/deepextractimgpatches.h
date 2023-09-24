@@ -70,19 +70,17 @@ class DeepExtractImagePatches : public DeepLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
-    virtual void setup() override;
-    virtual void forward(uint64_t sequence) override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void cleanup() override;
+    void setup() override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
     void setupShaders();
     void setupNetworkPolygons(VAO *vao);
-    void setupVBO(VAO *vao);
-    void setupIBO(VAO *vao);
 
     // ------------------------------------------------------------------------
     // Member variables

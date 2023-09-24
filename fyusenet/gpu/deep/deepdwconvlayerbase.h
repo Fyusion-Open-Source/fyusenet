@@ -51,14 +51,14 @@ class DeepDepthwiseConvLayerBase : public DeepConvLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void loadWeightsAndBiases(const float *weights,size_t offset=0) override;
+    void loadParameters(const ParameterProvider *weights) override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
     void createWeightTextureMatrix(const float *srcweights, int winOffset, GLuint weightTexture);
-    virtual void setupNetworkPolygons(VAO *vao) override;
-    virtual void setupShaders() override;
+    void setupNetworkPolygons(VAO *vao) override;
+    void setupShaders() override;
 
     // ------------------------------------------------------------------------
     // Member variables

@@ -20,10 +20,8 @@
 #include "../../common/logging.h"
 #include "deeptiler.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -36,7 +34,7 @@ namespace deep {
 
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepBatchNormLayer::DeepBatchNormLayer(const GPULayerBuilder & builder, int layerNumber) : DeepFunctionLayer(builder, layerNumber) {
     shader_ = nullptr;
@@ -73,12 +71,22 @@ std::vector<BufferSpec> DeepBatchNormLayer::getRequiredOutputBuffers() const {
 }
 
 /**
- * @copydoc BatchNormInterface::loadScaleAndBias()
- */
-void DeepBatchNormLayer::loadScaleAndBias(const float * scaleAndBias, size_t sbOffset) {
+ * @brief Load batchnorm data from a parameter provider
+ *
+ * @param source Pointer to provider object that stores the parameters to be used for this layer
+ *
+ * This function retrieves the batch-norm data from a supplied ParameterProvider instances using
+ * the layer name suffixed with \c ".bn" as the name and the \c subIndex set to 0. The batchnorm
+ * data is supposed to be in the following format:
+ *  1. all scales (single value per output channel for a total of \c \#output values)
+ *  2. all offsets (single value per output channel for a total of \c \#output values)
+ *
+ *  @see ParameterProvider
+ */void DeepBatchNormLayer::loadParameters(const ParameterProvider * source) {
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
     int padout = PIXEL_PACKING * ((outputChannels_ + PIXEL_PACKING-1) / PIXEL_PACKING);
-    const float * srcbn = scaleAndBias + sbOffset;
+    auto blob = source->get(getName()+std::string(".bn"), getNumber(), 0);
+    const float * srcbn = std::any_cast<const float *>(blob.get());
     bnScales_ = new float[padout];
     bnBias_ = new float[padout];
     memset(bnScales_,0,padout * sizeof(float));
@@ -111,13 +119,13 @@ void DeepBatchNormLayer::setupNetworkPolygons(VAO *vao) {
     }
     vao->enableArray(1);
     scaleAttribs_ = new VBO(context_);
-    scaleAttribs_->setBufferData(attrs1, tiler_->numOutputTiles()*4*4*sizeof(float), GL_STATIC_DRAW);
+    scaleAttribs_->setBufferData(attrs1, (GLsizei)(tiler_->numOutputTiles() * 4 * 4 * sizeof(float)), GL_STATIC_DRAW);
     scaleAttribs_->bind();
     vao->setVertexAttributeBuffer(1,4,GL_FLOAT,GL_FALSE,0,0);
     delete [] attrs1;
     biasAttribs_ = new VBO(context_);
     vao->enableArray(2);
-    biasAttribs_->setBufferData(attrs2, tiler_->numOutputTiles()*4*4*sizeof(float), GL_STATIC_DRAW);
+    biasAttribs_->setBufferData(attrs2, (GLsizei)(tiler_->numOutputTiles() * 4 * 4 * sizeof(float)), GL_STATIC_DRAW);
     biasAttribs_->bind();
     vao->setVertexAttributeBuffer(2,4,GL_FLOAT,GL_FALSE,0,0);
     delete [] attrs2;
@@ -131,7 +139,7 @@ void DeepBatchNormLayer::renderChannelBatch() {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D,inputTextures_.at(0));
     int quads = tiler_->numOutputTiles();
-    glDrawElements(GL_TRIANGLES,quads*6,GL_UNSIGNED_SHORT,(const GLvoid *)0);
+    glDrawElements(GL_TRIANGLES,quads*6,GL_UNSIGNED_SHORT,(const GLvoid *)nullptr);
 }
 
 
@@ -156,7 +164,7 @@ void DeepBatchNormLayer::afterRender() {
  */
 void DeepBatchNormLayer::setupShaders() {
     char preproc[1024] = {0};
-    handlePreprocFlags(flags_, preproc, sizeof(preproc)-1);
+    preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-1);
     shader_ = compileShaderPair("shaders/deep/deepbatchnorm.vert","shaders/deep/deepbatchnorm.frag",preproc,typeid(this));
     try {
         shader_->bindAttributeLocation("attributes0",0);
@@ -175,9 +183,6 @@ void DeepBatchNormLayer::setupShaders() {
 }
 
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

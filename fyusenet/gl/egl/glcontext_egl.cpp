@@ -306,6 +306,16 @@ GLContextInterface * GLContext::getMain() const {
     return manager_->getMain();
 }
 
+
+/**
+ * @copydoc GLContextInterface::texturePool()
+ */
+ScopedTexturePool * GLContext::texturePool() const {
+    assert(manager_);
+    return manager_->texturePool();
+}
+
+
 /*##################################################################################################
 #                               N O N -  P U B L I C  F U N C T I O N S                            #
 ##################################################################################################*/
@@ -325,7 +335,7 @@ GLContextInterface * GLContext::getMain() const {
 GLContext * GLContext::createFromCurrent(int idx, fyusenet::GfxContextManager *mgr) {
     EGLContext ccontext = eglGetCurrentContext();
     if (ccontext == EGL_NO_CONTEXT) return nullptr;
-    GLContext * ctx = new GLContext(ccontext, 0, mgr);
+    GLContext * ctx = new GLContext(ccontext, idx, mgr);
     ctx->display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     ctx->defaultSurface_ = eglGetCurrentSurface(EGL_DRAW);
     ctx->activeSurface_ = ctx->defaultSurface_;

@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <vector>
 #include <unordered_map>
 
 //-------------------------------------- Project  Headers ------------------------------------------
@@ -23,8 +24,7 @@
 #include "texture.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
 
 /**
  * @brief Wrapper class for OpenGL Frame-Buffer-Object (%FBO)
@@ -33,15 +33,12 @@ namespace opengl {
  * It maintains the actual %FBO as well as the backing texture(s) either as external entities
  * or, for a simple %FBO case, as an internal texture.
  *
- * Example usage:
- * <code
- *
- *
  * @see https://www.khronos.org/opengl/wiki/Framebuffer_Object
  */
 class FBO : public fyusenet::GfxContextTracker {
  public:
     constexpr static int MAX_DRAWBUFFERS = 8;
+    constexpr static int MAX_INTNL_TEXTURES = 8;
     // ------------------------------------------------------------------------
     // Constructors / Destructor
     // ------------------------------------------------------------------------
@@ -49,16 +46,19 @@ class FBO : public fyusenet::GfxContextTracker {
     FBO(const fyusenet::GfxContextLink & context, const Texture2D& backingTexture);
     FBO(const fyusenet::GfxContextLink & context, int width, int height, int channels, Texture::pixtype type, GLenum target = GL_TEXTURE_2D);
     FBO(const fyusenet::GfxContextLink & context, int width, int height, GLuint color0Texture, GLenum target = GL_TEXTURE_2D);
-    virtual ~FBO();
+    ~FBO() override;
+
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    bool isValid() const;
+    [[nodiscard]] bool isValid() const;
     void invalidate();
     size_t copyToPBO(PBO *target, GLenum dataType, int channels, size_t pboOffset=0, bool bindPBO=false, bool integral=false);
+    size_t copyToPBO(PBO *target, int width, int height, GLenum dataType, int channels, size_t pboOffset=0, bool bindPBO=false, bool integral=false);
     void bind(GLenum target = GL_FRAMEBUFFER, bool statusCheck=true);
     void bindWithViewport(GLenum target = GL_FRAMEBUFFER);
     void unbind(GLenum target = GL_FRAMEBUFFER);
+    void addTexture(GLenum attachment, int channels, Texture::pixtype pixType, GLenum target = GL_TEXTURE_2D);
     void addTexture(GLenum attachment, GLuint handle, GLenum target = GL_TEXTURE_2D);
     void addTexture(GLenum attachment, const Texture2D& texture);
     void addRenderbuffer(GLenum attachment, GLuint handle);
@@ -66,10 +66,10 @@ class FBO : public fyusenet::GfxContextTracker {
     void updateColorAttachment(GLenum attachment, const Texture2D& texture);
     void updateColorAttachment(GLenum attachment, GLuint texture, int width, int height);    
     void resize(int width, int height);
-    GLuint getAttachment(GLenum attachment = GL_COLOR_ATTACHMENT0) const;
+    [[nodiscard]] GLuint getAttachment(GLenum attachment = GL_COLOR_ATTACHMENT0) const;
     void bindAttachment(GLenum attachment = GL_COLOR_ATTACHMENT0, GLenum unit = GL_TEXTURE0, GLenum target = GL_TEXTURE_2D);
-    bool hasAttachment(GLenum attachment) const;
-    int numDrawBuffers() const;
+    [[nodiscard]] bool hasAttachment(GLenum attachment) const;
+    [[nodiscard]] int numDrawBuffers() const;
     void setWriteMask() const;
 
     /**
@@ -77,7 +77,7 @@ class FBO : public fyusenet::GfxContextTracker {
      *
      * @return OpenGL FBO handle or 0 if FBO is not valid
      */
-    GLuint getHandle() const {
+    [[nodiscard]] GLuint getHandle() const {
         return handle_;
     }
 
@@ -86,7 +86,7 @@ class FBO : public fyusenet::GfxContextTracker {
      *
      * @return Number of texture attachments
      */
-    int numAttachments() const {
+    [[nodiscard]] int numAttachments() const {
         return attachments_.size();
     }
 
@@ -99,7 +99,7 @@ class FBO : public fyusenet::GfxContextTracker {
      *       backing the FBO, which have associated dimensions. For ease-of-use we are assigning
      *       dimensions to an FBO here and assume that all backing textures have the correct size.
      */
-    int width() const {
+    [[nodiscard]] int width() const {
         return width_;
     }
 
@@ -113,63 +113,60 @@ class FBO : public fyusenet::GfxContextTracker {
      *       backing the FBO, which have associated dimensions. For ease-of-use we are assigning
      *       dimensions to an FBO here and assume that all backing textures have the correct size.
      */
-    int height() const {
+    [[nodiscard]] int height() const {
         return height_;
     }
 
     /**
-     * @brief Get GL handle of (internal) backing texture
+     * @brief Compute buffer size that can accommodate %FBO data
      *
-     * @return GL handle for internal backing texture, or 0 if there is no internal texture
+     * @param channels Assumed number of channels in the %FBO
      *
-     * FBO wrappers may have an internal backing texture for convenience. To get the texture handle
-     * of that type of wrappers, use this function.
+     * @return Number of elements (not necessarily bytes) to allocate for a buffer
      */
-    GLuint getInternalTexture() const {
-        return internalTexture_;
+    [[nodiscard]] size_t size(int channels) const {
+        return width_ * height_ * channels;
     }
-
 
     /**
      * @brief Amount of texture memory consumed by all (internally backed) FBOs
      *
      * @return Size (bytes) of texture memory occupied by all internally backed FBOs
      */
-    static int64_t textureMemory() {
+    [[nodiscard]] static int64_t textureMemory() {
         return textureMemory_.load();
     }
 
     template<typename T, GLenum dtype>
     void writeToMemory(T *memory, int channels, GLsizei bufsize, bool integral=false);
 
-
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    GLuint setupInternalTexture(int width,int height,int channels, Texture::pixtype type, GLenum target = GL_TEXTURE_2D);
+    GLuint setupInternalTexture(int width, int height, int channels, Texture::pixtype type, GLenum target = GL_TEXTURE_2D);
+
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
     static const GLenum WRITE_BUFFERS[MAX_DRAWBUFFERS];
-    int width_;                                     //!< Width of the FBO (pixels) and its backing texture(s)
-    int height_;                                    //!< Height of the FBO (pixels) and its backing texture(s)
-    GLuint handle_ = 0;                             //!< FBO handle (OpenGL)
-    GLuint internalTexture_ = 0;                    //!< Texture handle of optional internal backing texture
-    GLenum internalTarget_ = GL_TEXTURE_2D;         //!< Texture target for the internal texture
-    int internalChannels_;                          //!< Color channels for the #internalTexture_
-    Texture::pixtype internalType_;                 //!< Data type for the #internalTexture_
-    GLint internalFormat_ = 0;                      //!< GL (internal) texture format, relates to #internalTexture_ when valid
-    mutable int numDrawBuffers_ = 0;                //!< Number of drawing buffers for this FBO
-    mutable bool bound_ = false;                    //!< Indicator if FBO is currently bound
-    mutable bool dbDirty_ = false;                  //!<
-    std::unordered_map<GLint,GLenum> attachments_;  //!<
-    static std::atomic<int64_t> textureMemory_;     //!< Tracker for internally allocated texture memory
+    int width_ = 0;                                         //!< Width of the FBO (pixels) and its backing texture(s)
+    int height_ = 0;                                        //!< Height of the FBO (pixels) and its backing texture(s)
+    GLuint handle_ = 0;                                     //!< FBO handle (OpenGL)
+    GLuint internalTextures_[MAX_INTNL_TEXTURES];           //!< Internal textures (managed by the FBO itself)
+    GLenum internalTargets_[MAX_INTNL_TEXTURES];            //!< Internal textures (managed by the FBO itself)
+    uint8_t internalChannels_[MAX_INTNL_TEXTURES];          //!< Internal textures (managed by the FBO itself)
+    Texture::pixtype internalTypes_[MAX_INTNL_TEXTURES];    //!< Data type for the #internalTextures_
+    int numInternalTextures_ = 0;                           //!< Number of internal textures
+    mutable int numDrawBuffers_ = 0;                        //!< Number of drawing buffers for this FBO
+    mutable bool bound_ = false;                            //!< Indicator if FBO is currently bound
+    mutable bool dbDirty_ = false;                          //!< Set to \c true if the number of draw buffers need to be recomputed
+    std::unordered_map<GLint,GLuint> attachments_;          //!< Texture / Renderbuffer handles for mapped by their FBO attachment points
+    static std::atomic<int64_t> textureMemory_;             //!< Tracker for internally allocated texture memory
 };
 
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
 
 
 // vim: set expandtab ts=4 sw=4:

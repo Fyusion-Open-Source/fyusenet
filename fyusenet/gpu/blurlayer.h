@@ -26,9 +26,8 @@
 #include "blurlayerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Simple spatial blur layer (Gaussian/Box) for shallow tensors
@@ -44,14 +43,13 @@ namespace gpu {
  */
 class BlurLayer : public FunctionLayer {
  public:
-    enum {
-        SHADER_WEIGHTS = 1
-    };
+    constexpr static int MAX_KERNEL_SIZE = 21;
+    constexpr static int SHADER_WEIGHTS = 1;
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     BlurLayer(const BlurLayerBuilder & builder,int layerNumber);
-    virtual ~BlurLayer();
+    ~BlurLayer() override;
 
     // ------------------------------------------------------------------------
     // Public methods
@@ -82,9 +80,6 @@ class BlurLayer : public FunctionLayer {
     float *kernelWeights_ = nullptr;                   //!< Pointer to computed kernel weights to be used in the shader
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
-
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

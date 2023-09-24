@@ -24,10 +24,7 @@
 #include "deepconvlayerbase.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 /**
  * @brief NxN convolution layer for deep tensor format
@@ -47,15 +44,15 @@ class DeepConvLayerNxN : public DeepConvLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void forward(uint64_t sequence) override;
-    virtual void cleanup() override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
+    void cleanup() override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupNetworkPolygons(VAO *vao) override;
-    virtual void compileConvolutionShaders(const char *preproc) override;
+    void setupNetworkPolygons(VAO *vao) override;
+    void compileConvolutionShaders(const char *preproc) override;
     unistateptr initShader(programptr shader, int horizOffset, int kernelOffset, int kernelY);
     void partialRender();
     void nonPartialRender();
@@ -72,15 +69,12 @@ class DeepConvLayerNxN : public DeepConvLayerBase {
     bool partialConv_ = false;                      //!< Indicator if the convolution done here requires multiple render passes due to splitting of the kernel
     std::vector<programptr> shaders_;               //!< Convolution shader programs
     std::vector<programptr> noBiasShaders_;         //!< Convolution shader programs that do not include the network bias
-    std::vector<unistateptr> shaderStates_;         //!< Uniform-variable state for #shader_
-    std::vector<unistateptr> noBiasShaderStates_;   //!< Uniform-variable state for #noBiasShader_
+    std::vector<unistateptr> shaderStates_;         //!< Uniform-variable state for #shaders_
+    std::vector<unistateptr> noBiasShaderStates_;   //!< Uniform-variable state for #noBiasShaders_
 
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 
 // vim: set expandtab ts=4 sw=4:

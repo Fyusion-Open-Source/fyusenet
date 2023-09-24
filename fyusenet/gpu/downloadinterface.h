@@ -17,12 +17,13 @@
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
+#include "../base/buffershape.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
 
 class Engine;
+struct StateToken;
 
 namespace gpu {
 
@@ -32,19 +33,25 @@ namespace gpu {
  */
 class DownloadLayerInterface {
     friend class fyusion::fyusenet::Engine;
- public:
 
-     /**
-      * @brief Wait for the download thread to finish
-      */
-     virtual void wait(uint64_t sequenceNo) = 0;
+public:
+
+    /**
+     * @brief Wait for the download thread to finish
+     */
+    virtual void wait(uint64_t sequenceNo) = 0;
+
+    /**
+     * @brief Get buffer shape for output port
+     */
+    [[nodiscard]] virtual BufferShape getOutputShape(int port) const = 0;
 
 #ifdef FYUSENET_MULTITHREADING
     /**
        * @brief Asynchronous layer execution
        *
        * @param sequenceNo Sequence number of the run that this layer is scheduled in
-       *
+       * @param token State token for the current run
        * @param callback Callback function into the engine that notifies when a download is
        *                 complete
        *
@@ -52,14 +59,12 @@ class DownloadLayerInterface {
        * work properly, it is important that the GL operation that led to the input tensor for
        * this layer was run in the same thread as the calling thread.
        */
-      virtual void asyncForward(uint64_t sequenceNo, const std::function<void(uint64_t)> & callback) = 0;
+      virtual void asyncForward(uint64_t sequenceNo, StateToken * token, const std::function<void(uint64_t)> & callback) = 0;
 #endif
 };
 
-
 } // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
 
 // vim: set expandtab ts=4 sw=4:
 

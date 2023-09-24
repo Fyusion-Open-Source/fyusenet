@@ -38,7 +38,7 @@ namespace vanilla {
 
 
 /**
- * @copydoc vanilla::ConvLayerBase::ConvLayerBase
+ * @copydoc vanilla::ConvLayerBase::ConvLayerBase(const ConvLayerBuilder&, int)
  */
 FractionalConvLayerNxN::FractionalConvLayerNxN(const ConvLayerBuilder & builder, int layerNumber):ConvLayerNxN(builder, layerNumber) {
     if (builder.dilation_[0] > 1 || builder.dilation_[1] > 1) THROW_EXCEPTION_ARGS(FynException,"Dilations not supported for fractional convolution");

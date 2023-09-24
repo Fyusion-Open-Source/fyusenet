@@ -35,7 +35,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepScaleLayer::DeepScaleLayer(const ScaleLayerBuilder & builder, int layerNumber) :
       DeepFunctionLayer((const GPULayerBuilder &)builder, layerNumber) {
@@ -46,7 +46,7 @@ DeepScaleLayer::DeepScaleLayer(const ScaleLayerBuilder & builder, int layerNumbe
 
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepScaleLayer::DeepScaleLayer(const GPULayerBuilder & builder, int layerNumber) : DeepFunctionLayer(builder, layerNumber) {
     type_ = ScalingType::NEAREST;
@@ -120,7 +120,7 @@ void DeepScaleLayer::afterRender() {
  */
 void DeepScaleLayer::setupShaders() {
     char preproc[1024] = {0};
-    handlePreprocFlags(flags_, preproc, sizeof(preproc)-1);
+    preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-1);
     shader_ = compileShaderPair("shaders/deep/deepdefault.vert","shaders/deep/deepdefault.frag",preproc,typeid(this));
     try {
         shader_->bindAttributeLocation("attributes0",0);

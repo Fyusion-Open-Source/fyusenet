@@ -62,7 +62,7 @@ void TestContextManager::setupGLContext(int derived) {
     while (!buttonup) {
         glfwWaitEventsTimeout(0.1);
     }
-    for (int i=0; i<6; i++) {
+    for (int i=0; i < 4; i++) {
         ctx->sync();
     }
 #endif
@@ -89,6 +89,23 @@ void TestContextManager::tearDownGLContext() {
 #endif
     context_.reset();
     fyusion::fyusenet::GfxContextManager::tearDown();
+}
+
+void TestContextManager::waitMouse() {
+#ifdef FYUSENET_USE_GLFW
+    static bool buttondown = false;
+    const fyusion::opengl::GLContext * ctx = dynamic_cast<const fyusion::opengl::GLContext *>(context_.interface());
+    ctx->sync();
+    auto mousecb = [](GLFWwindow *win, int bt, int action, int mods) {
+        if (action == GLFW_PRESS) {
+            buttondown = true;
+        }
+    };
+    glfwSetMouseButtonCallback(ctx->context_, mousecb);
+    while (!buttondown) {
+        glfwWaitEventsTimeout(0.1);
+    }
+#endif
 }
 
 /*##################################################################################################

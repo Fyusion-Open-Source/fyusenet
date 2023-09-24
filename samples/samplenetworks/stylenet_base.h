@@ -22,19 +22,22 @@
 
 #include <fyusenet/fyusenet.h>
 #include <fyusenet/gl/gl_sys.h>
+#include "../helpers/stylenet_provider.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
 
+
 /**
- * @brief Neural network that implements a simplicistic image style-transfer operation
+ * @brief Neural network that implements a simplistic image style-transfer operation
  *
  * This class implements a basic image style-transfer operation based on 3x3 by convolution layers.
  * Different styles can be used by changing the weight/bias data. To initialize this network, perform
  * the following steps:
  *   1. Instantiate the network object
- *   2. Load weights and biases by calling loadWeightsAndBiases() on the object
- *   3. Call setup() on the object
- *   4. Set either input/output buffers or textures
+ *   2. Instantiate a StyleNetParameter object and load data into it
+ *   3. Load parameters into the network by calling setParameters()
+ *   4. Call setup() on the object
+ *   5. Set either input/output buffers or textures
  *
  * To perform inference on the net, simply use the forward() method. Finally for taking down the
  * network, make sure to call cleanup() within a valid GL context prior to deleting the object.
@@ -43,21 +46,14 @@
  * and output textures and asynchronous operation is desired, make sure to invoke the asynchronous()
  * method prior to calling setup(). During the operation, the network handles the multi-buffering
  * internally but there are rules to follow:
- *   - The only safe section to query the (current) output buffer via getOutputBuffer() is when
+ *   - The only safe section to query the (current) output buffer via getCPUOutputBuffer() is when
  *     inside the asynchronous callback that was supplied to asynchronous()
  *   - The output buffer will be swapped as soon as the callback returns, using the buffer beyond
  *     that point is subject to race conditions
  */
 class StyleNetBase : public fyusion::fyusenet::NeuralNetwork {
  public:
-    /**
-     * Common indices for the layer numbers
-     */
-    enum {
-        UNPACK = 0,
-        UPLOAD = 0,
-        CONV1
-    };
+    using fyusion::fyusenet::NeuralNetwork::forward;
 
     constexpr static int ASYNC_BUFFERS = 2;
 
@@ -65,17 +61,29 @@ class StyleNetBase : public fyusion::fyusenet::NeuralNetwork {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     StyleNetBase(int width, int height, bool upload, bool download, const fyusion::fyusenet::GfxContextLink& ctx = fyusion::fyusenet::GfxContextLink());
-    ~StyleNetBase();
+    ~StyleNetBase() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual execstate forward() override;
-    void setInputTexture(GLuint texture);
+    execstate forward(fyusion::fyusenet::StateToken * token) override;
+    void setInputGPUBuffer(fyusion::fyusenet::gpu::GPUBuffer * buffer);
     GLuint getOutputTexture() const;
-    GLuint getOutputFBO() const;
     void setInputBuffer(const float *data);
     CPUBuffer * getOutputBuffer();
+
+    /**
+     * @brief Set weights/biases provider into network
+     *
+     * @param params Pointer to parameter provider
+     *
+     * This function merely sets the internal parameter provider (nothing is loaded into the network
+     * here) and takes ownership over the supplied data.
+     */
+    void setParameters(StyleNetProvider * params) {
+        delete parameters_;
+        parameters_ = params;
+    }
 
     /**
      * @brief Enable writing of all intermediate layer results to binary dumps
@@ -105,12 +113,31 @@ class StyleNetBase : public fyusion::fyusenet::NeuralNetwork {
         oesInput_ = true;
     }
 
-    virtual void loadWeightsAndBiases(float *weightsAndBiases, size_t size) = 0;
+
+    /**
+     * @brief Get processing / network width
+     *
+     * @return Network width (pixels)
+     */
+    [[nodiscard]] int width() const {
+        return width_;
+    }
+
+
+    /**
+     * @brief Get processing / network height
+     *
+     * @return Network height (pixels)
+     */
+    [[nodiscard]] int height() const {
+        return height_;
+    }
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
+    void initializeWeights(fyusion::fyusenet::CompiledLayers & layers) override;
 #ifdef FYUSENET_MULTITHREADING
     void internalDLCallback(uint64_t seqNo, fyusion::fyusenet::cpu::CPUBuffer *buffer, fyusion::fyusenet::AsyncLayer::state state);
     void internalULCallback(uint64_t seqNo, fyusion::fyusenet::cpu::CPUBuffer *buffer, fyusion::fyusenet::AsyncLayer::state state);
@@ -118,17 +145,17 @@ class StyleNetBase : public fyusion::fyusenet::NeuralNetwork {
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
-    GLuint inputTexture_ = 0;               //!< Handle of input texture if upload is not part of the net
-    int width_ = 0;                         //!< Input and output width of the network
-    int height_ = 0;                        //!< Input and output height of the network
-    bool oesInput_ = false;                 //!< Indicator that there is an OES texture unpack step
-    bool upload_ = false;                   //!< Indicator that there is an additional upload layer (i.e. data is not supplie via texture)
-    bool download_ = false;                 //!< Indicator that the network should end with a GPU->CPU download layer
+    int width_ = 0;                           //!< Input and output width of the network
+    int height_ = 0;                          //!< Input and output height of the network
+    bool oesInput_ = false;                   //!< Indicator that there is an OES texture unpack step
+    bool upload_ = false;                     //!< Indicator that there is an additional upload layer (i.e. data is not supplie via texture)
+    bool download_ = false;                   //!< Indicator that the network should end with a GPU->CPU download layer
+    StyleNetProvider * parameters_ = nullptr; //!< Pointer to network parameters
 
     /**
      * Stores multiple download CPU buffers for asynchronous operation.
      */
-    CPUBuffer * asyncDLBuffers_[ASYNC_BUFFERS];
+    CPUBuffer * asyncDLBuffers_[ASYNC_BUFFERS] = {nullptr};
 
     /**
      * Externally supplied callback function that is invoked when an asynchronous download has
@@ -145,7 +172,7 @@ class StyleNetBase : public fyusion::fyusenet::NeuralNetwork {
     /**
      * For buffer-driven networks, contains the pointers to the input buffers.
      *
-     * @see setInputBuffer
+     * @see setCPUInputBuffer
      */
     fyusion::fyusenet::cpu::CPUBuffer * inBuffers_[ASYNC_BUFFERS] = {0};
 

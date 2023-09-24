@@ -27,10 +27,7 @@
 #include "../castlayerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 
 /**
@@ -67,15 +64,15 @@ class DeepCastLayer : public DeepFunctionLayer {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
+    void cleanup() override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupShaders() override;
-    virtual void renderChannelBatch() override;
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
+    void setupShaders() override;
+    void renderChannelBatch() override;
+    void beforeRender() override;
+    void afterRender() override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -85,10 +82,7 @@ class DeepCastLayer : public DeepFunctionLayer {
     CastTarget target_;
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 
 // vim: set expandtab ts=4 sw=4:

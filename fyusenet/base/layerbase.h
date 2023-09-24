@@ -19,16 +19,18 @@
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "../common/fynexception.h"
+#include "parameterprovider.h"
 #include "layerbuilder.h"
 #include "layerflags.h"
 #include "bufferspec.h"
+#include "statetoken.h"
 #include "../cpu/cpubuffer.h"
 
 using fyusion::fyusenet::cpu::CPUBuffer;
-using fyusion::fyusenet::cpu::CPUBufferShape;
+using fyusion::fyusenet::BufferShape;
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 
@@ -89,6 +91,7 @@ class LayerBase {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
+    explicit LayerBase(const LayerBuilder& builder);
     LayerBase(const LayerBuilder& builder, int layerNumber);
     virtual ~LayerBase();
 
@@ -100,7 +103,7 @@ class LayerBase {
      * @brief Perform setup of the layer code
      *
      * This function performs initializations of the layer prior to be able to be used for inference.
-     * Initializations may include buffer allocation, precomputation of tables and - in the case of
+     * Initializations may include buffer allocation, pre-computation of tables and - in the case of
      * GPUs - setting up the necessary interfaces and computation kernels to execute the inference.
      *
      * @pre In case of GPU layers, the GL context that is to be used for running the inference
@@ -122,6 +125,21 @@ class LayerBase {
      */
     virtual void cleanup() = 0;
 
+    /**
+     * @brief Load layer parameters from a provider interface
+     *
+     * @param weights Pointer to a ParameterProvider instance that provides the parameters
+     *
+     * This function is responsible from loading all required parameters from the supplied provider
+     * object. It is reimplemented in derived classes where needed. Check the documentation
+     * in ParameterProvider and derived classes for more information.
+     *
+     * @see ParameterProvider
+     */
+    virtual void loadParameters(const ParameterProvider * weights) {
+        (void)weights;
+        // NOTE (mw) empty on purpose, reimplement in derived classes where needed
+    }
 
     /**
      * @brief Obtain buffer specifiers that are required as input for this layer
@@ -130,7 +148,7 @@ class LayerBase {
      *
      * @see BufferSpec
      */
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const  = 0;
+    [[nodiscard]] virtual std::vector<BufferSpec> getRequiredInputBuffers() const  = 0;
 
 
     /**
@@ -140,21 +158,27 @@ class LayerBase {
      *
      * @see BufferSpec
      */
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const = 0;
+    [[nodiscard]] virtual std::vector<BufferSpec> getRequiredOutputBuffers() const = 0;
 
     /**
      * @brief Execute the layer
      *
-     * @param sequence Sequence number (\b must be stricly increasing)
+     * @param sequenceNo Sequence number (\b must be strictly increasing)
+     * @param state Optional pointer to a StateToken that tracks and controls inference state, may
+     *              be \c nullptr if state does not need to be tracked
      *
      * This function performs the actual computation that maps the input data to the output data
-     * for this layer. The supplied \p sequence number must be stricly increasing per inference run
+     * for this layer. The supplied \p sequence number must be strictly increasing per inference run
      * and may be used for debugging purposes, in case errors only manifests themselves after a
      * certain number of computation cycles. It can also be used to keep track of the total number
      * of inference runs. Internally, it is used to make sure that asynchronously transmitted data
      * is up-to-date (on PBO reads for example).
+     *
+     * The optional state token can be used to convey state information between layers and/or inference
+     * runs. An example for state information may be the query length of a tensor that is passed in
+     * sequence-learning inference.
      */
-    virtual void forward(uint64_t sequence = 0) = 0;
+    virtual void forward(uint64_t sequenceNo, StateToken *state) = 0;
 
     /**
      * @brief Store computation results of layer in file for debugging purposes
@@ -200,10 +224,10 @@ class LayerBase {
      *
      * @note This function only works in a debug build. In release builds, this will be a no-op.
      */
-    virtual void writeResult(const char *fileName, bool includePadding=false) = 0;
+    virtual void writeResult(const char *fileName, bool includePadding=false) = 0;  // NOLINT
 
-    virtual bool isConnected() const ;
-    virtual bool isConnected(int connIndex) const;
+    [[nodiscard]] virtual bool isConnected() const;
+    [[nodiscard]] virtual bool isConnected(int connIndex) const;
     virtual void addInputConnection(int port, LayerBase *sender, int senderPort);
     virtual void addOutputConnection(int port, LayerBase *receiver, int receiverPort);
 
@@ -216,7 +240,7 @@ class LayerBase {
      *
      * @return # of input ports
      */
-    virtual int numInputPorts() const {
+    [[nodiscard]] virtual int numInputPorts() const {
         return 1;
     }
 
@@ -233,7 +257,7 @@ class LayerBase {
      *
      * @return First (virtual) channel of the specified port.
      */
-    virtual int getPortChannelIndex(int port) const {
+    [[nodiscard]] virtual int getPortChannelIndex(int port) const {
         if (port >= numInputPorts()) THROW_EXCEPTION_ARGS(FynException,"Illegal input port %d specified",port);
         return 0;
     }
@@ -244,9 +268,9 @@ class LayerBase {
      * @return Input padding (per channel)
      *
      * Padding is assumed to be isotropic and on each side. For example, a 32x32 channels with
-     * a padding of 1 will have total dimesions of 34x34
+     * a padding of 1 will have total dimensions of 34x34
      */
-    inline int getInputPadding() const {
+    [[nodiscard]] inline int getInputPadding() const {
         return inputPadding_;
     }
 
@@ -256,9 +280,9 @@ class LayerBase {
      * @return output padding (per channel)
      *
      * Padding is assumed to be isotropic and on each side. For example, a 32x32 channels with
-     * a padding of 1 will have total dimesions of 34x34
+     * a padding of 1 will have total dimensions of 34x34
      */
-    inline int getOutputPadding() const {
+    [[nodiscard]] inline int getOutputPadding() const {
         return outputPadding_;
     }
 
@@ -269,7 +293,7 @@ class LayerBase {
      *
      * @note The residual padding \b must be equivalent to the output padding
      */
-    inline int getResidualPadding() const {
+    [[nodiscard]] inline int getResidualPadding() const {
         return residualPadding_;
     }
 
@@ -278,7 +302,7 @@ class LayerBase {
      *
      * @return Width per channel of the input buffer/tensor, \e excluding any padding
      */
-    inline int getWidth() const {
+    [[nodiscard]] inline int getWidth() const {
         return width_;
     }
 
@@ -287,7 +311,7 @@ class LayerBase {
      *
      * @return Height per channel of the input buffer/tensor, \e excluding any padding
      */
-    inline int getHeight() const {
+    [[nodiscard]] inline int getHeight() const {
         return height_;
     }
 
@@ -296,7 +320,7 @@ class LayerBase {
      *
      * @return Layer flags that are set in this layer
      */
-    inline layerflags getFlags() const {
+    [[nodiscard]] inline layerflags getFlags() const {
         return flags_;
     }
 
@@ -305,7 +329,7 @@ class LayerBase {
      *
      * @return Layer number
      */
-    inline int getNumber() const {
+    [[nodiscard]] inline int getNumber() const {
         return layerNumber_;
     }
 
@@ -320,7 +344,7 @@ class LayerBase {
      * multiple ports at all). For some specific layers, like a concatenation layer, the number
      * of input channels per port may differ
      */
-    virtual int numInputChannels(int port=0) const {
+    [[nodiscard]] virtual int numInputChannels(int port=0) const {  // NOLINT
         return inputChannels_;
     }
 
@@ -329,7 +353,7 @@ class LayerBase {
      *
      * @return Number of output channels
      */
-    inline int numOutputChannels() const {
+    [[nodiscard]] inline int numOutputChannels() const {
         return outputChannels_;
     }
 
@@ -338,7 +362,7 @@ class LayerBase {
      *
      * @return String containing layer name / ID
      */
-    inline const std::string& getName() const {
+    [[nodiscard]] inline const std::string& getName() const {
         return name_;
     }
 
@@ -349,7 +373,7 @@ class LayerBase {
      * @retval true %Layer was properly initialized
      * @retval false %Layer was not initialized (yet)
      */
-    inline bool isValid() const {
+    [[nodiscard]] inline bool isValid() const {
         return valid_;
     }
 
@@ -363,7 +387,7 @@ class LayerBase {
      * on every system. These layers will return \c false when the execution environment lacks
      * required functionality.
      */
-    virtual bool isApplicable() const {
+    [[nodiscard]] virtual bool isApplicable() const {
         return true;
     }
 
@@ -374,8 +398,20 @@ class LayerBase {
      * @retval CPU If this layer only runs on the CPU
      * @retval GPU If this layer only runs on the GPU
      */
-    inline compute_device getDevice() const {
+    [[nodiscard]] inline compute_device getDevice() const {
         return device_;
+    }
+
+    /**
+     * @brief Check if a layer has parameters (like weights) that need to be set prior to usage
+     *
+     * @retval true Layer requires parameters to be loaded
+     * @retval false Layer is parameter-free
+     *
+     * @see loadParameters
+     */ 
+    [[nodiscard]] bool hasParameters() const {
+        return hasParameters_;
     }
 
  protected:
@@ -384,28 +420,27 @@ class LayerBase {
     // Member variables
     // ------------------------------------------------------------------------
     std::string name_;                               //!< Layer identifier
-    float leakyReLU_ = 0.0f;                         //!< Optional leak value for leaky ReLUs (fused on GPUs)
-    float lowClip_ = 0.0f;                           //!< For clipping-type activation function (lower end of clip)
-    float highClip_ = 0.0f;                          //!< For clipping-type activation function (upper end of clip)
     layerflags flags_ = LayerFlags::NO_LAYER_FLAGS;  //!< Misc flags for this layer
-    uint16_t width_ = 0;                             //!< Width (in elements) of a single feature-map slab
-    uint16_t height_ = 0;                            //!< Height (in elements) of a single feature-map slab
-    uint16_t inputChannels_= 0;                      //!< Number of input channels of the input feature-maps
-    uint16_t outputChannels_ = 0;                    //!< Number of output channels of the output feature-maps
+    int width_ = 0;                                  //!< Width (in elements) of a single feature-map slab
+    int height_ = 0;                                 //!< Height (in elements) of a single feature-map slab
+    int inputChannels_= 0;                           //!< Number of input channels of the input feature-maps
+    int outputChannels_ = 0;                         //!< Number of output channels of the output feature-maps
     int layerNumber_ = -1;                           //!< Layer number (defines execution order)
-    uint8_t inputPadding_ = 0;                       //!< Padding on the input data
-    uint8_t outputPadding_ = 0;                      //!< Padding on the output data
-    uint8_t residualPadding_ = 0;                    //!< Padding on the incoming residual data (currently must be the same as #outputPadding_ )
-    uint16_t inConnections_ = 0;                     //!< Number of connected input ports
+    int inputPadding_ = 0;                           //!< Padding on the input data
+    int outputPadding_ = 0;                          //!< Padding on the output data
+    int residualPadding_ = 0;                        //!< Padding on the incoming residual data (currently must be the same as #outputPadding_ )
+    int inConnections_ = 0;                          //!< Number of connected input ports
     bool outputConnected_ = false;                   //!< Indicator that output port is connected
     std::vector<int> connectedInputPorts_;           //!< Port numbers of all connected input ports (see BufferSpec)
-    compute_device device_ = compute_device::DEV_ILLEGAL;            //!< Device type this layer runs on
     bool valid_ = false;                             //!< Indicator that this layer is valid for use (i.e. has been properly initialized)
+    bool hasParameters_ = false;                      //!< Indicator whether this layer requires parameters to be loaded prior to usage
+    /**
+     * Device type this layer runs on
+     */
+    compute_device device_ = compute_device::DEV_ILLEGAL;
 };
 
 
-} // fyusenet namespace
-} // fyusion namespace
-
+} // fyusion::fyusenet namespace
 
 // vim: set expandtab ts=4 sw=4:

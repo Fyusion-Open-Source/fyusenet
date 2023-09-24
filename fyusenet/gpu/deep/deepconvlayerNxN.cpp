@@ -26,16 +26,9 @@
 #include "deepconvlayerNxN.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 //-------------------------------------- Local Definitions -----------------------------------------
-
-// -1 0
-// -2 -1 0 1
-// -3 -2 -1 0 1 2
 
 static const char * OFFSET_DEFS_3 = "#define OFFSET0 2\n"
                                     "#define OFFSET3a 0\n"
@@ -76,7 +69,7 @@ static const char * OFFSET_DEFS_6 = "#define OFFSET0 6\n"
 
 
 /**
- * @copydoc DeepConvLayerBase::DeepConvLayerBase
+ * @copydoc DeepConvLayerBase::DeepConvLayerBase(const GPULayerBuilder&, int)
  */
 DeepConvLayerNxN::DeepConvLayerNxN(const ConvLayerBuilder& builder,int layerNumber) : DeepConvLayerBase(builder, layerNumber) {
     assert((builder.kernel_ % 2) == 1);
@@ -126,13 +119,13 @@ void DeepConvLayerNxN::cleanup() {
 /**
  * @copydoc LayerBase::forward
  */
-void DeepConvLayerNxN::forward(uint64_t sequence) {
+void DeepConvLayerNxN::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
     int err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif    
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -423,8 +416,11 @@ void DeepConvLayerNxN::appendOffsetDefs(char *string, int kernel, size_t maxChar
  * @brief Create shader state for supplied shader
  *
  * @param shader Shader to create a uniform state object for
+ * @param horizOffset Horizontal offset within the convolution kernel
+ * @param kernelOffset Vertical offset within the convolution kernel
+ * @param kernelY Window size of convolution kernel (vertical part)
  *
- * @return Shared pointer to UniformState object that maps values to the uniforms of a shder
+ * @return Shared pointer to UniformState object that maps values to the uniforms of a shader
  */
 unistateptr DeepConvLayerNxN::initShader(programptr shader, int horizOffset, int kernelOffset, int kernelY) {
     unistateptr state = UniformState::makeShared(shader);
@@ -437,7 +433,7 @@ unistateptr DeepConvLayerNxN::initShader(programptr shader, int horizOffset, int
         state->setUniformValue("biasTexture", BIAS_TEXTURE, true);
     }
     if (largeDilation_) {
-        state->setUniformValue("dilationStep", tiler_->getTextureStepX() * dilation_[0]);
+        state->setUniformValue("dilationStep", tiler_->getTextureStepX() * (float)dilation_[0]);
     }
     state->setUniformValue("instancesPerTile", kernelY);
     state->setUniformValue("horizOffset", horizOffset, true);
@@ -448,9 +444,6 @@ unistateptr DeepConvLayerNxN::initShader(programptr shader, int horizOffset, int
 
 
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

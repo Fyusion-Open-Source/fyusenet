@@ -63,22 +63,22 @@ class DepthwiseConvWeightArrayKxKxNxM : public UniformWeightArray {
     // Constructor / Destructor
     // ------------------------------------------------------------------------
     DepthwiseConvWeightArrayKxKxNxM(int kernel, int inputChannels, int channelMultiplier, int maxRenderTargets, int maxTextures);
-    virtual ~DepthwiseConvWeightArrayKxKxNxM();
+    ~DepthwiseConvWeightArrayKxKxNxM() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual const float * getPackageWeights(int inputPass, int outputPass, int xIndex, int yIndex) const override;
-    virtual const float * getPackageBias(int outputPass) const override;
-    virtual const float * getPackageBNScale(int outputPass) const override;
-    virtual void extractBiasData(const float *input, size_t offset) override;
-    virtual void extractWeightData(const float *input, size_t offset) override;
-    virtual void extractBatchnormData(const float *input, size_t offset) override;
-    virtual int numInputRenderPasses() const override;
-    virtual int numOutputRenderPasses() const override;
-    virtual int numRenderTargets(int outputPass) const override;
-    virtual int outputTextureOffset(int outputPass) const override;
-    virtual int getPackageSize(int inputPass, int outputPass, int xIndex, int yIndex) const override;
+    const float * getPackageWeights(int inputPass, int outputPass, int xIndex, int yIndex) const override;
+    const float * getPackageBias(int outputPass) const override;
+    const float * getPackageBNScale(int outputPass) const override;
+    void extractBiasData(const float *input) override;
+    void extractWeightData(const float *input) override;
+    void extractBatchnormData(const float *input) override;
+    int numInputRenderPasses() const override;
+    int numOutputRenderPasses() const override;
+    int numRenderTargets(int outputPass) const override;
+    int outputTextureOffset(int outputPass) const override;
+    int getPackageSize(int inputPass, int outputPass, int xIndex, int yIndex) const override;
  private:
 
     // ------------------------------------------------------------------------

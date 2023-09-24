@@ -27,17 +27,14 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+namespace fyusion::fyusenet::gpu::vanilla {
 
 /**
  * @brief Base class for shallow tensor convolutions on generic GPUs
  *
  * This class serves as base class for convolutions running on a rather generic GPU (well,
  * actually more like a mobile Adreno GPU and more recent Mali GPUs). All (shallow) convolution
- * shaders  for generic GPUs use the same basic approach, which is to render multiple proxy polygons
+ * shaders for generic GPUs use the same basic approach, which is to render multiple proxy polygons
  * that differ in the texture coordinates to realize the shift in the convolution. More specifically,
  * only the vertical shift is done by using multiple proxy polygons, whereas the horizontal shift is
  * implemented in the shader itself for performance reasons.
@@ -67,18 +64,19 @@ class ConvLayerBase : public gpu::ConvLayerBase {
     // ------------------------------------------------------------------------
     // Constructor / Destructor
     // ------------------------------------------------------------------------
+    explicit ConvLayerBase(const ConvLayerBuilder & builder);
     ConvLayerBase(const ConvLayerBuilder & builder, int layerNumber);
     ConvLayerBase(const GPULayerBuilder & builder, int layerNumber);
-    virtual ~ConvLayerBase();
+    ~ConvLayerBase() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
-    virtual void setup() override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual void loadWeightsAndBiases(const float *biasAndWeights, size_t offset=0) override;
+    void cleanup() override;
+    void setup() override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void loadParameters(const ParameterProvider *weights) override;
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
@@ -86,29 +84,25 @@ class ConvLayerBase : public gpu::ConvLayerBase {
 
     virtual size_t shaderPreprocessing(char *preproc, size_t maxChars);
     virtual void setupNetworkPolygons(VAO *vao, int kernel);
-    virtual void setupFBOs() override;
-    virtual void updateFBOs() override;
+    void setupFBOs() override;
+    void updateFBOs() override;
     virtual void setBias(int outPass, const UniformWeightArray *bias);
 
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
-    UniformWeightArray *weights_ = nullptr;         //!< Weight/Bias/BN data that is required to operate this layer (see #loadWeightsAndBiases)
+    UniformWeightArray *weights_ = nullptr;         //!< Weight/Bias/BN data that is required to operate this layer (see #loadParameters)
     VAO * vertexArray_ = nullptr;                   //!< Pointer to vertex-array object which maintains the VBO / IBO config
     VBO * vertexBuffer_ = nullptr;                  //!< Pointer to VBO for the polygons used in convolution
     VBO * residualBuffer_ = nullptr;                //!< Pointer to VBO for the polygons used for the residual
     IBO * indexBuffer_ = nullptr;                   //!< Pointer to IBO used for convolution (and residual) polygons
     float *zeroBias_ = nullptr;                     //!< As the name implies, bias vector with all zeros
-    int maxRenderTargets_ = 0;                      //!< Maximim number of render targets that can be used by this layer
+    int maxRenderTargets_ = 0;                      //!< Maximum number of render targets that can be used by this layer
     float sourceStep_ = 1.0f;                       //!< Defines the step-width of the convolution (source-side) for fractional convolutions
     bool mali_ = false;                             //!< Flag that is set when an ARM Mali GPU was detected
     bool preG71_ = false;                           //!< Flag that is set when an ARM Mali GPU prior to the G-71 model (e.g. T-880) was detected
 };
 
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
-
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

@@ -17,20 +17,11 @@
 #include "../../gl/gl_sys.h"
 #include "../../gl/vertexshader.h"
 #include "../../gl/fragmentshader.h"
-#include "../../gl/shaderprogram.h"
-#include "../../gl/glinfo.h"
-#include "../../gl/glexception.h"
-#include "../../common/fynexception.h"
 #include "../uniformweightarray.h"
-#include "../../common/logging.h"
-#include "../../common/performance.h"
 #include "convlayer1x1_vanilla.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+namespace fyusion::fyusenet::gpu::vanilla {
 
 
 //-------------------------------------- Local Definitions -----------------------------------------
@@ -40,9 +31,14 @@ namespace vanilla {
 #                                   P U B L I C  F U N C T I O N S                                 #
 ##################################################################################################*/
 
-
 /**
  * @copydoc vanilla::ConvLayerBase::ConvLayerBase
+ */
+ConvLayer1x1::ConvLayer1x1(const ConvLayerBuilder & builder) : ConvLayer1x1(builder, builder.number_) {
+}
+
+/**
+ * @copydoc vanilla::ConvLayerBase::ConvLayerBase(const ConvLayerBuilder&,int)
  */
 ConvLayer1x1::ConvLayer1x1(const ConvLayerBuilder & builder,int layerNumber) : ConvLayerBase(builder, layerNumber) {
     assert(builder.kernel_ == CONVSIZE);
@@ -54,7 +50,7 @@ ConvLayer1x1::ConvLayer1x1(const ConvLayerBuilder & builder,int layerNumber) : C
 
 
 /**
- * @copydoc vanilla::ConvLayerBase::ConvLayerBase
+ * @copydoc vanilla::ConvLayerBase::ConvLayerBase(const GPULayerBuilder&, int)
  */
 ConvLayer1x1::ConvLayer1x1(const GPULayerBuilder & builder,int layerNumber) : ConvLayerBase(builder, layerNumber) {
     for (int i=0; i <= maxRenderTargets_; i++) {
@@ -78,13 +74,13 @@ void ConvLayer1x1::cleanup() {
 /**
  * @copydoc LayerBase::forward
  */
-void ConvLayer1x1::forward(uint64_t sequence) {
+void ConvLayer1x1::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -166,6 +162,9 @@ void ConvLayer1x1::setupShaders() {
  * properly during rendering.
  */
 void ConvLayer1x1::compileConvolutionShaders(const char *preproc) {
+#if defined(WIN32) || defined(WIN64)
+        using ssize_t = int64_t;
+#endif
     char finalpreproc[1024+128] = {0};
     char extra[128];
     for (int i=1; i <= maxRenderTargets_; i++) {
@@ -211,9 +210,6 @@ void ConvLayer1x1::compileConvolutionShaders(const char *preproc) {
 }
 
 
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

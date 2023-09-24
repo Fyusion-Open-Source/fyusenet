@@ -26,10 +26,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-using namespace opengl;
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Templatized anchor for GPU upload/download layer builders
@@ -83,6 +80,24 @@ struct UpDownLayerBuilderTempl : GPULayerBuilderTempl<D> {
         return *(D *)this;
     }
 
+    /**
+     * @brief Set packing size for sequence uploads
+     *
+     * @param pack Packing size, must be in the range [1, LayerBase::PIXEL_PACKING], default value is
+     *             LayerBase::PIXEL_PACKING
+     *
+     * @return Reference to builder after assignment
+     *
+     * For processing purposes on the compute device, multiple values are packed into a vector. On
+     * a GPU, the packing dimension often is 4 (for RGBA pixels), which is also the default. If
+     * a different packing is desired, specify this here.
+     */
+    D & sequencePacking(int pack) {
+        if (pack < 1 || pack > LayerBase::PIXEL_PACKING) THROW_EXCEPTION_ARGS(FynException,"Illegal packing factor %d supplied", pack);
+        seqPacking_ = pack;
+        return *(D *)this;
+    }
+
 #ifdef FYUSENET_MULTITHREADING
     /**
      * @brief Assign callback for asynchronous uploads and downloads
@@ -113,7 +128,8 @@ struct UpDownLayerBuilderTempl : GPULayerBuilderTempl<D> {
     }
 #endif
 
-    dir direction_;                 //!< Data direction (either upload to GPU or download from GPU)
+    dir direction_;                                 //!< Data direction (either upload to GPU or download from GPU)
+    int seqPacking_ = LayerBase::PIXEL_PACKING;     //!< Number of sequence elements to pack into a single vector (default is 4)
 #ifdef FYUSENET_MULTITHREADING
     bool async_ = false;            //!< Whether or not the layer should be working asynchronously (default is synchronous)
 
@@ -123,7 +139,7 @@ struct UpDownLayerBuilderTempl : GPULayerBuilderTempl<D> {
      *   - \c UPLOAD_COMMENCED when an upload was started and the input buffer may be changed
      *   - \c UPLOAD_DONE when an upload has completed in the background
      *   - \c DOWNLOAD_DONE when a download has completed in the background
-     *   - \c ERROR when an error has occured
+     *   - \c ASYNC_ERROR when an error has occured
      *
      * Note that \c UPLOAD_COMMENCED states may be called from within the same thread, be aware
      * of locks.
@@ -134,7 +150,7 @@ struct UpDownLayerBuilderTempl : GPULayerBuilderTempl<D> {
     /**
      * Datatype <i>on the CPU</i> to be used for the upload/download operation (defaults to 32-bit float)
      */
-    BufferSpec::dtype dataType_ = BufferSpec::FLOAT;
+    BufferSpec::dtype dataType_ = BufferSpec::dtype::FLOAT;
 };
 
 
@@ -171,8 +187,6 @@ struct UpDownLayerBuilder : UpDownLayerBuilderTempl<UpDownLayerBuilder> {
     using UpDownLayerBuilderTempl<UpDownLayerBuilder>::UpDownLayerBuilderTempl;
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

@@ -52,9 +52,9 @@ void OESConverter::cleanup() {
  */
 std::vector<BufferSpec> OESConverter::getRequiredOutputBuffers() const {
      std::vector<BufferSpec> result;
-     result.push_back(BufferSpec(0,0, viewport_[0], viewport_[1],
-                                 TEXTURE_IFORMAT_OES, TEXTURE_FORMAT_OES, TEXTURE_TYPE_OES,
-                                 BufferSpec::OES_DEST));
+     result.emplace_back(0, 0, viewport_[0], viewport_[1],
+                         TEXTURE_IFORMAT_OES, TEXTURE_FORMAT_OES, TEXTURE_TYPE_OES,
+                         BufferSpec::OES_DEST);
      return result;
 }
 

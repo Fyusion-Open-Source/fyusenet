@@ -13,6 +13,7 @@ fyusenet
    |-- gpu            (GPU code for neural network layers)
    |    '- vanilla    (GPU code for neural network layers not aimed at specific GPU)
    |    '- deep       (GPU code for neural network layers that use deep-tensor data)
+   |    '- sequence   (GPU code for neural network layers that support sequence learning)
    |    '- shaders    (GLSL shaders for all neural network layers)
    |-- fyusenet.h     (Convenience header file)
    '-- CMakeLists.txt (Library build file)

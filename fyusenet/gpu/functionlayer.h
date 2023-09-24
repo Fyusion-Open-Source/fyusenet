@@ -12,8 +12,6 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <vector>
-
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "../gl/gl_sys.h"
@@ -26,9 +24,7 @@
 #include "../base/layerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Base class for simple function-type layers that perform unary/binary operations
@@ -51,11 +47,11 @@ class FunctionLayer : public GPULayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void setup() override;
-    virtual void cleanup() override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
-    virtual void forward(uint64_t sequence = 0) override;
+    void setup() override;
+    void cleanup() override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void forward(uint64_t sequence, StateToken * state) override;
 
  protected:
     // ------------------------------------------------------------------------
@@ -112,8 +108,8 @@ class FunctionLayer : public GPULayerBase {
      */
     virtual void renderChannelBatch(int outPass, int numRenderTargets, int texOffset)=0;
 
-    virtual void setupFBOs() override;
-    virtual void updateFBOs() override;
+    void setupFBOs() override;
+    void updateFBOs() override;
     void setupVBO(VAO *vao);
     void setupIBO(VAO *vao);
 
@@ -124,10 +120,9 @@ class FunctionLayer : public GPULayerBase {
     VBO *vertexBuffer_ = nullptr;       //!< Pointer to vertex buffer object for polygon vertices / texture coordinates
     IBO *indexBuffer_ = nullptr;        //!< Pointer to index buffer object that defines the connectivity for the #vertexBuffer_
     int maxRenderTargets_;              //!< Maximum number of render targets to use for this system
+    bool isSequence_ = false;           //!< Set to true if this (and derived) layers are to be used on sequence-formatted textures
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

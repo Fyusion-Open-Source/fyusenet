@@ -23,8 +23,8 @@
 #include "layerbase.h"
 #include "compiledlayers.h"
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 class LayerFactoryBackend;
@@ -32,7 +32,7 @@ class LayerFactoryBackend;
 /**
  * @brief Base class for neural network layer-factories
  *
- * This class provides the interface for a factory that creates a complete neural network layer by
+ * This class provides the interface for a factory that creates a complete neural network layer-by-
  * layer by translating a set of builders, which serve as input to the factory, into a set of
  * neural network layers that satisfy the parameters supplied in those builders.
  *
@@ -98,7 +98,6 @@ class LayerFactory : LayerFactoryInterface {
     // Public methods
     // ------------------------------------------------------------------------
     std::string getName() const;
-    virtual void pushBuilder(LayerBuilder *builder) override;
     virtual CompiledLayers compileLayers();
 
     /**
@@ -126,11 +125,12 @@ class LayerFactory : LayerFactoryInterface {
     // ------------------------------------------------------------------------
     template<class T>
     static LayerFactory * instanceInternal(T backendType, bool debug);
+    void pushBuilder(LayerBuilder *builder) override;
 
     // ------------------------------------------------------------------------
     // Member variables
     // ------------------------------------------------------------------------
-    LayerFactory(LayerFactoryBackend *backend);
+    explicit LayerFactory(LayerFactoryBackend *backend);
     LayerFactoryBackend *backend_;                      //!< Pointer to target-specific factory backend
     LayerFactoryBackend *cpuBackend_;                   //!< CPU factory backend (present in every factory)
     std::unordered_map<int,LayerBuilder *> builders_;   //!< Map of builders that contain the information about the layers to be built
@@ -198,8 +198,7 @@ inline std::string LayerFactory::getName() const {
 }
 
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
 
 
 // vim: set expandtab ts=4 sw=4:

@@ -21,6 +21,13 @@
 #include "gl_sys.h"
 #include "glexception.h"
 
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
 //------------------------------------- Public Declarations ----------------------------------------
 namespace fyusion {
 //! Lightweight / low-level OpenGL abstraction layer namespace
@@ -129,10 +136,8 @@ class GLInfo {
     };
 
     // implementation-specific limits
-    enum {
-        MAX_MALI_T_SERIES_RENDER_TARGETS = 2,
-        MAX_SUPPORTED_TEXTURE_UNITS = 8
-    };
+    constexpr static int MAX_MALI_T_SERIES_RENDER_TARGETS = 2;
+    constexpr static int MAX_SUPPORTED_TEXTURE_UNITS = 8;
 
     // ------------------------------------------------------------------------
     // Public methods
@@ -267,7 +272,7 @@ class GLInfo {
      * @return Limit of texture units that should be used
      */
     static int getMaximumRecommendedTextureUnits() {
-        return std::min((int)MAX_SUPPORTED_TEXTURE_UNITS, getMaximumTextureUnits());
+        return std::min((int)MAX_SUPPORTED_TEXTURE_UNITS, (int)getMaximumTextureUnits());
     }
 
     static unsigned int getMaxUBOSize();
@@ -277,6 +282,7 @@ class GLInfo {
     static int getMaximumDrawBuffers();
     static int getMaximumRecommendedDrawBuffers();
     static int getMaximumTextureSize();
+    static int getMaximumTexArrayDepth();
     static int getMaxVaryingVectors();
     static int getMaximumTextureUnits();
     static bool hasExtension(const char *extension);

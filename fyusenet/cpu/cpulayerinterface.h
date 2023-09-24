@@ -19,9 +19,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace cpu {
+namespace fyusion::fyusenet::cpu {
 
 /**
  * @brief Interface for CPU-based data processing
@@ -33,6 +31,7 @@ namespace cpu {
  * @see CPULayerBase, DownloadLayer
  */
 class CPULayerInterface {
+    friend class BufferManager;
  public:
 
     /**
@@ -48,9 +47,9 @@ class CPULayerInterface {
      * @note This interface does not take ownership over the supplied buffer, it is up to the caller to
      *       maintain its life-cycle.
      *
-     * @see BufferManager::connectLayers, BufferManager::connectCPULayers, getOutputBuffer
+     * @see BufferManager::connectLayers, BufferManager::connectCPULayers, getCPUOutputBuffer
      */
-    virtual void addOutputBuffer(CPUBuffer * buf, int port=0) = 0;
+    virtual void addCPUOutputBuffer(CPUBuffer * buf, int port= 0) = 0;
 
     /**
      * @brief Register input buffer with this layer
@@ -65,9 +64,9 @@ class CPULayerInterface {
      * @note This interface does not take ownership over the supplied buffer, it is up to the caller
      *       to maintain its life-cycle.
      *
-     * @see BufferManager::connectLayers, BufferManager::connectCPULayers, getInputBuffer
+     * @see BufferManager::connectLayers, BufferManager::connectCPULayers, getCPUInputBuffer
      */
-    virtual void setInputBuffer(CPUBuffer * buf, int port) = 0;
+    virtual void setCPUInputBuffer(CPUBuffer * buf, int port) = 0;
 
     /**
      * @brief Append buffer to the list of residual buffers
@@ -82,7 +81,7 @@ class CPULayerInterface {
      * @note This interface does not take ownership over the supplied buffer, it is up to the caller to
      *       maintain its life-cycle.
      */
-    virtual void setResidualBuffer(CPUBuffer * buf) = 0;
+    virtual void setCPUResidualBuffer(CPUBuffer * buf) = 0;
 
     /**
      * @brief Clear/reset input buffers for this layer
@@ -95,7 +94,7 @@ class CPULayerInterface {
      *       to release the buffers or reuse them. This call merely removes the reference to the
      *       buffer(s).
      */
-    virtual void clearInputBuffers(int port=-1) = 0;
+    virtual void clearCPUInputBuffers(int port=-1) = 0;
 
 
     /**
@@ -109,7 +108,7 @@ class CPULayerInterface {
      *       to release the buffers or reuse them. This call merely removes the reference to the
      *       buffer(s).
      */
-    virtual void clearOutputBuffers(int port=-1) = 0;
+    virtual void clearCPUOutputBuffers(int port=-1) = 0;
 
 
     /**
@@ -117,10 +116,10 @@ class CPULayerInterface {
      *
      * @param port Port number to check (defaults to 0)
      *
-     * @retval true Specified port has an output (CPU) buffer asigned
+     * @retval true Specified port has an output (CPU) buffer assigned
      * @retval false otherwise
      */
-    virtual bool hasOutputBuffer(int port=0) const = 0;
+    virtual bool hasCPUOutputBuffer(int port=0) const = 0;
 
     /**
      * @brief Retrieve output CPU buffer for a specified port
@@ -129,23 +128,21 @@ class CPULayerInterface {
      *
      * @return Pointer to CPUBuffer instance that is assigned to the specified \p port
      */
-    virtual CPUBuffer * getOutputBuffer(int port=0) const = 0;
+    virtual CPUBuffer * getCPUOutputBuffer(int port=0) const = 0;
 
 
     /**
-     * @brief Retrive input CPU buffer for a specified port
+     * @brief Retrieve input CPU buffer for a specified port
      *
      * @param port Port to retrieve buffer for
      *
      * @return Pointer to CPUBuffer instance that is assigned to the specified \p port
      */
-    virtual CPUBuffer * getInputBuffer(int port=0) const = 0;
+    virtual CPUBuffer * getCPUInputBuffer(int port=0) const = 0;
 };
 
 
-} // cpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::cpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

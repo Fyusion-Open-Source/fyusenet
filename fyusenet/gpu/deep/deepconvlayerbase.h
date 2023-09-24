@@ -25,17 +25,13 @@
 #include "../../gl/shaderprogram.h"
 #include "../../gl/uniformstate.h"
 #include "../../base/bufferspec.h"
-#include "../../base/convlayerinterface.h"
 #include "../convlayerbase.h"
 #include "deeptiler.h"
 #include "deeplayerbase.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 
 /**
@@ -55,7 +51,7 @@ namespace deep {
  *   - Texture \e width corresponds to the number of input channels multiplied by the convolution
  *     kernel size (there is an additional tweak, see below for details)
  *   - Each pixel in the texture corresponds to 4 (or 8) convolution coefficients that are laid
- *     out as as part of 4x4 matrices
+ *     out as part of 4x4 matrices
  *   - Four (4) consecutive pixels in a row represent a 4x4 matrix with the input channels as their
  *     column space and the output channels as their row space
  *   - Depending on the convolution kernel size, \e k neighboring 4x4 matrices horizontally
@@ -77,24 +73,24 @@ class DeepConvLayerBase : public ConvLayerBase {
     // ------------------------------------------------------------------------
     DeepConvLayerBase(const ConvLayerBuilder& builder, int layerNumber);
     DeepConvLayerBase(const GPULayerBuilder& builder, int layerNumber);
-    virtual ~DeepConvLayerBase();
+    ~DeepConvLayerBase() override;
 
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void loadWeightsAndBiases(const float *weights, size_t offset) override;
-    virtual void setup() override;
-    virtual void cleanup() override;
-    virtual bool isApplicable() const override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void loadParameters(const ParameterProvider *weights) override;
+    void setup() override;
+    void cleanup() override;
+    [[nodiscard]] bool isApplicable() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
 
     /**
      * @brief Obtain pointer to data tiler that is used for this object
      *
      * @return Pointer to DeepTiler object that is used to compute the tiling for this layer
      */
-    DeepTiler * getTiler() const {
+    [[nodiscard]] DeepTiler * getTiler() const {
         return tiler_;
     }
 
@@ -106,23 +102,25 @@ class DeepConvLayerBase : public ConvLayerBase {
      *
      * @note The returned object may be a \c nullptr
      */
-    DeepTiler * getResidualTiler() const {
+    [[nodiscard]] DeepTiler * getResidualTiler() const {
         return residualTiler_;
     }
 
-    virtual void writeResult(const char *fileName, bool includePadding) override;
-    virtual void copyResult(float *memory, bool includePadding=false) override;
+    void writeResult(const char *fileName, bool includePadding) override;
+    void copyResult(float *memory, bool includePadding) override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupShaders() override;
+    void setupShaders() override;
     virtual void setupNetworkPolygons(VAO *vao);
     virtual size_t shaderPreprocessing(char *preproc,size_t maxChars);
-    virtual void shaderPostprocessing(programptr shader);    
-    virtual void setupFBOs() override;
-    virtual void updateFBOs() override;
+    virtual void shaderPostprocessing(programptr & shader);
+    void setupFBOs() override;
+    void updateFBOs() override;
+    [[nodiscard]] BufferSpec::order getInputOrder(int port) const override;
+    [[nodiscard]] BufferSpec::order getOutputOrder(int port) const override;
 
     /**
      * @brief Compile convolution-specific shaders
@@ -130,9 +128,7 @@ class DeepConvLayerBase : public ConvLayerBase {
      * @param preproc Existing preprocessor macros for the shader
      *
      * This function compiles and links the convolution-specific shader(s) and stores the shader
-     * programs in the appropriate locations at #shader_ and #noBiasShader_ . In addition, the
-     * shader state objects at #shaderState_ and #noBiasShaderState_ are initialized with the
-     * implementation-specific values.
+     * programs and the states (if any) in the appropriate locations.
      */
     virtual void compileConvolutionShaders(const char * preproc) = 0;
 
@@ -153,7 +149,7 @@ class DeepConvLayerBase : public ConvLayerBase {
     float * postBNBias_ = nullptr;              //!< Bias values for post-render batchnorm
 
     bool mali_ = false;                         //!< Indicator flag for ARM Mali GPUs
-    bool preG71_ = false;                       //!< Indicator flat for (old) ARM Mali GPUs prior to G71
+    bool preG71_ = false;                       //!< Indicator flag for (old) ARM Mali GPUs prior to G71
     bool largeDilation_ = false;                //!< Indicator if dilation is outside of the GLSL textureOffset operation
     bool halfSupport_ = false;                  //!< Indicator if 16-bit FP is supported on the platform
 
@@ -163,9 +159,6 @@ class DeepConvLayerBase : public ConvLayerBase {
 
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

@@ -41,7 +41,7 @@
 void JPEGIO::saveRGBImage(const uint8_t * img, int width, int height, const std::string& name, int quality) {
     struct jpeg_error_mgr jerr;
     struct jpeg_compress_struct jcomp;
-    FILE *outfile = fopen(name.c_str(),"w");
+    FILE *outfile = fopen(name.c_str(),"wb");
     if (outfile) {
         jcomp.err = jpeg_std_error(&jerr);
         jpeg_create_compress(&jcomp);
@@ -81,19 +81,19 @@ void JPEGIO::saveRGBImage(const uint8_t * img, int width, int height, const std:
  * @return Pointer to image in RGB pixel order or \c nullptr if image could not be read.
  */
 uint8_t * JPEGIO::loadRGBImage(const std::string& name, int & width, int & height) {
-    FILE * in = fopen(name.c_str(),"r");
+    FILE * in = fopen(name.c_str(),"rb");
     if (in) {
         fseek(in,0,SEEK_END);
         size_t size = ftell(in);
         fseek(in,0,SEEK_SET);
         uint8_t * buffer = new uint8_t[size];
         fread(buffer,1,size,in);
-        struct jpeg_error_mgr jerr;
-        struct jpeg_decompress_struct jdcomp;
+        struct jpeg_error_mgr jerr = {0};
+        struct jpeg_decompress_struct jdcomp = {0};
         jdcomp.err = jpeg_std_error(&jerr);
         jpeg_create_decompress(&jdcomp);
         jpeg_mem_src(&jdcomp,buffer,size);
-        if (jpeg_read_header(&jdcomp,TRUE) != JPEG_HEADER_OK) {
+        if (jpeg_read_header(&jdcomp , true) != JPEG_HEADER_OK) {
             return nullptr;
         }
         jpeg_start_decompress(&jdcomp);

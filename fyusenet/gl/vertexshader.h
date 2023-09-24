@@ -21,8 +21,8 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 
 /**
  * @brief Class wrapper for vertex shaders
@@ -94,7 +94,6 @@ class VertexShader : public Shader {
     }
 };
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
 
 // vim: set expandtab ts=4 sw=4:

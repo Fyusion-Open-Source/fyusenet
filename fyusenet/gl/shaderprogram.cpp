@@ -1463,6 +1463,9 @@ GLint ShaderProgram::resolveLocation(const char *varName, bool silent) const {
 }
 
 
+
+
+
 /*##################################################################################################
 #                               N O N -  P U B L I C  F U N C T I O N S                            #
 ##################################################################################################*/
@@ -1545,6 +1548,7 @@ void ShaderProgram::logError() const {
         FNLOGI("<no linker log>");
     }
 }
+
 
 
 } // opengl namespace

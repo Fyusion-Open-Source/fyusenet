@@ -2,21 +2,21 @@
 # Required packages for the unit tests
 #----------------------------------------------------------------------------------
 
-# FIXME (mw) find something that works better under MacOS
 if (NOT APPLE)
-  if (NOT ANDROID)
+  if(NOT ANDROID AND NOT WIN32)
     find_package(JPEG REQUIRED)
   endif()
 else()
+  # FIXME (mw) find something that works better under MacOS
   set(JPEG_INCLUDE_DIR /opt/homebrew/include)
-  set(JPEG_LIBRARIES /opt/homebrew/lib/libturbjpeg)
+  set(JPEG_LIBRARIES /opt/homebrew/lib/libturbojpeg)
 endif()
 
 #----------------------------------------------------------------------------------
 # Misc compiler flags and default link libraries
 #----------------------------------------------------------------------------------
 
-if (NOT ANDROID)
+if (NOT ANDROID AND NOT WIN32)
   set(CXX_LIBS stdc++ m)
 endif()
 
@@ -44,8 +44,8 @@ set(IO_HELPERS ../samples/helpers/jpegio.cpp)
 # Add GoogleTest framework...
 #----------------------------------------------------------------------------------
 
-add_subdirectory(gtest)
-include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
+include_directories(${gtest_SOURCE_DIR}/googletest/include ${gtest_SOURCE_DIR}/googlemock/include ${gtest_SOURCE_DIR}/googletest)
+add_subdirectory(${gtest_SOURCE_DIR} ${gtest_BINARY_DIR})
 
 #----------------------------------------------------------------------------------
 # Test data
@@ -71,6 +71,9 @@ else(APPLE)
     else()
       set(GL_SYS_DEPS EGL GLESv2)
     endif()
+  elseif(WIN32)
+    # MS Windows
+    set(GL_SYS_DEPS "")
   else()
     # Linux desktop GL / GLX
     set(GL_SYS_DEPS X11)
@@ -100,7 +103,8 @@ if (NOT ANDROID)
 endif()
 
 if (USE_MULTITHREADING AND NOT ANDROID)
-  add_executable(asynctests asynctests.cpp ../samples/samplenetworks/stylenet_base.cpp ../samples/samplenetworks/stylenet3x3.cpp ${BASE_SOURCES} ${HELPERS} ${IO_HELPERS} ${SHADERMETA} ${SHADERRSRC})
+  add_executable(asynctests asynctests.cpp ../samples/samplenetworks/stylenet_base.cpp ../samples/samplenetworks/stylenet3x3.cpp 
+                 ../samples/helpers/stylenet_provider.cpp ${BASE_SOURCES} ${HELPERS} ${IO_HELPERS} ${SHADERMETA} ${SHADERRSRC})
   target_link_libraries(asynctests ${FYUSENET_LIBS} ${DEFAULT_LIBS} ${OPENGL_LIBRARIES} ${JPEG_LIBRARIES} ${GL_SYS_DEPS})
   add_dependencies(asynctests shader-meta)
 endif()

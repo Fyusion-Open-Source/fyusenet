@@ -40,7 +40,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepDepthwiseConvLayer3x3::DeepDepthwiseConvLayer3x3(const ConvLayerBuilder& builder,int layerNumber):DeepDepthwiseConvLayerBase(builder, layerNumber) {
     assert(inputChannels_ == outputChannels_);
@@ -64,13 +64,13 @@ void DeepDepthwiseConvLayer3x3::cleanup() {
 /**
  * @copydoc LayerBase::forward
  */
-void DeepDepthwiseConvLayer3x3::forward(uint64_t sequence) {
+void DeepDepthwiseConvLayer3x3::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
     int err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif    
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);

@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------------------------------
 // FyuseNet                                                               (c) Fyusion Inc. 2016-2022
 //--------------------------------------------------------------------------------------------------
-// Explicit Add Layer (Header)
+// Explicit Add/Sub Layer (Header)
 // Creator: Martin Wawro
 // SPDX-License-Identifier: MIT
 //--------------------------------------------------------------------------------------------------
@@ -25,9 +25,7 @@
 #include "../base/layerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 /**
  * @brief Simple addition / subtraction layer for shallow tensors
@@ -49,17 +47,17 @@ class AddSubLayer : public FunctionLayer {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
-    virtual std::vector<BufferSpec> getRequiredInputBuffers() const override;
+    void cleanup() override;
+    std::vector<BufferSpec> getRequiredInputBuffers() const override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
-    virtual void setupShaders() override;
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
+    void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
+    void setupShaders() override;
+    void beforeRender() override;
+    void afterRender() override;
     programptr compileShader(const char *preproc);
 
     // ------------------------------------------------------------------------
@@ -72,8 +70,6 @@ class AddSubLayer : public FunctionLayer {
     mutable int texturesPerPort_ = 0;                   //!< Number of input textures per port
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

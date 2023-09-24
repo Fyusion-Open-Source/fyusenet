@@ -27,10 +27,7 @@
 #include "../scalelayerbuilder.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 
 /**
@@ -52,17 +49,17 @@ class DeepScaleLayer : public DeepFunctionLayer {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
-    virtual std::vector<BufferSpec> getRequiredOutputBuffers() const override;
+    void cleanup() override;
+    [[nodiscard]] std::vector<BufferSpec> getRequiredOutputBuffers() const override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void setupShaders() override;
-    virtual void renderChannelBatch() override;
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
+    void setupShaders() override;
+    void renderChannelBatch() override;
+    void beforeRender() override;
+    void afterRender() override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -72,9 +69,6 @@ class DeepScaleLayer : public DeepFunctionLayer {
     ScalingType type_;            //!< Scaling type (e.g. nearest neighbor, lerp etc.)
 };
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

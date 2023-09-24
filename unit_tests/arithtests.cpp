@@ -8,10 +8,7 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <cstdint>
-#include <cmath>
 #include <fstream>
-#include <atomic>
 #include <memory>
 #include <thread>
 
@@ -105,9 +102,9 @@ TEST_P(ParamSingletonLayerTest, SingletonTestShallow) {
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     float expect = 0.f;
     switch (param.oper) {
@@ -143,9 +140,9 @@ TEST_P(ParamSingletonLayerTest, SingletonTestDeep) {
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     float expect = 0.f;
     switch (param.oper) {
@@ -182,9 +179,9 @@ TEST_P(ParamArithLayerTest, ArithTestShallow) {
     std::vector<const float *> inputs{input1.get(), input2.get()};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     float expect = 0.f;
     switch (param.oper) {

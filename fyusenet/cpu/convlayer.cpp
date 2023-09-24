@@ -15,9 +15,8 @@
 
 #include "convlayer.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace cpu {
+namespace fyusion::fyusenet::cpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -29,7 +28,7 @@ namespace cpu {
 ##################################################################################################*/
 
 /**
- * @copydoc LayerBase::LayerBase
+ * @copydoc CPULayerBase::CPULayerBase(const LayerBuilder&, int)
  *
  * @warning If \c PRE_RELU activation is used with this layer, the input data will be overwritten
  */
@@ -57,7 +56,7 @@ ConvolutionLayer::~ConvolutionLayer() {
 /**
  * @copydoc LayerBase::forward
  */
-void ConvolutionLayer::forward(uint64_t sequence) {
+void ConvolutionLayer::forward(uint64_t sequenceNo, StateToken * state) {
     // TODO (mw) seriously painfully unoptimized code as this is only used for very small convs for now
     float * output = outputs_[0]->map<float>();
     int outwidth = (width_ / downsample_[0]) + 2*outputPadding_;
@@ -88,18 +87,30 @@ void ConvolutionLayer::forward(uint64_t sequence) {
 
 
 /**
- * @copydoc ConvLayerInterface::loadWeightsAndBiases
+ * @copydoc LayerBase::loadParameters
  */
-void ConvolutionLayer::loadWeightsAndBiases(const float *biasAndWeights, size_t offset) {
-    weights_ = new float[kernel_*kernel_*inputChannels_*outputChannels_];
-    memcpy(weights_,biasAndWeights+offset+outputChannels_,kernel_*kernel_*inputChannels_*outputChannels_*sizeof(float));
+void ConvolutionLayer::loadParameters(const ParameterProvider *weights) {
+    weights_ = new float[kernel_ * kernel_ * inputChannels_ * outputChannels_];
+    weights->map(getName() + std::string(".weights"), getNumber(), 0).with([&](const std::any& data) {
+        if (data.has_value()) {
+            memcpy(weights_, std::any_cast<const float*>(data), kernel_ * kernel_ * inputChannels_ * outputChannels_ * sizeof(float));
+        }
+    });
     bias_ = new float[outputChannels_];
-    memcpy(bias_,biasAndWeights+offset,outputChannels_*sizeof(float));
+    weights->map(getName() + std::string(".bias"), getNumber(), 1).with([&](const std::any& data) {
+        if (data.has_value()) {
+            memcpy(bias_, std::any_cast<const float*>(data), outputChannels_ * sizeof(float));
+        }
+    });
     bnScale_ = new float[outputChannels_];
     if (flags_ & LayerFlags::POST_BATCHNORM) {
-        const float * bnscale = biasAndWeights+outputChannels_+kernel_*kernel_*inputChannels_*outputChannels_;
-        memcpy(bnScale_, bnscale,outputChannels_*sizeof(float));
-        for (int i=0; i < outputChannels_;i++) bias_[i] = bias_[i] * bnscale[i] + bnscale[outputChannels_+i];
+        weights->map(getName() + std::string(".bn"), getNumber(), 2).with([&](const std::any& data) {
+            if (data.has_value()) {
+                const float * src = std::any_cast<const float*>(data);
+                memcpy(bnScale_, src, outputChannels_ * sizeof(float));
+                for (int i=0; i < outputChannels_; i++) bias_[i] = bias_[i] * bnScale_[i] + src[outputChannels_ + i];
+            }
+        });
     } else {
         for (int i=0; i < outputChannels_;i++) bnScale_[i] = 1.0f;
     }
@@ -111,10 +122,10 @@ void ConvolutionLayer::loadWeightsAndBiases(const float *biasAndWeights, size_t 
  */
 std::vector<BufferSpec> ConvolutionLayer::getRequiredInputBuffers() const {
     std::vector<BufferSpec> ret;
-    ret.push_back(BufferSpec(0, 0, width_+2*inputPadding_, height_+2*inputPadding_,
-                             BufferSpec::SINGLE32F, BufferSpec::SINGLE,
-                             BufferSpec::FLOAT, BufferSpec::CONVOLUTION_SOURCE,
-                             inputChannels_).device(BufferSpec::COMP_STOR_CPU).dataOrder(BufferSpec::order::CHANNELWISE));
+    ret.push_back(BufferSpec(0, 0, width_ + 2*inputPadding_, height_ + 2*inputPadding_,
+                             BufferSpec::sizedformat::SINGLE32F, BufferSpec::genericformat::SINGLE,
+                             BufferSpec::dtype::FLOAT, BufferSpec::FUNCTION_SOURCE,
+                             inputChannels_).device(BufferSpec::csdevice::COMP_STOR_CPU).dataOrder(BufferSpec::order::CHANNELWISE));
     return ret;
 }
 
@@ -126,9 +137,9 @@ std::vector<BufferSpec> ConvolutionLayer::getRequiredOutputBuffers() const {
     std::vector<BufferSpec> ret;
     int outwidth = (upsample_[0]*width_) / downsample_[0] + 2 * outputPadding_;
     int outheight = (upsample_[1]*height_) / downsample_[1] + 2 * outputPadding_;
-    ret.push_back(BufferSpec(0, 0, outwidth, outheight, BufferSpec::SINGLE32F,
-                             BufferSpec::SINGLE, BufferSpec::FLOAT, BufferSpec::CONVOLUTION_DEST,
-                             outputChannels_).device(BufferSpec::COMP_STOR_CPU).dataOrder(BufferSpec::order::CHANNELWISE));
+    ret.push_back(BufferSpec(0, 0, outwidth, outheight, BufferSpec::sizedformat::SINGLE32F,
+                             BufferSpec::genericformat::SINGLE, BufferSpec::dtype::FLOAT, BufferSpec::FUNCTION_DEST,
+                             outputChannels_).device(BufferSpec::csdevice::COMP_STOR_CPU).dataOrder(BufferSpec::order::CHANNELWISE));
     return ret;
 }
 
@@ -265,12 +276,6 @@ void ConvolutionLayer::paddedConv(const float *input, float *output) {
     }
 }
 
-
-
-
-
-} // cpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::cpu namespace
 
 // vim: set expandtab ts=4 sw=4:

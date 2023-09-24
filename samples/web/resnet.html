@@ -1,0 +1,92 @@
+<html>
+  <head>
+    <script type="text/javascript">
+
+      document.addEventListener("DOMContentLoaded", function() {
+          console.log(document.getElementById("imagefile"));
+          document.getElementById("imagefile").addEventListener("change", readFile);
+      });
+
+      function readFile() {
+          console.log("read file");
+          const finput = document.getElementById("imagefile");
+	      const file = finput.files[0];
+          const reader = new FileReader();
+	      reader.readAsArrayBuffer(file);
+	      reader.onload = (event) => {
+              const wasmData = Module._malloc(event.target.result.byteLength);
+              const data = new Uint8Array(Module.HEAPU8.buffer, wasmData, event.target.result.byteLength);
+              const uint8arr = new Uint8Array(event.target.result);
+              data.set(uint8arr);
+              Module._setImage(data);
+	      }
+      }
+
+      var Module = {
+
+        /**
+         * @brief Callback once wasm module has been initialized
+         *
+         * Initializes GL context in the target canvas and triggers loading the network
+         * weights (asynchronously)
+         */
+        onRuntimeInitialized: function() {
+            let id = "#mycanvas";
+            let cv = document.getElementById("mycanvas");
+            Module.target = cv;
+            const idBuffer = Module._malloc(Module.lengthBytesUTF8(id)+1);
+            Module.stringToUTF8(id, idBuffer, Module.lengthBytesUTF8(id)+1);
+            if (Module._initContext(idBuffer, Number(cv.clientWidth), Number(cv.clientHeight))) {
+                // let tid = Module._createInputTexture();
+                // error: missing code here
+            } else {
+                console.log("Unable to initialize network");
+            }
+        },
+        netOK : false
+    }
+
+    /**
+     * @brief 
+     *
+     * @param texture WebGL texture that contains the camera frame
+     * @param gl WebGL context
+     *
+     * Applies style-transfer network to incoming camera frame
+     */
+    function cameraFrame(texture, gl) {
+        if (Module.netOK) {
+            Module._forward(Number(texture.name));
+        }
+    }
+
+
+    /**
+     * @brief Load network weights
+     *
+     * This transfers the network weight data from the host and marshalls that data into the network.
+     */
+    async function initNetwork() {
+        let weights = await window.fetch('resnet_50.dat');
+        if (weights.ok === true) {
+            const bytes = weights.headers.get('Content-Length');
+            let ptr = Module._malloc(bytes);
+            let heapBytes = new Uint8Array(Module.HEAPU8.buffer, ptr, bytes);
+            let buf = await weights.arrayBuffer();
+            heapBytes.set(new Uint8Array(buf));
+            Module._createNetwork(heapBytes.byteOffset, heapBytes.length);
+            Module.netOK = true;
+        }
+    }
+
+    </script>
+
+    <script type="text/javascript" src="resnet.js"></script>
+  </head>
+
+  <body>
+  <canvas tabindex=0 id="mycanvas" width="16" height="16"></canvas>
+  <canvas tabindex=0 id="jpegcanvas" width="224" height="224"></canvas>
+  <input type="file" id="imagefile"/>
+  </body>
+</html>

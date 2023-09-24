@@ -9,5 +9,6 @@
 #include "shaders/activation.inc"
 
 void main(void) {
-  fragmentColor0 = activate(texture(inputLayer0,texCoord.xy));
+    fragmentColor0 = activate(texture(inputLayer0,texCoord.xy));
+    gl_PointSize = 1.0;
 }

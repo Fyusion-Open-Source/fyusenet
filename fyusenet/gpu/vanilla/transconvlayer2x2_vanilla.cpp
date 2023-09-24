@@ -28,10 +28,7 @@
 #include "transconvlayer2x2_vanilla.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+namespace fyusion::fyusenet::gpu::vanilla {
 
 //-------------------------------------- Local Definitions -----------------------------------------
 
@@ -42,21 +39,29 @@ namespace vanilla {
 
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 TransConvLayer2x2::TransConvLayer2x2(const ConvLayerBuilder & builder, int layerNumber) : TransConvLayerBase(builder, layerNumber) {
 }
 
 
 /**
- * @copydoc ConvLayerInterface::loadWeightsAndBiases
+ * @copydoc ConvLayerBase::loadParameters
  */
-void TransConvLayer2x2::loadWeightsAndBiases(const float *biasAndWeights, size_t offset) {
+void TransConvLayer2x2::loadParameters(const ParameterProvider *weights) {
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
     weights_ = new TransConvWeightArray2x2xNxM(upsample_,inputChannels_,outputChannels_,maxRenderTargets_);
-    weights_->extractBiasData(biasAndWeights,offset);
-    weights_->extractWeightData(biasAndWeights,offset);
-    if (flags_ & LayerFlags::POST_BATCHNORM) weights_->extractBatchnormData(biasAndWeights,offset);
+    weights->map(getName() + std::string(".bias"), getNumber(), 1).with([&](const std::any & data) {
+        weights_->extractBiasData(std::any_cast<const float *>(data));
+    });
+    weights->map(getName() + std::string(".weights"), getNumber(), 0).with([&](const std::any & data) {
+        weights_->extractWeightData(std::any_cast<const float *>(data));
+    });
+    if (flags_ & LayerFlags::POST_BATCHNORM) {
+        weights->map(getName() + std::string(".bn"), getNumber(), 2).with([&](const std::any & data) {
+            weights_->extractBatchnormData(std::any_cast<const float *>(data));
+        });
+    }
 }
 
 
@@ -106,11 +111,6 @@ void TransConvLayer2x2::setupShaders() {
 }
 
 
-
-
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

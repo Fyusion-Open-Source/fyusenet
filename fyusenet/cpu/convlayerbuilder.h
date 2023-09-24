@@ -19,9 +19,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace cpu {
+namespace fyusion::fyusenet::cpu {
 
 /**
  * @brief Templatized anchor for convolution layer builders for CPU 2D convolution layers
@@ -115,8 +113,6 @@ struct ConvLayerBuilder : ConvLayerBuilderTempl<ConvLayerBuilder> {
 
 };
 
-} // cpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::cpu namespace
 
 // vim: set expandtab ts=4 sw=4:

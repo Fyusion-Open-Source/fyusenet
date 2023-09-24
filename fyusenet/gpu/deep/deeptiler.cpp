@@ -17,11 +17,10 @@
 
 #include "../gpulayerbase.h"
 #include "deeptiler.h"
+#include "../gpubuffer.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -31,13 +30,6 @@ namespace deep {
 /*##################################################################################################
 #                                   P U B L I C  F U N C T I O N S                                 #
 ##################################################################################################*/
-
-/**
- * @brief Boring constructor that does nothing
- */
-DeepTiler::DeepTiler() {
-}
-
 
 /**
  * @brief Constructor
@@ -80,11 +72,11 @@ DeepTiler::DeepTiler(LayerType ltype, int width, int height, int inputChannels, 
     outputPadding_ = outputPadding;
     inputTiles_ = (inputChannels + (LayerBase::PIXEL_PACKING-1)) / LayerBase::PIXEL_PACKING;
     outputTiles_ = (outputChannels + (LayerBase::PIXEL_PACKING-1)) / LayerBase::PIXEL_PACKING;
-    std::pair<int,int> intile = CPUBufferShape::computeDeepTiling(inputChannels);
+    std::pair<int,int> intile = GPUBuffer::computeDeepTiling(inputChannels);
     inputTiling_[0] = intile.first;
     inputTiling_[1] = intile.second;
     inputTiling_[2] = 1;
-    std::pair<int,int> outtile = CPUBufferShape::computeDeepTiling(outputChannels);
+    std::pair<int,int> outtile = GPUBuffer::computeDeepTiling(outputChannels);
     outputTiling_[0] = outtile.first;
     outputTiling_[1] = outtile.second;
     outputTiling_[2] = 1;
@@ -112,14 +104,14 @@ std::vector<DeepTiler::Tile> DeepTiler::createOutputTiles() const {
     float tileheight = (float)outputHeight_;
     int itilewidth = outputWidth_;
     int itileheight = outputHeight_;
-    float xextent = (2.0f*tilewidth) / viewport_[0];
-    float yextent = (2.0f*tileheight) / viewport_[1];
+    float xextent = (2.0f*tilewidth) / (float)viewport_[0];
+    float yextent = (2.0f*tileheight) / (float)viewport_[1];
     int tilenum=0;
     for (int y=0; y < outputTiling_[1]; y++) {
-        float by = ((2.0f*((y * (tileheight+outputPadding_)) + outputPadding_)) / (float)viewport_[1])-1.0f;
+        float by = ((2.0f*((y * (tileheight + (float)outputPadding_)) + (float)outputPadding_)) / (float)viewport_[1])-1.0f;
         for (int x=0; x < outputTiling_[0]; x++) {
             Tile t;
-            float bx = ((2.0f*((x * (tilewidth+outputPadding_)) + outputPadding_)) / (float)viewport_[0])-1.0f;
+            float bx = ((2.0f*((x * (tilewidth + (float)outputPadding_)) + (float)outputPadding_)) / (float)viewport_[0])-1.0f;
             t.quad_[0*2+0] = bx;
             t.quad_[0*2+1] = by;
             t.quad_[1*2+0] = bx;
@@ -530,9 +522,6 @@ void DeepTiler::Tile::toDisplacement(const Tile& defaultExtents,float *tgt, int 
 
 
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

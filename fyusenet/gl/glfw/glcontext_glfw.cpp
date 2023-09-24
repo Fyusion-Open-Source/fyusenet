@@ -30,8 +30,8 @@
 
 #ifdef FYUSENET_USE_GLFW
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 //-------------------------------------- Local Definitions -----------------------------------------
 
 static std::atomic<bool> THREAD_INIT{false};
@@ -120,6 +120,9 @@ void GLContext::init() {
         glfwInit();
         glfwSetErrorCallback(errorCallback);
     }
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     context_ = glfwCreateWindow(width_, height_, "mtnwrw", nullptr, nullptr);
     if (!context_) THROW_EXCEPTION_ARGS(GLException, "Cannot initialize GLFW window");
     glfwMakeContextCurrent(context_);
@@ -207,9 +210,20 @@ GLContextInterface * GLContext::getMain() const {
     return manager_->getMain();
 }
 
+
+/**
+ * @copydoc GLContextInterface::texturePool()
+ */
+ScopedTexturePool * GLContext::texturePool() const {
+    return manager_->texturePool();
+}
+
+
 /*##################################################################################################
 #                               N O N -  P U B L I C  F U N C T I O N S                            #
 ##################################################################################################*/
+
+
 
 /**
  * @brief Create a wrapped GL context from the currently active context
@@ -241,6 +255,9 @@ GLContext * GLContext::createFromCurrent(int idx, fyusenet::GfxContextManager *m
 GLContext * GLContext::derive(int idx, int dIdx) const {
     if (!context_) THROW_EXCEPTION_ARGS(GLException,"Cannot derive context from empty context");
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     GLFWwindow * win = glfwCreateWindow(32, 32, "hidden", nullptr, context_);
     return new GLContext(win, this, idx, dIdx, manager_);
 }
@@ -264,8 +281,8 @@ void errorCallback(int error, const char *message) {
     FNLOGE("GLFW error (%d): %s\n", error, message);
 }
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 #endif
 #endif

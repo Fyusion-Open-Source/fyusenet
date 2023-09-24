@@ -12,8 +12,6 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <vector>
-
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "../gl/gl_sys.h"
@@ -25,12 +23,11 @@
 #include "../base/layerflags.h"
 
 //------------------------------------- Public Declarations ----------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+
+namespace fyusion::fyusenet::gpu {
 
 /**
- * @brief Layer that maps input data with a sigmoid function for shallow tensors
+ * @brief Layer that maps input data with a sigmoid function for shallow & sequence tensors
  *
  * This layer maps all input data element-wise using a sigmoid function, using the following
  * mapping:
@@ -49,16 +46,16 @@ class SigmoidLayer : public FunctionLayer {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void cleanup() override;
+    void cleanup() override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
-    virtual void setupShaders() override;
-    virtual void beforeRender() override;
-    virtual void afterRender() override;
+    void renderChannelBatch(int outPass,int numRenderTargets,int texOffset) override;
+    void setupShaders() override;
+    void beforeRender() override;
+    void afterRender() override;
 
     // ------------------------------------------------------------------------
     // Member variables
@@ -68,9 +65,7 @@ class SigmoidLayer : public FunctionLayer {
     ShaderProgram *currentShader_ = nullptr;            //!< Raw pointer to currently active/in-use shader
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

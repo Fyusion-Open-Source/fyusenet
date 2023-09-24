@@ -4,3 +4,6 @@
 /build-*
 Makefile
 *.user*
+/docs
+/build
+/cmake-build-*

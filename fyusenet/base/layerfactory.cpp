@@ -9,25 +9,19 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <mutex>
-#include <cstring>
 #include <cassert>
-#include <unistd.h>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
-#include "../common/logging.h"
 #include "layerfactory.h"
-#include "../common/fynexception.h"
 #include "../gpu/gpulayerfactory.h"
 #include "../cpu/cpulayerfactory.h"
-#include "../gl/glinfo.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
 
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //-------------------------------------- Local Definitions -----------------------------------------
 
 
@@ -191,7 +185,7 @@ template std::shared_ptr<LayerFactory> LayerFactory::instance<LayerFactory::GPUF
 template LayerFactory * LayerFactory::instanceInternal<LayerFactory::GPUFactoryType>(LayerFactory::GPUFactoryType backendType, bool debug);
 
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
+
 
 // vim: set expandtab ts=4 sw=4:

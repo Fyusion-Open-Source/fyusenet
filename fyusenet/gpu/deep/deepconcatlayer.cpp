@@ -19,10 +19,8 @@
 #include "deeptiler.h"
 #include "deepconcatlayer.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -37,7 +35,13 @@ namespace deep {
 /**
  * @copydoc GPULayerBase::GPULayerBase
  */
-DeepConcatLayer::DeepConcatLayer(const ConcatLayerBuilder & builder, int layerNumber) : DeepLayerBase((const GPULayerBuilder &)builder,layerNumber) {
+DeepConcatLayer::DeepConcatLayer(const ConcatLayerBuilder & builder) : DeepConcatLayer(builder, builder.number_) {
+}
+
+/**
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder &, int)
+ */
+DeepConcatLayer::DeepConcatLayer(const ConcatLayerBuilder & builder, int layerNumber) : DeepLayerBase((const GPULayerBuilder &)builder) {
     // TODO (mw) support individual activation types on different concatenation inputs
     int relucnt = 0;
     for (auto it = builder.inputs_.begin(); it != builder.inputs_.end(); ++it) {
@@ -101,19 +105,20 @@ void DeepConcatLayer::cleanup() {
 /**
  * @brief Execute layer
  *
- * @param sequence Sequence number (\b must be stricly increasing)
+ * @param sequenceNo Sequence number (\b must be strictly increasing)
+ * @param state Pointer to optional StateToken object that encapsulates per-run state information
  *
  * This function executes the layer and performs the actual concatenation of the input textures to
  * an output texture. In order to save on rendering passes, the implementation uses up to 4 input
  * textures in parallel to perform the concatenation.
  */
-void DeepConcatLayer::forward(uint64_t sequence) {
+void DeepConcatLayer::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -217,7 +222,7 @@ int DeepConcatLayer::numInputChannels(int port) const {
  */
 void DeepConcatLayer::setupShaders() {
     char preproc[1024] = {0};
-    handlePreprocFlags(flags_, preproc, sizeof(preproc)-1);
+    preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-1);
     shader_ = compileShaderPair("shaders/deep/deepconcat.vert","shaders/deep/deepconcat.frag",preproc,typeid(this));
     try {
         shader_->bindAttributeLocation("posAttributes",0);
@@ -375,35 +380,35 @@ void DeepConcatLayer::setupNetworkPolygons(VAO *vao) {
     // vertex positions
     positionBuffer_ = new VBO(context_);
     vao->enableArray(0);
-    positionBuffer_->setBufferData(posattr,posoffset*sizeof(float),GL_STATIC_DRAW);
+    positionBuffer_->setBufferData(posattr,(GLsizei)(posoffset*sizeof(float)),GL_STATIC_DRAW);
     positionBuffer_->bind();
     vao->setVertexAttributeBuffer(0,2,GL_FLOAT,GL_FALSE,0,0);
 
     // input textures 0, 1
     texCoord0Buffer_ = new VBO(context_);
     vao->enableArray(1);
-    texCoord0Buffer_->setBufferData(texattr0,texoffset*sizeof(float),GL_STATIC_DRAW);
+    texCoord0Buffer_->setBufferData(texattr0,(GLsizei)(texoffset*sizeof(float)),GL_STATIC_DRAW);
     texCoord0Buffer_->bind();
     vao->setVertexAttributeBuffer(1,4,GL_FLOAT,GL_FALSE,0,0);
 
     // input textures 2, 3
     texCoord1Buffer_ = new VBO(context_);
     vao->enableArray(2);
-    texCoord1Buffer_->setBufferData(texattr1,texoffset*sizeof(float),GL_STATIC_DRAW);
+    texCoord1Buffer_->setBufferData(texattr1,(GLsizei)(texoffset*sizeof(float)),GL_STATIC_DRAW);
     texCoord1Buffer_->bind();
     vao->setVertexAttributeBuffer(2,4,GL_FLOAT,GL_FALSE,0,0);
 
     // # texture components
     texCompBuffer_ = new VBO(context_);
     vao->enableArray(3);
-    texCompBuffer_->setBufferData(texcomps,shiftoffset*sizeof(int),GL_STATIC_DRAW);
+    texCompBuffer_->setBufferData(texcomps,(GLsizei)(shiftoffset*sizeof(int)),GL_STATIC_DRAW);
     texCompBuffer_->bind();
     vao->setVertexAttributeBuffer(3,4,GL_INT,0,0);
 
     // shift values
     texShiftBuffer_ = new VBO(context_);
     vao->enableArray(4);
-    texShiftBuffer_->setBufferData(texshifts,shiftoffset*sizeof(int),GL_STATIC_DRAW);
+    texShiftBuffer_->setBufferData(texshifts,(GLsizei)(shiftoffset*sizeof(int)),GL_STATIC_DRAW);
     texShiftBuffer_->bind();
     vao->setVertexAttributeBuffer(4,4,GL_INT,0,0);
 
@@ -415,15 +420,15 @@ void DeepConcatLayer::setupNetworkPolygons(VAO *vao) {
     //----------------------------------------------------
     // IBO part
     //----------------------------------------------------
-    GLshort *indices = new GLshort[outtiles.size()*6];
+    auto * indices = new GLshort[outtiles.size()*6];
     for (int i=0; i < (int)outtiles.size(); i++) {
         int offset=i*4;
-        indices[i*6+0] = offset + 0;
-        indices[i*6+1] = offset + 1;
-        indices[i*6+2] = offset + 2;
-        indices[i*6+3] = offset + 0;
-        indices[i*6+4] = offset + 2;
-        indices[i*6+5] = offset + 3;
+        indices[i*6+0] = (GLshort)(offset + 0);
+        indices[i*6+1] = (GLshort)(offset + 1);
+        indices[i*6+2] = (GLshort)(offset + 2);
+        indices[i*6+3] = (GLshort)(offset + 0);
+        indices[i*6+4] = (GLshort)(offset + 2);
+        indices[i*6+5] = (GLshort)(offset + 3);
     }
     indexBuffer_ = new IBO(context_);
     indexBuffer_->setBufferData(indices,6*outtiles.size()*sizeof(GLshort),GL_STATIC_DRAW);
@@ -433,9 +438,6 @@ void DeepConcatLayer::setupNetworkPolygons(VAO *vao) {
 
 
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

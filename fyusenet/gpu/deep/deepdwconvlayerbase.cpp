@@ -35,7 +35,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepDepthwiseConvLayerBase::DeepDepthwiseConvLayerBase(const ConvLayerBuilder & builder, int layerNumber):DeepConvLayerBase(builder, layerNumber) {
     channelMultiplier_ = outputChannels_/builder.groupSize_;
@@ -48,25 +48,25 @@ DeepDepthwiseConvLayerBase::DeepDepthwiseConvLayerBase(const ConvLayerBuilder & 
 /**
  * @brief Read weights and biases from raw data and store them into a texture
  *
- * @param biasAndWeights Pointer to array with bias and weight values (see long description)
- * @param offset Optional offset (in floating-point elements) into \p biasAndWeights where to
- *               start reading from
+ * @param weights Pointer to ParameterProvider object that stores weights and biases
  *
- * This function parses the weights and biases stored in the \p biasAndWeights parameter for
- * usage with the GPU. It is assumed that the biases and weights are stored biases first,
- * followed by the convolution weights. In case a batchnorm operation is used, the batchnorm
- * parameters are following the weight data in the form of all scales and then all offsets.
- * For example, for \e n output channels, the first \e n entries in \p biasAndWeights are the
- * biases. For \e m input channels and a kernel of size \e k (i.e. a kxk kernel), we expect a 4D
- * array of size nxkxkxm with the following index
- * order:
+ * This function parses the weights and biases stored in the \p weights provider for
+ * usage with the GPU. For convolutions, the convolution weights are supposed to be stored in the
+ * following nested order:
  *
  * @code
  * [outchannel][kernely][kernelx][inchannel]
  * @endcode
  *
+ * Thus for \e m input channels and a kernel of size \e k (i.e. a \f$ k \times k \f$ kernel),
+ * we expect a 4D array of size \f$ n \times k \times k \times m \f$. The bias data as well
+ * is supposed to be stored as simple 1D vectors and the batch-norm parameters are expected
+ * to be stored in the following order:
+ *  1. all scales (single value per output channel for a total of \c output values)
+ *  2. all offsets (single value per output channel for a total of \c output values)
+ *
  * As opposed to the shallow tensor handling, it is not efficient to use multiple render passes
- * with changing uniforms for the convolution (at least not in my tests on mobile GPUs). Instead
+ * with changing uniforms for the convolution (at least not in my tests on mobile GPUs). Instead,
  * we choose a different path, which packs the convolution coefficients into textures and use a
  * few tricks - when available.
  *
@@ -91,36 +91,48 @@ DeepDepthwiseConvLayerBase::DeepDepthwiseConvLayerBase(const ConvLayerBuilder & 
  * single channel and can reduce the texture width by 50% . This has to be decoded by the shader
  * later.
  *
+ * The parameter provider is called with the following \c name parameters on loading data:
+ *   - \c layername.weights for the weight data, \c subIndex set to 0
+ *   - \c layername.bias for the bias data, \c subIndex set to 1
+ *   - \c layername.bn for the batch-norm data, \c subIndex set to 2
+ *
+ * Where \c layername refers to the name that was assigned to this layer by the builder.
+ *
+ *  @see ParameterProvider
  */
-void DeepDepthwiseConvLayerBase::loadWeightsAndBiases(const float *biasAndWeights, size_t offset) {
+void DeepDepthwiseConvLayerBase::loadParameters(const ParameterProvider *weights) {
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!weightTexture_) glGenTextures(1,&weightTexture_);
     glBindTexture(GL_TEXTURE_2D,weightTexture_);
-    const float * srcweights = biasAndWeights + offset + outputChannels_;
-    createWeightTextureMatrix(srcweights, 0, weightTexture_);
+    if (auto wgtsrc = weights->get(getName() + std::string(".weights"), getNumber(), 0) ; !wgtsrc.empty()) {
+        const float *srcweights = std::any_cast<const float *>(wgtsrc.get());
+        createWeightTextureMatrix(srcweights, 0, weightTexture_);
+    }
     // TODO (mw) put into own function -> promote
     //------------------------------------------------------
     // If we have the post-BN flag set, store the batchnorm
     // stuff...
     //------------------------------------------------------
-    if (flags_ & fyusenet::LayerFlags::POST_BATCHNORM) {
-        int padout = 4*((outputChannels_+3)/4);
-        const float * srcbn = biasAndWeights + outputChannels_ + offset + kernel_*kernel_*inputChannels_*channelMultiplier_;
+    if (auto bnsrc = weights->get(getName() + std::string(".bn"), getNumber(), 2) ; flags_ & fyusenet::LayerFlags::POST_BATCHNORM) {
+        int padout = PIXEL_PACKING * ((outputChannels_ + PIXEL_PACKING-1) / PIXEL_PACKING);
+        const float * srcbn = std::any_cast<const float *>(bnsrc.get());
         postBNScales_ = new float[padout];
         postBNBias_ = new float[padout];
         memset(postBNScales_,0,padout*sizeof(float));
         memset(postBNBias_,0,padout*sizeof(float));
         memcpy(postBNScales_, srcbn, outputChannels_*sizeof(float));
-        memcpy(postBNBias_, srcbn+outputChannels_, outputChannels_*sizeof(float));
+        memcpy(postBNBias_, srcbn + outputChannels_, outputChannels_*sizeof(float));
     }
     //------------------------------------------------------
     // Now for the bias part (and also batchnorm)...
     //------------------------------------------------------
-    int bs = PIXEL_PACKING*(1+(outputChannels_+PIXEL_PACKING-1)/PIXEL_PACKING);
+    int bs = PIXEL_PACKING * (1 + (outputChannels_ + PIXEL_PACKING-1) / PIXEL_PACKING);
     if (flags_ & LayerFlags::POST_BATCHNORM) bs *= 2;
     float * bias = new float[bs];
-    memset(bias,0,bs*sizeof(float));
-    memcpy(bias+PIXEL_PACKING,biasAndWeights+offset,outputChannels_*sizeof(float));
+    memset(bias, 0, bs * sizeof(float));
+    weights->map(getName() + std::string(".bias"), getNumber(), 0).with([&](const std::any &data) {
+        memcpy(bias + PIXEL_PACKING, std::any_cast<const float *>(data), outputChannels_ * sizeof(float));
+    });
     // load batchnorm scale and bias if necessary
     if (flags_ & LayerFlags::POST_BATCHNORM) {
         for (int i=0;i<outputChannels_;i++) {

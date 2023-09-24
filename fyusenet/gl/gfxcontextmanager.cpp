@@ -12,20 +12,22 @@
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
+#include "../common/miscdefs.h"
 #include "glexception.h"
 #include "../gpu/gfxcontextmanager.h"   // NOTE (mw) hacky
 #include "glcontext.h"
 #include "pbopool.h"
 #include "shadercache.h"
 #include "shadersnippet.h"
+#include "scoped_texturepool.h"
 #ifdef FYUSENET_MULTITHREADING
 #include "asyncpool.h"
 #endif
 
 //-------------------------------------- Global Variables ------------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //-------------------------------------- Local Definitions -----------------------------------------
 
 std::vector<std::shared_ptr<GfxContextManager>> GfxContextManager::managers_;
@@ -48,7 +50,7 @@ GfxContextManager::~GfxContextManager() noexcept(false) {
 #else
 GfxContextManager::~GfxContextManager() {
 #endif
-    if (contexts_.size()) {
+    if (!contexts_.empty()) {
 #ifdef DEBUG
         THROW_EXCEPTION_ARGS(opengl::GLException,"Context manager was not torn down before destruction");
 #else
@@ -89,7 +91,7 @@ fyusenet::GfxContextLink GfxContextManager::context(int ctxIdx) const {
  */
 fyusenet::GfxContextLink GfxContextManager::createMainContextFromCurrent() {
     // TODO (mw) thread safety
-#if !defined(USE_GLFW) && !defined(__APPLE__)
+#if !defined(FYUSENET_USE_GLFW) && !defined(__APPLE__)
     int idx = (int)contexts_.size();
     opengl::GLContext * ctx = opengl::GLContext::createFromCurrent(idx, this);
     if (!ctx) THROW_EXCEPTION_ARGS(opengl::GLException, "Cannot wrap external GL context");
@@ -168,7 +170,7 @@ GfxContextLink GfxContextManager::createMainContext(char *canvas, int width, int
 fyusenet::GfxContextLink GfxContextManager::createMainContext(bool makeCurrent) {
     // TODO (mw) thread safety
     int idx = (int)contexts_.size();
-    opengl::GLContext * ctx = new opengl::GLContext(idx, deviceID_, this);
+    auto * ctx = new opengl::GLContext(idx, deviceID_, this);
     ctx->init();
     if (makeCurrent) {
         if (!ctx->makeCurrent()) THROW_EXCEPTION_ARGS(opengl::GLException,"Cannot make GL context %p the current one",ctx);
@@ -322,10 +324,9 @@ void GfxContextManager::cleanup() {
 #endif
             }
         } else {
-            delete pboReadPool_;
-            delete pboWritePool_;
-            pboReadPool_ = nullptr;
-            pboWritePool_ = nullptr;
+            FNET_DEL_AND_CLEAR(pboReadPool_);
+            FNET_DEL_AND_CLEAR(pboWritePool_);
+            FNET_DEL_AND_CLEAR(texturePool_);
             for (opengl::GLContext * ctx : contexts_) {
                 assert(ctx);
                 if ((ctx->uses() > 0) && (!ctx->isExternal())) {
@@ -341,7 +342,7 @@ void GfxContextManager::cleanup() {
             contexts_.clear();
         }
     } else {
-        if (contexts_.size() > 0) THROW_EXCEPTION_ARGS(opengl::GLException, "No main context set, yet this manager has %ld contexts, canot teardown",contexts_.size());
+        if (!contexts_.empty()) THROW_EXCEPTION_ARGS(opengl::GLException, "No main context set, yet this manager has %ld contexts, canot teardown",contexts_.size());
     }
     // TODO (mw) thread-safety
     for (auto it=managers_.begin(); it != managers_.end(); ++it) {
@@ -363,13 +364,24 @@ void GfxContextManager::cleanup() {
  * downloading (read) textures.
  */
 void GfxContextManager::setupPBOPools(int readPoolSize, int writePoolSize) {
-    // TODO (mw) thread-safety
+    // TODO (mw) thread-safety and make sure that we are running in the right context
     assert(pboReadPool_ == nullptr);
     assert(pboWritePool_ == nullptr);
     pboReadPool_ = new opengl::PBOPool(readPoolSize);
     pboWritePool_ = new opengl::PBOPool(writePoolSize);
 }
 
+
+/**
+ * @brief Setup texture pool
+ *
+ * This function creates a texture pool for the current context as well as shared contexts.
+ * A texture pool is useful for dealing with transient textures as they appear in textures that are
+ * "internal" to layers in case they need to do some multi-pass computations.
+ */
+void GfxContextManager::setupTexturePool() {
+    texturePool_ = new opengl::ScopedTexturePool(context(0));
+}
 
 
 /*##################################################################################################
@@ -406,8 +418,10 @@ opengl::GLContext * GfxContextManager::findCurrentContext(opengl::GLContextInter
         auto context = glXGetCurrentContext();
 #elif defined(__APPLE__)
         auto context = CGLGetCurrentContext();
-#else
+#elif defined(FYUSENET_USE_WEBGL)
         auto context = emscripten_webgl_get_current_context();
+#else
+        HGLRC context = wglGetCurrentContext();
 #endif
         for (auto & mgr : managers_) {
             for (opengl::GLContext * ctx : mgr->contexts_) {
@@ -425,7 +439,6 @@ opengl::GLContext * GfxContextManager::findCurrentContext(opengl::GLContextInter
 }
 
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
 
 // vim: set expandtab ts=4 sw=4:

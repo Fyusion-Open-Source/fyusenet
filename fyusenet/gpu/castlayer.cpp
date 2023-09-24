@@ -31,7 +31,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 CastLayer::CastLayer(const CastLayerBuilder & builder, int layerNumber):FunctionLayer((GPULayerBuilder &)builder, layerNumber) {
     target_ = builder.target_;

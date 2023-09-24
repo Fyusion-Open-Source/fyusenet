@@ -75,13 +75,13 @@ void DeepTransposeLayer::cleanup() {
 }
 
 
-void DeepTransposeLayer::forward(uint64_t sequence) {
+void DeepTransposeLayer::forward(uint64_t sequence, StateToken * token) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke render() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -185,7 +185,7 @@ void DeepTransposeLayer::setupNetworkPolygons(VAO *vao) {
 
 void DeepTransposeLayer::setupShaders() {
     char preproc[1024] = {0};
-    handlePreprocFlags(flags_, preproc, sizeof(preproc)-1);
+    preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-1);
     shader_ = compileShaderPair("shaders/deep/deepdefault.vert", "shaders/deep/deepdefault.frag", preproc, typeid(this));
     try {
         shader_->bindAttributeLocation("attributes0",0);

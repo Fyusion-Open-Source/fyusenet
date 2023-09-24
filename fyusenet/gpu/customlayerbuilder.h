@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <any>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
@@ -22,9 +23,7 @@
 
 //------------------------------------- Public Declarations ----------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
 
 class GPULayerBase;
 
@@ -34,11 +33,16 @@ class GPULayerBase;
  */
 template<typename D = GPULayerBuilderTempl<>>
 struct CustomLayerBuilderTempl : GPULayerBuilderTempl<D> {
+
     CustomLayerBuilderTempl(const std::string& name) : GPULayerBuilderTempl<D>(name) {
         LayerBuilderTempl<D>::device_ = compute_device::DEV_GPU;
+        this->type(LayerType::CUSTOM);
     }
+
     CustomLayerBuilderTempl(const D& src) : GPULayerBuilderTempl<D>(src) {
     }
+
+    std::any privData_;             //!< Private data, most often injected during construction of the builder
 };
 
 
@@ -72,7 +76,7 @@ struct CustomLayerBuilder : CustomLayerBuilderTempl<CustomLayerBuilder> {
 
 
     /**
-     * @brief Initialization function called by the layer facctory
+     * @brief Initialization function called by the layer factory
      *
      * @return Pointer to GPU layer that was created by the callback
      *
@@ -89,9 +93,7 @@ struct CustomLayerBuilder : CustomLayerBuilderTempl<CustomLayerBuilder> {
     std::function<GPULayerBase *(const CustomLayerBuilder & builder)> initCallback_;
 };
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 
 // vim: set expandtab ts=4 sw=4:

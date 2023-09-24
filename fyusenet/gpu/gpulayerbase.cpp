@@ -11,22 +11,17 @@
 
 #include <cassert>
 #include <cstring>
-#include <algorithm>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "../common/logging.h"
 #include "gpulayerbase.h"
 #include "../gl/fbo.h"
-#include "../gl/shaderexception.h"
 #include "../gl/shaderresource.h"
-#include "../gl/glexception.h"
 #include "../gl/shadercache.h"
-#include "../gl/glinfo.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -42,6 +37,24 @@ namespace gpu {
  *
  * @param builder GPU-specific layer builder that contains parameterization for the layer
  *
+ * @throws FynException in case the layer is initialized with invalid/unsupported parameters
+ *
+ * @pre GL context that this layer is supposed to be operated under must be current
+ *
+ * Parses basic information from the supplied \p builder, including the output viewport and the
+ * GL context. Each builder also contains a layer number which has to be unique and in order of inference.
+ * It is up to the user to make sure that the layer numbering is correct and that there are no
+ * clashes where more than one layer uses the same layer number.
+ */
+GPULayerBase::GPULayerBase(const GPULayerBuilder & builder) : GPULayerBase(builder, builder.number_) {
+}
+
+
+/**
+ * @brief Constructor
+ *
+ * @param builder GPU-specific layer builder that contains parameterization for the layer
+ *
  * @param layerNumber Layer number that defines sequence position in execution
  *
  * @throws FynException in case the layer is initialized with invalid/unsupported parameters
@@ -50,11 +63,13 @@ namespace gpu {
  *
  * Parses basic information from the supplied \p builder, including the output viewport and the
  * GL context.
+ *
+ * @deprecated Do not use this constructor anymore, it will be deprecated in the next major version
  */
 GPULayerBase::GPULayerBase(const GPULayerBuilder & builder,int layerNumber) :
-      fyusenet::LayerBase((const LayerBuilder &)builder, layerNumber) {
+      fyusenet::LayerBase((const LayerBuilder &)builder, layerNumber), GfxContextTracker(builder.context_),
+      preprocessor_(builder) {
     device_ = compute_device::DEV_GPU;
-    setContext(builder.context_);
     // default viewport assumption
     viewport_[0] = width_ + 2*outputPadding_;
     viewport_[1] = height_ + 2*outputPadding_;
@@ -81,8 +96,8 @@ GPULayerBase::~GPULayerBase() {
     inputTextures_.clear();
     outputTextures_.clear();
     residualTextures_.clear();
-    if (framebuffers_.size() > 0) {
-        FNLOGE("Framebuffers not cleaned, this might leak OpenGL context memory (rem=%d)",(int)framebuffers_.size());
+    if (!framebuffers_.empty()) {
+        FNLOGE("Framebuffers not cleaned, this might leak OpenGL context memory (rem=%d)", (int)framebuffers_.size());
     }
 }
 
@@ -100,6 +115,7 @@ GPULayerBase::~GPULayerBase() {
  *       destructors too, but people (read: me) are just not used to that.
  */
 void GPULayerBase::cleanup() {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     valid_ = false;
     // do NOT _delete_ input and residual textures here, they are managed by the BufferManager
     inputTextures_.clear();
@@ -108,6 +124,320 @@ void GPULayerBase::cleanup() {
         delete fbo;
     }
     framebuffers_.clear();
+}
+
+
+/**
+ * @brief Return GPU output buffer(s) for this layer at specified port
+ *
+ * @param port Port number of the output buffer(s) to retrieve, supply 0 here for now
+ *
+ * @return GPUBuffer instance that wraps the (internal) textures(s) used as output
+ *
+ * Provides a GPUBuffer object pointer around the internal GPU buffers, ownership of that buffer
+ * (wrapper) is transferred to the caller.
+ *
+ * @note The buffer returned by this function is not related to the pointer that was used in
+ *       setGPUInputBuffer(). Currently only port 0 is supported for outputs.
+ */
+GPUBuffer * GPULayerBase::getGPUOutputBuffer(int port) const {
+    if (outputTextures_.empty()) return nullptr;
+    int width = viewport_[0] - 2 * outputPadding_;
+    int height = viewport_[1] - 2 * outputPadding_;
+    auto * out = createGPUBuffer(width, height, outputChannels_, getOutputOrder(port), getOutputType(port), outputPadding_);
+    for (auto handle : outputTextures_) {
+        pushSliceToBuffer(out, handle, viewport_[0], viewport_[1], PIXEL_PACKING, getOutputType(port));
+    }
+    return out;
+}
+
+
+
+/**
+ * @brief Return GPU input buffer(s) for this layer at specified port
+ *
+ * @param port Port number of the input buffer(s) to retrieve
+ *
+ * @return GPUBuffer instance that wraps the (internal) textures(s) used as input
+ *
+ * @note The buffer returned by this function is not related to the pointer that was used in
+ *       setGPUInputBuffer()
+ */
+GPUBuffer * GPULayerBase::getGPUInputBuffer(int port) const {
+    if (inputTextures_.empty()) return nullptr;
+    auto * out = createGPUBuffer(width_, height_, inputChannels_, getInputOrder(port), getInputType(port), inputPadding_);
+    auto specs = getRequiredInputBuffers();
+    for (int i=0; i < (int)inputTextures_.size(); i++) {
+        if (specs[i].port_ == port) {
+            pushSliceToBuffer(out, inputTextures_.at(i), width_ + 2 * inputPadding_, height_ + 2 * inputPadding_, PIXEL_PACKING, getInputType(port));
+        }
+    }
+    return out;
+}
+
+
+/**
+ * @brief Set GPU input buffer(s) for this layer at specified port
+ *
+ * @param buffer Pointer to GPUBuffer object that wraps the input texture(s)
+ *
+ * @param port Port to set
+ *
+ * This reads the information from the supplied \p buffer object and sets it as input for this
+ * layer. The supplied object can be discarded after this call, however the contents that are
+ * wrapped by this object (depending on the backend, for example texture handles) have to \b remain
+ * \b valid for the life-cycle of the layer or until replaced.
+ *
+ * @note This class never takes ownership over the supplied \p buffer pointer, in fact it is never
+ *       even stored within this class.
+ */
+void GPULayerBase::setGPUInputBuffer(GPUBuffer * buffer, int port) {
+    assert(port < numInputPorts());
+    auto specs = getRequiredInputBuffers();
+    if (specs.size() > inputTextures_.size()) inputTextures_.resize(specs.size(), 0);
+    for (int i=0,s=0; i < (int)specs.size(); i++) {
+        if (specs[i].port_ == port) {
+            inputTextures_[i] = getBufferSlice(buffer, s++);
+        }
+    }
+}
+
+
+/**
+ * @brief Set GPU output buffer(s) for this layer at specified port
+ *
+ * @param buffer Pointer to GPUBuffer object that wraps the output texture(s)
+ *
+ * @param port Port to set
+ *
+ * This reads the information from the supplied \p buffer object and sets it as output for this
+ * layer. The supplied object can be discarded after this call, however the contents that are
+ * wrapped by this object (depending on the backend, for example texture handles) have to \b remain
+ * \b valid for the life-cycle of the layer or until replaced.
+ *
+ * @note This class never takes ownership over the supplied \p buffer pointer, in fact it is never
+ *       even stored within this class.
+ */
+void GPULayerBase::setGPUOutputBuffer(GPUBuffer * buffer, int port) {
+    // NOTE (mw) we currently only support one output port
+    if ((int)outputTextures_.size() < buffer->numSlices()) outputTextures_.resize(buffer->numSlices(), 0);
+    for (int slice=0; slice < buffer->numSlices(); slice++) {
+        outputTextures_[slice] = getBufferSlice(buffer, slice);
+    }
+}
+
+
+/**
+ * @brief Get FBO at specified index
+ *
+ * @param index Index within the %FBO list
+ *
+ * @return Pointer to FBO object at specified \p index
+ *
+ * Use this function to gain direct access to an output %FBO of the layer (for debugging purposes
+ * for example). Note that when accessing an %FBO of a layer after other layers have been
+ * invoked subsequently, the output may not be as expected, as the BufferManager reuses textures
+ * wherever possible.
+ */
+FBO * GPULayerBase::getFBO(int index) const {
+    return framebuffers_.at(index);
+}
+
+
+/**
+ * @copydoc LayerBase::writeResult
+ */
+void GPULayerBase::writeResult(const char *fileName, bool includePadding) {
+#ifdef DEBUG
+    int owidth = viewport_[0];
+    int oheight = viewport_[1];
+    if (!includePadding) {
+        owidth -= 2 * outputPadding_;
+        oheight -= 2 * outputPadding_;
+    }
+#ifndef FYUSENET_USE_WEBGL
+    FILE *out = fopen(fileName,"wb");
+    if (out) {
+#else
+    uint8_t * download = new uint8_t[owidth * oheight * outputChannels_];
+    uint8_t * downptr = download;
+    if (true) {
+#endif
+        int outblocks = (outputChannels_ % PIXEL_PACKING) ? (outputChannels_ / PIXEL_PACKING)+1 : (outputChannels_ / PIXEL_PACKING);
+        if (outblocks > FBO::MAX_DRAWBUFFERS) outblocks = FBO::MAX_DRAWBUFFERS;
+        if ((owidth <= 0 ) || (oheight <= 0)) THROW_EXCEPTION_ARGS(FynException, "Illegal writing resolution %dx%d encountered",owidth,oheight);
+        float * data = new float[viewport_[0] * viewport_[1] * PIXEL_PACKING * outblocks];
+        float * layer = new float[owidth * oheight];
+        int rem = outputChannels_;
+        for (int fb = 0 ; fb < numFBOs(); fb++ ) {
+            memset(data, 0, viewport_[0] * viewport_[1] * outblocks * PIXEL_PACKING * sizeof(float));
+            FBO *fbo = getFBO(fb);            
+            fbo->writeToMemory<float,GL_FLOAT>(data, PIXEL_PACKING, (GLsizei)(viewport_[0] * viewport_[1] * outblocks * PIXEL_PACKING * sizeof(float)));
+            int fborem = fbo->numAttachments() * PIXEL_PACKING;
+            if (fborem > rem) fborem = rem;
+            float *ptr = data;
+            int padoffset = (includePadding) ? 0 : outputPadding_;
+            while (fborem > 0) {
+                int ml = (fborem >= PIXEL_PACKING) ? PIXEL_PACKING : fborem;
+                for (int l=0; l <ml; l++) {
+                    for (int y=0; y  < oheight; y++) {
+                        for (int x=0; x < owidth; x++) {
+                            layer[x+y*owidth]=ptr[l+PIXEL_PACKING*((y+padoffset)*viewport_[0]+x+padoffset)];
+                        }
+                    }
+#ifndef FYUSENET_USE_WEBGL
+                    fwrite(layer, 1, owidth * oheight * sizeof(float), out);
+#else
+                    memcpy(downptr, layer, owidth * oheight * sizeof(float));
+                    downptr += owidth * oheight;
+#endif
+                }
+                fborem -= ml;
+                rem -= ml;
+                ptr += viewport_[0] * viewport_[1] * PIXEL_PACKING;
+            }
+        }
+        delete [] data;
+        delete [] layer;
+#ifndef FYUSENET_USE_WEBGL
+        fclose(out);
+#else
+        EM_ASM({window.download($0, $1, $2);}, download, owidth * oheight * outputChannels_ * sizeof(float), fileName);
+        delete [] download;
+#endif
+    } else {
+        FNLOGE("Cannot open %s for output",fileName);
+    }
+#endif
+}
+
+
+/**
+ * @brief Copy computation results of layer to CPU memory for debugging purposes
+ *
+ * @param[out] memory Pointer to memory (32-bit FP) where data should be written to, it is the
+ *                    caller's responsibility to make sure that enough memory is available
+ *
+ * @param includePadding If \c true, the padding will be included in the output file, otherwise
+ *        the padding will be ignored and only the net contents are written to the output file
+ *
+ * This function copies the content of the output textures as binary dump into the specified memory.
+ * region. All data will be written as little-endian 32-bit IEEE-754 floating-point numbers in a
+ * channel-by-channel fashion. The data is arranged row-by-row (x-axis as innermost index) for a
+ * single channel (y-axis as middle index) where the channels are stacked (channel axis as outermost
+ * index).
+ *
+ * @note This function only works in a debug build. In release builds, this will be a no-op.
+ */
+void GPULayerBase::copyResult(float *memory, bool includePadding) {
+#ifdef DEBUG
+    int owidth = viewport_[0];
+    int oheight = viewport_[1];
+    if (!includePadding) {
+        owidth -= 2 * outputPadding_;
+        oheight -= 2 * outputPadding_;
+    }
+    if ((owidth <= 0 ) || (oheight <= 0)) THROW_EXCEPTION_ARGS(FynException,"Illegal resolution %dx%d encountered",owidth,oheight);
+    int rem = outputChannels_;
+    float * target = memory;
+    for (int fb = 0 ; fb < numFBOs(); fb++ ) {
+        FBO *fbo = getFBO(fb);
+        assert(fbo);
+        float * tmp = new float[fbo->numAttachments() * PIXEL_PACKING * viewport_[0] * viewport_[1]];
+        fbo->writeToMemory<float,GL_FLOAT>(tmp, PIXEL_PACKING, (GLsizei)(viewport_[0] * viewport_[1] * fbo->numAttachments() * PIXEL_PACKING*sizeof(float)));
+        int fborem = fbo->numAttachments() * PIXEL_PACKING;
+        if (fborem > rem) fborem = rem;
+        int padoffset = (includePadding) ? 0 : outputPadding_;
+        const float * ptr  = tmp;
+        while (fborem > 0) {
+            int ml = (fborem >= PIXEL_PACKING) ? PIXEL_PACKING : fborem;
+            for (int l=0; l < ml;l++) {
+                for (int y=0; y  < oheight; y++) {
+                    for (int x=0; x < owidth; x++) {
+                        target[x+y*owidth] = ptr[l+PIXEL_PACKING*((y+padoffset)*viewport_[0]+x+padoffset)];
+                    }
+                }
+                target += owidth*oheight;
+            }
+            fborem -= ml;
+            rem -= ml;
+            ptr += viewport_[0] * viewport_[1] * PIXEL_PACKING;
+        }
+        delete [] tmp;
+    }
+#else
+    THROW_EXCEPTION_ARGS(FynException, "This function is not available in release mode");
+#endif
+}
+
+
+
+/*##################################################################################################
+#                               N O N -  P U B L I C  F U N C T I O N S                            #
+##################################################################################################*/
+
+/**
+ * @brief Retrieve (default) data order for input textures
+ *
+ * @param port Port number to retrieve info for
+ *
+ * @return Data order
+ */
+BufferSpec::order GPULayerBase::getInputOrder(int port) const {
+    return BufferSpec::order::GPU_SHALLOW;
+}
+
+
+/**
+ * @brief Retrieve (default) data order for output textures
+ *
+ * @param port Port number to retrieve info for
+ *
+ * @return Data order
+ */
+BufferSpec::order GPULayerBase::getOutputOrder(int port) const {
+    return BufferSpec::order::GPU_SHALLOW;
+}
+
+
+/**
+ * @brief Retrieve (default) data type for input textures
+ *
+ * @param port Port number to retrieve info for
+ *
+ * @return Data type
+ */
+BufferSpec::dtype GPULayerBase::getInputType(int port) const {
+    return GPULayerBase::TEXTURE_TYPE_DEFAULT;
+}
+
+
+/**
+ * @brief Retrieve (default) data type for output textures
+ *
+ * @param port Port number to retrieve info for
+ *
+ * @return Data type
+ */
+BufferSpec::dtype GPULayerBase::getOutputType(int port) const {
+    return GPULayerBase::TEXTURE_TYPE_DEFAULT;
+}
+
+
+
+/**
+ * @brief Retrieve number of FBOs used by the layer output
+ *
+ * @return Number of FBOs that are allocated
+ *
+ * GPU-based NN layers use FBO instances to "render" the result of the layer operation into the
+ * output textures. The number of %FBOs used is not necessarily the same as the number of
+ * output textures, in case multi render targets are used (for shallow layers).
+ *
+ * @see getFBO
+ */
+int GPULayerBase::numFBOs() const {
+    return (int)framebuffers_.size();
 }
 
 
@@ -201,6 +531,23 @@ void GPULayerBase::addResidualTexture(GLuint textureID, int channelIndex) {
 
 
 /**
+ * @brief Add texture to the list of residual textures
+ *
+ * @param texture Texture2D instance that wraps the texture to be added
+ * @param channelIndex Index within the set of input textures of this layer
+ *
+ * This is an overloaded function, provided for convenience. It simply calls the other
+ * addResidualTexture(GLuint, int) method with the raw OpenGL texture handle of the supplied
+ * Texture2D instance.
+ *
+ * @see addResidualTexture(GLuint, int)
+ */
+void GPULayerBase::addResidualTexture(const Texture2D& texture , int channelIndex) {
+    addResidualTexture(texture.getHandle(), channelIndex);
+}
+
+
+/**
  * @brief Clear all input textures registered with this layer
  *
  * Resets the layer's input textures to the empty set. Note that this does \e not deallocate
@@ -244,12 +591,12 @@ void GPULayerBase::clearOutputTextures() {
  * will refer to channels 16 to 19 (inclusive) of the first port and a channel index of 12 will
  * refer to channels 24..27 (inclusive) of the second port.
  *
- * For deep tensor layers, the behaviour of \p channelIndex is quite different and it will
- * be equivalent to the input port number, as all channels are stored in a single texture.
+ * For deep or sequence tensor layers, the behaviour of \p channelIndex is quite different and is
+ * equivalent to the input port number, as all channels of a tensor are stored in a single texture.
  *
  * In case this function is called for the same channel index multiple times, this default
  * implementation will \e overwrite the texture ID at that index. Specific layers might choose
- * a different approach. In general it is not recommended to use this function for \e changing
+ * a different approach. In general, it is not recommended to use this function for \e changing
  * a texture, please see the updateInputTexture() function for that.
  *
  * @note This class does not take ownership over the supplied texture, it is up to the caller to
@@ -265,17 +612,35 @@ void GPULayerBase::addInputTexture(GLuint textureID, int channelIndex) {
 
 
 /**
+ * @brief Register input texture with this layer
+ *
+ * @param texture Texture2D instance that wraps the texture handle to be added to the list of
+ *                input textures
+ *
+ * @param channelIndex Index which is based on input port and channel within that port
+ *
+ * This function is an overloaded version of the addInputTexture(GLuint, int) method.
+ *
+ * @see addInputTexture(GLuint, int)
+ */
+
+void GPULayerBase::addInputTexture(const Texture2D & texture, int channelIndex) {
+    addInputTexture(texture.getHandle(), channelIndex);
+}
+
+
+/**
  * @brief Update existing (previously added) texture slot with a new texture
  *
  * @param textureID New texture ID to set
  *
  * @param channelIndex Index which is based on input port and channel within that port
  *
- * This function \e updates an existing input texture slot at the specified \p channelIndex with the
+ * This function \e updates an existing input texture slot at the specified \p channelIndex with
  * the supplied \p textureID, overwriting the old texture ID. The new texture must have the same
  * dimensions as the old texture.
  *
- * This function may be overriden for classes that require change/setup code whenever an input
+ * This function may be overridden for classes that require change/setup code whenever an input
  * texture changes.
  *
  * @see addInputTexture
@@ -287,28 +652,51 @@ void GPULayerBase::updateInputTexture(GLuint textureID, int channelIndex) {
 
 
 /**
+ * @brief Update existing (previously added) texture slot with a new texture
+ *
+ * @param texture Texture2D object that wraps the new texture to be set
+ *
+ * @param channelIndex Index which is based on input port and channel within that port
+ *
+ * This function is a convenience wrapper around the updateInputTexture(GLuint, int) function.
+ *
+ * @see updateInputTexture(GLuint, int)
+ */
+void GPULayerBase::updateInputTexture(const Texture2D& texture, int channelIndex) {
+    updateInputTexture(texture.getHandle(), channelIndex);
+}
+
+
+
+/**
  * @brief Register output texture with this layer
  *
- * @param textureID Raw OpenGL texture handle to be added to the list of output textures
+ * @param textureID Raw OpenGL texture handle to be added to the list of output textures, see
+ *                  precondition
  *
  * @param channelIndex Index which is based on output channel
  *
- * @param shadowIndex Optional index that adds a multiple textures to the same port/channelindex
+ * @param shadowIndex Optional index that adds multiple textures to the same port/channelindex
  *                    for multi-buffering. If this functionality is to be used, this method has
- *                    to be overriden, otherwise any value other than 0 will raise an exception.
+ *                    to be overridden, otherwise any value other than 0 will raise an exception.
  *
  * This function adds a texture to the output texture list at the provided \p channelIndex location.
  * Opposed to the input, layers currently only have one output port, but may be extended to support
  * multiple output ports later (or never).
  *
- * Unlike the input, layers currently only have one output port, but may be extended to
- * support multiple output ports later (or never). If a layer has more than one output port
- * in the future, each port may consist of more than one texture. The \p channelIndex specifies
- * a flattened offset into this list. For example, assume that a layer has 2 output ports,
- * where the first port has 24 channels and the second port has 32 channels. This equals to 6
- * textures on the first port and 8 textures on the second port (each texture aggregates 4
- * channels). A channel index of 4 will therefore be channels 16 to 19 (inclusive) of the
- * first port and a channel index of 12 will be channels 24..27 (inclusive) of the second port.
+ * If a layer has more than one output port in the future, each port may consist of more than one
+ * texture for \e shallow layers. For shallow type of layers, the \p channelIndex specifies a
+ * flattened offset into the list of output textures and port combinations. For example, assume that
+ * a shallow layer has 2 output ports, where the first port has 24 channels and the second port has
+ * 32 channels. This equals to 6 textures on the first port and 8 textures on the second port (each
+ * texture aggregates 4 channels). A channel index of 4 will therefore be channels 16 to 19
+ * (inclusive) of the first port and a channel index of 12 will be channels 24..27 (inclusive) of
+ * the second port.
+ *
+ * For deep or sequence tensor layers, the \p channelIndex is equivalent to the port number.
+ *
+ * @pre The supplied \p textureID must belong to a texture that has been \e dimensionalized already,
+ *      i.e. \c glTexImage2D or \c glTexStorage2D must have been called on it.
  *
  * @post #outputChanged_ is set to \c true to indicate that some parts may have to be reinitialized
  *
@@ -328,6 +716,27 @@ void GPULayerBase::addOutputTexture(GLuint textureID, int channelIndex, int shad
     outputChanged_ = true;
 }
 
+/**
+ * @brief Register output texture with this layer
+ *
+ * @param texture Texture2D object which wraps the texture to be added to the list of output textures
+ *
+ * @param channelIndex Index which is based on output channel
+ *
+ * @param shadowIndex Optional index that adds multiple textures to the same port/channelindex
+ *                    for multi-buffering. If this functionality is to be used, this method has
+ *                    to be overridden, otherwise any value other than 0 will raise an exception.
+ *
+ * This function is an overloaded convenience function that calls the other addOutputTexture(GLuint, int, int)
+ * method.
+ *
+ * @see addOutputTexture(GLuint, int, int)
+ */
+void GPULayerBase::addOutputTexture(const Texture2D& texture, int channelIndex, int shadowIndex) {
+    return addOutputTexture(texture.getHandle(), channelIndex, shadowIndex);
+}
+
+
 
 /**
  * @brief Check if layer has a valid output texture at specified index
@@ -342,12 +751,15 @@ void GPULayerBase::addOutputTexture(GLuint textureID, int channelIndex, int shad
  *
  * Unlike the input, layers currently only have one output port, but may be extended to
  * support multiple output ports later (or never). If a layer has more than one output port
- * in the future, each port may consist of more than one texture. The \p channelIndex specifies
- * a flattened offset into this list. For example, assume that a layer has 2 output ports,
- * where the first port has 24 channels and the second port has 32 channels. This equals to 6
- * textures on the first port and 8 textures on the second port (each texture aggregates 4
- * channels). A channel index of 4 will therefore be channels 16 to 19 (inclusive) of the
- * first port and a channel index of 12 will be channels 24..27 (inclusive) of the second port.
+ * in the future, each port may consist of more than one texture for \e shallow layers. The
+ * \p channelIndex specifies a flattened offset into the list of output textures. In particular,
+ * for a shallow layer type with 2 output ports, where the first port has 24 channels and the second
+ * port has 32 channels. This equals to 6 textures on the first port and 8 textures on the second
+ * port (each texture aggregates 4 channels). A channel index of 4 will therefore be channels 16 to
+ * 19 (inclusive) of the first port and a channel index of 12 will be channels 24..27 (inclusive) of
+ * the second port.
+ *
+ * For deep and sequence type layers, the \p channelIndex is equivalent to the port number.
  *
  * @see BufferManager::connectLayers, BufferManager::connectGPULayers, addOutputTexture, getOutputTexture
  */
@@ -369,15 +781,17 @@ bool GPULayerBase::hasOutputTexture(int channelIndex) const {
  *
  * Unlike the input, layers currently only have one output port, but may be extended to
  * support multiple output ports later (or never). If a layer has more than one output port
- * in the future, each port may consist of more than one texture. The \p channelIndex specifies
- * a flattened offset into this list. For example, assume that a layer has 2 output ports,
- * where the first port has 24 channels and the second port has 32 channels. This equals to 6
- * textures on the first port and 8 textures on the second port (each texture aggregates 4
- * channels). A channel index of 4 will therefore be channels 16 to 19 (inclusive) of the
- * first port and a channel index of 12 will be channels 24..27 (inclusive) of the second port.
+ * in the future, each port may consist of more than one texture for \e shallow layers. The
+ * \p channelIndex specifies a flattened offset into the list of output textures. In particular for
+ * a \e shallow layer with 2 output ports, where the first port has 24 channels and the second port
+ * has 32 channels, this equals to 6 textures on the first port and 8 textures on the second port
+ * (each texture aggregates 4 channels). A channel index of 4 will therefore be channels 16 to 19
+ * (inclusive) of the first port and a channel index of 12 will be channels 24..27 (inclusive) of
+ * the second port.
+ *
+ * For deep and sequence type layers, the \p channelIndex is equivalent to the port number.
  *
  * @throws FynException in case an illegal \p channelIndex has been provided
- *
  *
  * @see addOutputTexture, hasOutputTexture
  */
@@ -386,188 +800,6 @@ GLuint GPULayerBase::getOutputTexture(int channelIndex) const {
     return outputTextures_.at(channelIndex);
 }
 
-
-/**
- * @brief Retrieve number of FBOs used by the layer output
- *
- * @return Number of FBOs that are allocated
- *
- * GPU-based NN layers use FBO instances to "render" the result of the layer operation into the
- * output textures. The number of %FBOs used is not necessarily the same as the number of
- * output textures, in case multi render targets are used (for shallow layers).
- *
- * @see getFBO
- */
-int GPULayerBase::numFBOs() const {
-    return framebuffers_.size();
-}
-
-
-/**
- * @brief Get FBO at specified index
- *
- * @param index Index within the %FBO list
- *
- * @return Pointer to FBO object at specified \p index
- *
- * Use this function to gain direct access to an output %FBO of the layer (for debugging purposes
- * for example). Note that when accessing an %FBO of a layer after other layers have been
- * invoked subsequently, the output may not be as expected, as the BufferManager reuses textures
- * wherever possible.
- */
-FBO * GPULayerBase::getFBO(int index) const {
-    return framebuffers_.at(index);
-}
-
-
-/**
- * @brief Check if a layer is able to be executed
- *
- * @retval true if layer is able to be executed
- * @retval false if layer cannot run
- *
- * The return value of this function is usually equivalent to isValid(), but there may be
- * implementations that have to handle it otherwise.
- *
- * @todo Retire this method
- */
-bool GPULayerBase::canRun() const {
-    return isValid();
-}
-
-
-
-/**
- * @copydoc LayerBase::writeResult
- */
-void GPULayerBase::writeResult(const char *fileName, bool includePadding) {
-#ifdef DEBUG
-    int owidth = viewport_[0];
-    int oheight = viewport_[1];
-    if (!includePadding) {
-        owidth -= 2 * outputPadding_;
-        oheight -= 2 * outputPadding_;
-    }
-#ifndef FYUSENET_USE_WEBGL
-    FILE *out = fopen(fileName,"w");
-    if (out) {
-#else
-    uint8_t * download = new uint8_t[owidth * oheight * outputChannels_];
-    uint8_t * downptr = download;
-    if (true) {
-#endif
-        int outblocks = (outputChannels_ % PIXEL_PACKING) ? (outputChannels_ / PIXEL_PACKING)+1 : (outputChannels_ / PIXEL_PACKING);
-        if (outblocks > FBO::MAX_DRAWBUFFERS) outblocks = FBO::MAX_DRAWBUFFERS;
-        if ((owidth <= 0 ) || (oheight <= 0)) THROW_EXCEPTION_ARGS(FynException, "Illegal writing resolution %dx%d encountered",owidth,oheight);
-        float * data = new float[viewport_[0] * viewport_[1] * PIXEL_PACKING * outblocks];
-        float * layer = new float[owidth * oheight];
-        int rem = outputChannels_;
-        for (int fb = 0 ; fb < numFBOs(); fb++ ) {
-            memset(data, 0, viewport_[0] * viewport_[1] * outblocks * PIXEL_PACKING * sizeof(float));
-            FBO *fbo = getFBO(fb);            
-            fbo->writeToMemory<float,GL_FLOAT>(data, PIXEL_PACKING, viewport_[0] * viewport_[1] * outblocks * PIXEL_PACKING * sizeof(float));
-            int fborem = fbo->numAttachments() * PIXEL_PACKING;
-            if (fborem > rem) fborem = rem;
-            float *ptr = data;
-            int padoffset = (includePadding) ? 0 : outputPadding_;
-            while (fborem > 0) {
-                int ml = (fborem >= PIXEL_PACKING) ? PIXEL_PACKING : fborem;
-                for (int l=0; l <ml; l++) {
-                    for (int y=0; y  < oheight; y++) {
-                        for (int x=0; x < owidth; x++) {
-                            layer[x+y*owidth]=ptr[l+PIXEL_PACKING*((y+padoffset)*viewport_[0]+x+padoffset)];
-                        }
-                    }
-#ifndef FYUSENET_USE_WEBGL
-                    fwrite(layer, 1, owidth * oheight * sizeof(float), out);
-#else
-                    memcpy(downptr, layer, owidth * oheight * sizeof(float));
-                    downptr += owidth * oheight;
-#endif
-                }
-                fborem -= ml;
-                rem -= ml;
-                ptr += viewport_[0] * viewport_[1] * PIXEL_PACKING;
-            }
-        }
-        delete [] data;
-        delete [] layer;
-#ifndef FYUSENET_USE_WEBGL
-        fclose(out);
-#else
-        EM_ASM({window.download($0, $1, $2);}, download, owidth * oheight * outputChannels_ * sizeof(float), fileName);
-        delete [] download;
-#endif
-    } else {
-        FNLOGE("Cannot open %s for output",fileName);
-    }
-#endif
-}
-
-
-/**
- * @brief Copy computation results of layer to CPU memory for debugging purposes
- *
- * @param[out] memory Pointer to memory (32-bit FP) where data should be written to, it is the
- *                    caller's responsibility to make sure that enough memory is available
- *
- * @param includePadding If \c true, the padding will be included in the output file, otherwise
- *        the padding will be ignored and only the net contents are written to the output file
- *
- * This function copies the content of the output textures as binary dump into the specified memory.
- * region. All data will be written as little-endian 32-bit IEEE-754 floating-point numbers in a
- * channel-by-channel fashion. The data is arranged row-by-row (x-axis as innermost index) for a
- * single channel (y-axis as middle index) where the channels are stacked (channel axis as outermost
- * index).
- *
- * @note This function only works in a debug build. In release builds, this will be a no-op.
- */
-void GPULayerBase::copyResult(float *memory, bool includePadding) {
-#ifdef DEBUG
-    int owidth = viewport_[0];
-    int oheight = viewport_[1];
-    if (!includePadding) {
-        owidth -= 2 * outputPadding_;
-        oheight -= 2 * outputPadding_;
-    }
-    if ((owidth <= 0 ) || (oheight <= 0)) THROW_EXCEPTION_ARGS(FynException,"Illegal resolution %dx%d encountered",owidth,oheight);
-    int rem = outputChannels_;
-    float * target = memory;
-    for (int fb = 0 ; fb < numFBOs(); fb++ ) {
-        FBO *fbo = getFBO(fb);
-        assert(fbo);
-        float * tmp = new float[fbo->numAttachments() * PIXEL_PACKING * viewport_[0] * viewport_[1]];
-        fbo->writeToMemory<float,GL_FLOAT>(tmp, PIXEL_PACKING, viewport_[0] * viewport_[1] * fbo->numAttachments() * PIXEL_PACKING*sizeof(float));
-        int fborem = fbo->numAttachments() * PIXEL_PACKING;
-        if (fborem > rem) fborem = rem;
-        int padoffset = (includePadding) ? 0 : outputPadding_;
-        const float * ptr  = tmp;
-        while (fborem > 0) {
-            int ml = (fborem >= PIXEL_PACKING) ? PIXEL_PACKING : fborem;
-            for (int l=0; l < ml;l++) {
-                for (int y=0; y  < oheight; y++) {
-                    for (int x=0; x < owidth; x++) {
-                        target[x+y*owidth] = ptr[l+PIXEL_PACKING*((y+padoffset)*viewport_[0]+x+padoffset)];
-                    }
-                }
-                target += owidth*oheight;
-            }
-            fborem -= ml;
-            rem -= ml;
-            ptr += viewport_[0] * viewport_[1] * PIXEL_PACKING;
-        }
-        delete [] tmp;
-    }
-#else
-    THROW_EXCEPTION_ARGS(FynException, "This function is not available in release mode");
-#endif
-}
-
-
-
-/*##################################################################################################
-#                               N O N -  P U B L I C  F U N C T I O N S                            #
-##################################################################################################*/
 
 /**
  * @brief Preprocess and compile/cache a vertex/fragment shader pair
@@ -608,198 +840,24 @@ void GPULayerBase::copyResult(float *memory, bool includePadding) {
  * are not exactly the same based on the layer type (e.g. they are dependent on image resolution),
  * are re-set before running the shader
  *
- * @warning This function does \b not link the resulting shader program and it is up to the
+ * @warning This function does \b not link the resulting shader program, and it is up to the
  *          caller to make sure of that. However, when calling this function with a set of shaders
  *          for which a shader program was already cached, the returned shader program <i>might
  *          already be linked</i>. Make sure to query the shader state before conducting operations
  *          that require a certain state.
  *
- * @see ShaderRepository::getShader, ShaderCache::findShader
+ * @see ShaderRepository::compileShaderPair, ShaderRepository::getShader, ShaderCache::findShader
  */
 programptr GPULayerBase::compileShaderPair(const char *vertexName, const char *fragmentName,
                                            const char *preprocDefs, const std::type_info& typeInfo) {
-    using namespace fyusion::opengl;
-    const char *vert = ShaderRepository::getShader(vertexName);
-    const char *frag = ShaderRepository::getShader(fragmentName);
-    if (!vert) THROW_EXCEPTION_ARGS(ShaderException, "Cannot load vertex shader %s (not found)", vertexName);
-    if (!frag) THROW_EXCEPTION_ARGS(ShaderException, "Cannot load fragmnet shader %s (not found)", fragmentName);
-    shaderptr vshader(new VertexShader(context_));
-    shaderptr fshader(new FragmentShader(context_));
-    vshader->setResourceName(vertexName);
-    fshader->setResourceName(fragmentName);
-    vshader->setCode(vert);
-    fshader->setCode(frag);
-    vshader->setPreprocDefs(preprocDefs);
-    fshader->setPreprocDefs(preprocDefs);
-    ShaderCache *cache = ShaderCache::getInstance(context_);
     try {
-        if (cache) {
-            size_t modhash = typeInfo.hash_code();
-            shaderptr vcache = cache->findShader(vshader);
-            shaderptr fcache = cache->findShader(fshader);
-            if (vcache && fcache) {
-                std::vector<GLuint> handles{vcache->getHandle(), fcache->getHandle()};
-                programptr prog = cache->findProgram(modhash, handles);
-                if (prog) {
-                    return prog;
-                }
-            }
-            programptr prog = ShaderProgram::createInstance(context_);
-            prog->addShader( (vcache) ? vcache : vshader );
-            prog->addShader( (fcache) ? fcache : fshader );
-            prog->compile();
-            if ((!vcache) && (cache)) cache->putShader(vshader);
-            if ((!fcache) && (cache)) cache->putShader(fshader);
-            if (cache) cache->putProgram(prog, modhash);
-            return prog;
-        } else {
-            programptr prog = ShaderProgram::createInstance(context_);
-            prog->addShader(vshader);
-            prog->addShader(fshader);
-            prog->compile();
-            return prog;
-        }
+        return ShaderRepository::compileShaderPair(vertexName, fragmentName, preprocDefs, typeInfo, context_);
     } catch (GLException& ex) {
         FNLOGE("Cannot compile shader in layer %s", getName().c_str());
         throw;
     }
 }
 
-
-/**
- * @brief Mix user-supplied preprocessor definitions with flag-induced definitions
- *
- * @param flags Layer flags to be turned into preprocessor definitions
- *
- * @param[inout] preproc User-defined preprocessor definitions
- *
- * @param maxChars Maximum number of characters available in the \p preproc string
- *
- * @return Buffer capacity left in the supplied \p preproc buffer
- *
- * This function blocks the handling of preprocessor definitions in conjunction with layer-flags.
- * Based on the flags that were passed in \p flags, it appends preprocessor definitions to the
- * supplied \p preproc string. The following preprocessor strings are set for the layer flags:
- *  \li \c PRE_RELU adds the \c ACT_RELU preprocessor definition. In case a leaky ReLU is selected,
- *      and additional definition \c LEAKY_RELU with the leak value is added
- *  \li \c PRE_CLIP adds the \c ACT_CLIP preprocessor definition as well as CLIP_LOW and CLIP_HIGH
- *      with the respective values for the clipping activation function
- *  \li \c RESIDUAL_INPUT adds the \c USE_RESIDUAL preprocessor definition
- *  \li \c RELU_ON_RESIDUAL adds the \c RELU_ON_RESIDUAL preprocessor definition
- *  \li \c POST_BATCHNORM adds the \c POST_BATCHNORM preprocessor definition
- *
- *  In case no activation function was specified, \c NO_ACT is added as preprocessor definition.
- *
- *  Independent of the layer flags, a couple of additional preprocessor definitions are set, which
- *  are:
- *   - \c PIXEL_PACKING which defines the number of channels per pixel (4 usually)
- *   - \c PADDING defines the padding value on the input data
- *   - \c NO_HALF if set, indicates that 16-bit floating point data is not available as texture
- *        format
- *   - \c HIGH_PRECISION if set, indicates that high precision (full 32-bit FP) are desired and the
- *        precision qualifiers should be set to "high"
- *
- * The result of the preprocesser handling is appended to the supplied \p preproc data.
- */
-size_t GPULayerBase::handlePreprocFlags(layerflags flags, char *preproc, size_t maxChars) {
-    char extra[80];
-    assert(maxChars > 0);
-    ssize_t mc = (ssize_t)handleActivationPreproc(flags, preproc, maxChars);
-    if (flags & LayerFlags::RESIDUAL_INPUT) {
-        strncat(preproc, "#define USE_RESIDUAL\n", mc);
-        mc = maxChars-strlen(preproc);  // ouch
-    }
-    assert(mc > 0);
-    if (flags & LayerFlags::RELU_ON_RESIDUAL) {
-        strncat(preproc, "#define RELU_ON_RESIDUAL\n", mc);
-        mc = maxChars-strlen(preproc);  // ouch
-    }
-    assert(mc > 0);
-    if (flags & LayerFlags::BATCHNORM_ON_RESIDUAL) {
-        strncat(preproc, "#define BATCHNORM_ON_RESIDUAL\n", mc);
-        mc = maxChars-strlen(preproc); // ouch
-    }
-    assert(mc > 0);
-    if (flags & LayerFlags::POST_BATCHNORM) {
-        strncat(preproc, "#define POST_BATCHNORM\n", mc);
-        mc = maxChars-strlen(preproc);  // ouch
-    }
-    snprintf(extra, sizeof(extra), "#define PIXEL_PACKING %d\n",PIXEL_PACKING);
-    strncat(preproc, extra, mc);
-    mc -= strlen(extra);
-    assert(mc > 0);
-#ifdef HIGH_PRECISION
-    strncat(preproc, "#define NO_HALF\n", mc);
-    mc -= 16;
-#else
-    if (!GLInfo::supportsHalf()) {
-        strncat(preproc, "#define NO_HALF\n", mc);
-        mc -= 16;
-    }
-#endif
-    snprintf(extra, sizeof(extra), "#define PADDING %d\n",inputPadding_);
-    strncat(preproc, extra, mc);
-    mc -= strlen(extra);
-    assert(mc >= 0);
-#ifdef HIGH_PRECISION
-    strncat(preproc, "#define HIGH_PRECISION\n", mc);
-    mc = maxChars-strlen(preproc);  // ouch
-#endif
-    return (size_t)std::max((ssize_t)0,mc);
-}
-
-
-/**
- * @brief Handle preprocessor flags related to activation functions
- *
- * @param flags Layer flags to be turned into preprocessor definitions
- *
- * @param[inout] preproc User-defined preprocessor definitions
- *
- * @param maxChars Maximum number of characters available in the \p preproc string
- *
- * @return Buffer capacity left in the supplied \p preproc buffer
- *
- * This function handles the activation-related preprocessor flags (e.g. ReLU, clipping etc.) and
- * appends the correct preprocessor definitions to the supplied \p preproc. The following
- * substitutions are currently done:
- *
- *  \li \c PRE_RELU adds the \c ACT_RELU preprocessor definition. In case a leaky ReLU is selected,
- *      and additional definition \c LEAKY_RELU with the leak value is added
- *  \li \c PRE_CLIP adds the \c ACT_CLIP preprocessor definition as well as CLIP_LOW and CLIP_HIGH
- *      with the respective values for the clipping activation function
- *
- *  In case no activation function was specified, \c NO_ACT is added as preprocessor definition.
- */
-// TODO (mw) refactor this for more flexible activation
-size_t GPULayerBase::handleActivationPreproc(layerflags flags, char *preproc, size_t maxChars) {
-    char extra[80];
-    ssize_t mc = (ssize_t)maxChars;
-    if ((flags & (LayerFlags::PRE_RELU | LayerFlags::PRE_CLIP)) == 0) {
-        strncat(preproc, "#define NO_ACT\n", mc);
-        mc = maxChars-strlen(preproc);
-        assert(mc > 0);
-    } else {
-        if (flags & LayerFlags::PRE_CLIP) {
-            snprintf(extra, sizeof(extra), "#define ACT_CLIP\n#define CLIP_LOW %f\n#define CLIP_HIGH %f\n", lowClip_, highClip_);
-            strncat(preproc, extra, mc);
-            mc -= strlen(extra);
-            assert(mc > 0);
-        } else {
-            // TODO (mw) support: ACT_SIGMOID , ACT_TANH and ACT_CLIP
-            strncat(preproc, "#define ACT_RELU\n", mc);
-            mc = maxChars-strlen(preproc);
-            assert(mc > 0);
-            if (leakyReLU_ != 0.0f) {
-                snprintf(extra, sizeof(extra),"#define LEAKY_RELU %f\n", leakyReLU_);
-                strncat(preproc, extra, mc);
-                mc -= strlen(extra);
-            }
-            assert(mc > 0);
-        }
-    }
-    return (size_t)std::max((ssize_t)0,mc);
-}
 
 
 /**
@@ -808,8 +866,10 @@ size_t GPULayerBase::handleActivationPreproc(layerflags flags, char *preproc, si
  * @param blend If set to \c true, enables alpha blending in the output (used for accumulation),
  *              defaults to \c true
  * @param depth If set to \c true, enables depth buffer testing, default is \c false
+ *
+ * @param ignoreVP If set to \c true, will not set the viewport that is stored in the layer
  */
-void GPULayerBase::prepareRender(bool blend, bool depth) {
+void GPULayerBase::prepareRender(bool blend, bool depth, bool ignoreVP) {
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -823,11 +883,68 @@ void GPULayerBase::prepareRender(bool blend, bool depth) {
         glBlendFuncSeparate(GL_ONE,GL_ONE, GL_ONE,GL_ONE);
     }
     glClearColor(0, 0, 0, 0);
-    glViewport(0, 0, viewport_[0], viewport_[1]);
+    if (ignoreVP) glViewport(0, 0, viewport_[0], viewport_[1]);
 }
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+/**
+ * @brief Disable texture units (2D) by binding 0 textures into them
+ *
+ * @param numUnits Number of units to disable
+ * @param startUnit Optional start unit, defaults to 0
+ */
+void GPULayerBase::disableTextureUnits(int numUnits, int startUnit) {
+    for (int i = startUnit; i < numUnits + startUnit; i++) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+}
+
+
+/**
+ * @brief Create empty GPUBuffer instance to fill with texture information
+ * @param width Net width of the buffer as represented in a buffer shape
+ * @param height Net height of the buffer as represented in a buffer shape
+ * @param channels Number of channels in the buffer (not necessarily equivalent to number of channels per texture slice)
+ * @param order Data order
+ * @param type Data type
+ * @param padding (Symmetric spatial) padding that is applied to the slice textures inside the buffer
+ *
+ * @return Pointer to GPUBuffer instance
+ */
+GPUBuffer * GPULayerBase::createGPUBuffer(int width, int height, int channels, BufferSpec::order order, BufferSpec::dtype type, int padding) {
+    return new GPUBuffer(width, height, channels, order, type, padding, false, true);
+}
+
+
+/**
+ * @brief Add single texture slice to existing GPUBuffer instance
+ *
+ * @param buffer Pointer to buffer to be modified
+ * @param handle OpenGL texture handle
+ * @param width Actual width of the texture slice (including padding)
+ * @param height Actual height of the texture slice (including padding)
+ * @param channels Actual # of channels per texture (1..4)
+ * @param type Data type found in the texture
+ */
+void GPULayerBase::pushSliceToBuffer(GPUBuffer *buffer, GLuint handle, int width, int height, int channels, BufferSpec::dtype type) {
+    assert(buffer);
+    buffer->addTexture(handle, width, height, channels, type);
+}
+
+/**
+ * @brief Get OpenGL texture handle for a specific slice in a GPUBuffer instance
+ *
+ * @param buffer Pointer to buffer to be queried
+ * @param slice Slice index
+ *
+ * @return OpenGL texture handle
+ */
+GLuint GPULayerBase::getBufferSlice(const GPUBuffer * buffer, int slice) {
+    assert(buffer);
+    return buffer->getTexture(slice);
+}
+
+
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

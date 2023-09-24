@@ -6,6 +6,9 @@
 // SPDX-License-Identifier: MIT
 //--------------------------------------------------------------------------------------------------
 
+#ifndef FYUSENET_GL_BACKEND
+#error This file should not be included in this build configuration
+#endif
 
 //--------------------------------------- System Headers -------------------------------------------
 
@@ -74,6 +77,8 @@ class StyleNetWrapper {
      */
     void init(int inputWidth, int inputHeight) {
         network_ = new StyleNet3x3(inputWidth, inputHeight, false, false, context_);
+        inputSize_[0] = inputWidth;
+        inputSize_[1] = inputHeight;
     }
 
     /**
@@ -87,10 +92,12 @@ class StyleNetWrapper {
      */
     bool loadWeights(void *dataPtr, size_t dataSize) {
         try {
-            float * weights = reinterpret_cast<float *>(dataPtr);
-            network_->loadWeightsAndBiases(weights, dataSize / sizeof(float));
+            uint8_t * weights = reinterpret_cast<uint8_t *>(dataPtr);
+            auto * params = new StyleNet3x3Provider(weights, dataSize);
+            network_->setParameters(params);
             network_->setup();
             createBlitter();
+            delete params;
         } catch (std::exception& ex) {
             EM_ASM({console.log($0);}, ex.what());
             return false;
@@ -104,7 +111,15 @@ class StyleNetWrapper {
      * @param texID GL texture to run the network on
      */
     void forward(GLuint texID) {
-        network_->setInputTexture(texID);
+        using namespace fyusion::fyusenet::gpu;
+        if ((!inputBuffer_) || (currentInput_ != texID)) {
+            std::vector<GPUBuffer::slice> textures;
+            textures.emplace_back(fyusion::opengl::Texture2DRef(texID, inputSize_[0], inputSize_[1], fyusion::opengl::Texture2D::UINT8, 3));
+            delete inputBuffer_;
+            inputBuffer_ = GPUBuffer::createShallowBuffer(BufferShape(inputSize_[1], inputSize_[0], 3, 0, GPUBuffer::type::UINT8, GPUBuffer::order::GPU_SHALLOW),
+                                                          textures);
+            network_->setInputGPUBuffer(inputBuffer_);
+        }
         network_->forward();
         blit(network_->getOutputTexture());
     }
@@ -114,7 +129,7 @@ class StyleNetWrapper {
     /**
      * @brief Create shader program for final stage blitter
      *
-     * This creates a shadder and proxy geometry for blitting the output of the network to the
+     * This creates a shader and proxy geometry for blitting the output of the network to the
      * target canvas.
      */
     void createBlitter() {
@@ -171,7 +186,10 @@ class StyleNetWrapper {
     fyusion::opengl::VAO * vao_ = nullptr;
     fyusion::opengl::TexturedQuad * quad_ = nullptr;
     fyusion::opengl::programptr program_;
-    int outputSize_[2] = {0, 0};
+    fyusion::fyusenet::gpu::GPUBuffer * inputBuffer_ = nullptr;
+    GLuint currentInput_ = 0;
+    int inputSize_[2] = {0};
+    int outputSize_[2] = {0};
 };
 
 static StyleNetWrapper * wrapper = nullptr;

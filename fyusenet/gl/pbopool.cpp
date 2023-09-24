@@ -75,6 +75,7 @@ PBOPool::~PBOPool() {
  * @note The number of \p channels may exceed the maximum number of channels per pixel (4), because
  *       the %PBO here is just treated as a buffer.
  */
+ // TODO (mw) switch from geometry (width, height) to pure size instead
 ManagedPBO PBOPool::getAvailablePBO(int width, int height, int channels, int bytesPerChannel) {
     using namespace std::chrono_literals;
     bool immediate = true;
@@ -91,20 +92,20 @@ ManagedPBO PBOPool::getAvailablePBO(int width, int height, int channels, int byt
                         pbo->resize(width, height, channels, bytesPerChannel);
                         if (immediate) immediateHits_++;
                         lock_.unlock();
-                        return ManagedPBO(pbo, this, &(*ii).refcount, &(*ii).pending, idx);
+                        return {pbo, this, &(*ii).refcount, &(*ii).pending, idx};
                     }
                 }
             }
         }
         if (currentPBOs_ < maxPBOs_) {
             PBO * pbo = new PBO(width, height, channels, bytesPerChannel, context());
-            idx = availablePBOs_.size();
+            idx = (int)availablePBOs_.size();
             availablePBOs_.emplace_back(pbo, true);
             entry & last = availablePBOs_.back();
             currentPBOs_++;
             if (immediate) immediateHits_++;
             lock_.unlock();
-            return ManagedPBO(pbo, this, &(last.refcount), &(last.pending), idx);
+            return {pbo, this, &(last.refcount), &(last.pending), idx};
         }
         immediate = false;
         waitCycles_++;

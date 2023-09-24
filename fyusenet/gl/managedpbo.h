@@ -22,8 +22,8 @@
 //------------------------------------------ Constants ---------------------------------------------
 
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 class PBOPool;
@@ -94,7 +94,7 @@ class ManagedPBO {
 };
 
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 // vim: set expandtab ts=4 sw=4:

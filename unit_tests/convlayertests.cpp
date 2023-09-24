@@ -25,6 +25,7 @@
 #include <fyusenet/gpu/deep/deepconvlayer1x1.h>
 #include <fyusenet/gpu/deep/deepconvlayerNxN.h>
 #include <fyusenet/base/layerfactory.h>
+#include <fyusenet/common/performance.h>
 #include "layertestbase.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
@@ -168,11 +169,12 @@ TEST_P(ParamConvLayerTest1x1, ShallowConv1x1) {
     generateTextures(&layer, inputs, nullptr);
     float ckernel[1] = {1.0f};
     std::unique_ptr<float[]> wandb(stackConvolution(0.f, ckernel, 1, 1, param.inchans, param.outchans));
-    layer.loadWeightsAndBiases(wandb.get(), 0);
+    SingleWeightProvider wsrc(wandb.get() + param.outchans, wandb.get());
+    layer.loadParameters(&wsrc);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.outchans * param.width * param.height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     const float * rptr = result.get();
     int owidth = param.width / param.downsample;
@@ -209,11 +211,12 @@ TEST_P(ParamConvLayerTest1x1, DeepConv1x1) {
     int pwidth = param.width + layer->getInputPadding() * 2;
     int pheight = param.height + layer->getInputPadding() * 2;
     std::unique_ptr<float[]> ref(paddedConvolution(input.get(), wandb.get(), param.outchans, param.kernel, param.kernel, param.inchans, pwidth, pheight));
-    layer->loadWeightsAndBiases(wandb.get(), 0);
+    SingleWeightProvider wsrc(wandb.get() + param.outchans, wandb.get());
+    layer->loadParameters(&wsrc);
     layer->setup();
-    layer->forward(1);
+    layer->forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.outchans * param.width * param.height]);
-    layer->copyResult(result.get());
+    layer->copyResult(result.get(), false);
     layer->cleanup();
     const float * resptr = result.get();
     const float * refptr = ref.get();
@@ -247,11 +250,12 @@ TEST_P(ParamConvLayerTestNxN, ShallowConvNxN) {
         else ckernel[i] = 1.f;
     }
     std::unique_ptr<float[]> wandb(stackConvolution(0.f, ckernel.get(), param.kernel, param.kernel, param.inchans, param.outchans));
-    layer->loadWeightsAndBiases(wandb.get(), 0);
+    SingleWeightProvider wsrc(wandb.get() + param.outchans, wandb.get());
+    layer->loadParameters(&wsrc);
     layer->setup();
-    layer->forward(1);
+    layer->forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.outchans * param.width * param.height]);
-    layer->copyResult(result.get());
+    layer->copyResult(result.get(), false);
     layer->cleanup();
     const float * rptr = result.get();
     int owidth = param.width / param.downsample;
@@ -289,11 +293,12 @@ TEST_P(ParamConvLayerTestNxN, DeepConvNxN) {
     int pwidth = param.width + layer->getInputPadding() * 2;
     int pheight = param.height + layer->getInputPadding() * 2;
     std::unique_ptr<float[]> ref(paddedConvolution(input.get(), wandb.get(), param.outchans, param.kernel, param.kernel, param.inchans, pwidth, pheight, param.downsample, param.downsample));
-    layer->loadWeightsAndBiases(wandb.get(), 0);
+    SingleWeightProvider wsrc(wandb.get() + param.outchans, wandb.get());
+    layer->loadParameters(&wsrc);
     layer->setup();
-    layer->forward(1);
+    layer->forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.outchans * param.width * param.height]);
-    layer->copyResult(result.get());
+    layer->copyResult(result.get(), false);
     layer->cleanup();
     const float * resptr = result.get();
     const float * refptr = ref.get();
@@ -322,11 +327,12 @@ TEST_F(ConvLayerTest, ShallowConv1x1) {
     generateTextures(&layer, inputs, nullptr);
     float ckernel[1] = {1.0f};
     std::unique_ptr<float[]> wandb(stackConvolution(0.f, ckernel, 1, 1, inchans, outchans));
-    layer.loadWeightsAndBiases(wandb.get(), 0);
+    SingleWeightProvider wsrc(wandb.get() + outchans, wandb.get());
+    layer.loadParameters(&wsrc);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[outchans * width * height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     const float * rptr = result.get();
     int owidth = width / downsample;
@@ -363,11 +369,12 @@ TEST_F(ConvLayerTest, DeepConv5x5) {
     int pwidth = width + layer.getInputPadding()*2;
     int pheight = height + layer.getInputPadding()*2;
     std::unique_ptr<float[]> ref(paddedConvolution(input.get(), wandb.get(), outchans, kernel, kernel, inchans, pwidth, pheight));
-    layer.loadWeightsAndBiases(wandb.get(), 0);
+    SingleWeightProvider wsrc(wandb.get() + outchans, wandb.get());
+    layer.loadParameters(&wsrc);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[width * height * outchans]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     const float * resptr = result.get();
     const float * refptr = ref.get();
@@ -404,11 +411,12 @@ TEST_F(ConvLayerTest, DeepConv3x3) {
     int pwidth = width + layer.getInputPadding()*2;
     int pheight = height + layer.getInputPadding()*2;
     std::unique_ptr<float[]> ref(paddedConvolution(input.get(), wandb.get(), outchans, kernel, kernel, inchans, pwidth, pheight, downsample, downsample));
-    layer.loadWeightsAndBiases(wandb.get(), 0);
+    SingleWeightProvider wsrc(wandb.get() + outchans, wandb.get());
+    layer.loadParameters(&wsrc);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[width * height * outchans]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     const float * resptr = result.get();
     const float * refptr = ref.get();
@@ -419,6 +427,81 @@ TEST_F(ConvLayerTest, DeepConv3x3) {
     }
 }
 
+TEST_F(ConvLayerTest, DeepConv3x3Speed) {
+    const int kernel = 3;
+    const int width = 64;
+    const int height = 64;
+    const int inchans = 64;
+    const int outchans = 64;
+    const int downsample = 1;
+    // approx flops: 302 M  (3x3x64x2 x64x64x64)
+    gpu::ConvLayerBuilder bld(kernel, "conv");    
+    bld.context(context()).shape(outchans, height, width, inchans).type(LayerType::CONVOLUTION2D).number(1).deep().inputPadding((kernel-1)/2);
+    bld.downsample(downsample);
+    gpu::deep::DeepConvLayerNxN layer(bld, 1);
+    ASSERT_EQ(layer.getInputPadding(), (kernel-1)/2);
+    std::unique_ptr<float[]> input(generateConstantData(1.0f, inchans, width, height, layer.getInputPadding()));
+    ASSERT_NE(input, nullptr);
+    std::vector<const float *> inputs{input.get()};
+    generateTextures(&layer, inputs, nullptr, true);
+    std::unique_ptr<float[]> ckernel(new float[kernel * kernel]);
+    int mid = (kernel * kernel - 1) / 2;
+    for (int i=0; i < kernel * kernel; i++) {
+        if (i < mid) ckernel[i] = -1.f;
+        else if (i == mid) ckernel[i] = 0.f;
+        else ckernel[i] = 1.f;
+    }
+    std::unique_ptr<float[]> wandb(stackConvolution(0.f, ckernel.get(), kernel, kernel, inchans, outchans));
+    SingleWeightProvider wsrc(wandb.get() + outchans, wandb.get());
+    layer.loadParameters(&wsrc);
+    layer.setup();
+    tstamp start = fy_get_stamp();
+    for (int i=0; i < 100; i++) {
+        layer.forward(i, nullptr);
+    }
+    glFinish();
+    tstamp stop = fy_get_stamp();
+    printf("Millis for 100 runs: %d\n", fy_elapsed_millis(start, stop));
+    layer.cleanup();
+}
+
+TEST_F(ConvLayerTest, DeepConv7x7Speed) {
+    const int kernel = 7;
+    const int width = 28;
+    const int height = 27;
+    const int inchans = 64;
+    const int outchans = 64;
+    const int downsample = 1;
+    // FLOPS: 303M
+    gpu::ConvLayerBuilder bld(kernel, "conv");
+    bld.context(context()).shape(outchans, height, width, inchans).type(LayerType::CONVOLUTION2D).number(1).deep().inputPadding((kernel-1)/2);
+    bld.downsample(downsample);
+    gpu::deep::DeepConvLayerNxN layer(bld, 1);
+    ASSERT_EQ(layer.getInputPadding(), (kernel-1)/2);
+    std::unique_ptr<float[]> input(generateConstantData(1.0f, inchans, width, height, layer.getInputPadding()));
+    ASSERT_NE(input, nullptr);
+    std::vector<const float *> inputs{input.get()};
+    generateTextures(&layer, inputs, nullptr, true);
+    std::unique_ptr<float[]> ckernel(new float[kernel * kernel]);
+    int mid = (kernel * kernel - 1) / 2;
+    for (int i=0; i < kernel * kernel; i++) {
+        if (i < mid) ckernel[i] = -1.f;
+        else if (i == mid) ckernel[i] = 0.f;
+        else ckernel[i] = 1.f;
+    }
+    std::unique_ptr<float[]> wandb(stackConvolution(0.f, ckernel.get(), kernel, kernel, inchans, outchans));
+    SingleWeightProvider wsrc(wandb.get() + outchans, wandb.get());
+    layer.loadParameters(&wsrc);
+    layer.setup();
+    tstamp start = fy_get_stamp();
+    for (int i=0; i < 100; i++) {
+        layer.forward(i, nullptr);
+    }
+    glFinish();
+    tstamp stop = fy_get_stamp();
+    printf("Millis for 100 runs: %d\n", fy_elapsed_millis(start, stop));
+    layer.cleanup();
+}
 
 
 // TODO (mw) more test patterns, maybe fuzz-testing with randomization

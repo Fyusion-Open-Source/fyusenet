@@ -13,12 +13,11 @@
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "shallow2deep.h"
-#include "../gl/glinfo.h"
+#include "../common/miscdefs.h"
 #include "deep/deeptiler.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -31,7 +30,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 Shallow2DeepLayer::Shallow2DeepLayer(const GPULayerBuilder& builder, int layerNumber) :
     DeepLayerBase(builder, layerNumber) {
@@ -39,13 +38,6 @@ Shallow2DeepLayer::Shallow2DeepLayer(const GPULayerBuilder& builder, int layerNu
     maxInputTextures_ = std::min(maxInputTextures_, GLInfo::getMaximumTextureUnits());
     int numintex = (builder.in()+PIXEL_PACKING-1) / PIXEL_PACKING;
     numRenderPasses_ = (numintex+maxInputTextures_-1) / maxInputTextures_;
-}
-
-
-/**
- * @copydoc GPULayerBase::~GPULayerBase
- */
-Shallow2DeepLayer::~Shallow2DeepLayer() {
 }
 
 
@@ -66,7 +58,7 @@ void Shallow2DeepLayer::setup() {
 /**
  * @copydoc LayerBase::forward
  */
-void Shallow2DeepLayer::forward(uint64_t sequence) {
+void Shallow2DeepLayer::forward(uint64_t sequenceNo, StateToken * state) {
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_BLEND);
@@ -101,16 +93,12 @@ void Shallow2DeepLayer::forward(uint64_t sequence) {
  * @copydoc GPULayerBase::cleanup
  */
 void Shallow2DeepLayer::cleanup() {
-    if (vertexBuffer_) delete vertexBuffer_;
-    if (indexBuffer_) delete indexBuffer_;
-    if (vertexArray_) delete vertexArray_;
-    if (texUnitBuffer_) delete texUnitBuffer_;
+    FNET_DEL_AND_CLEAR(vertexBuffer_);
+    FNET_DEL_AND_CLEAR(indexBuffer_);
+    FNET_DEL_AND_CLEAR(vertexArray_);
+    FNET_DEL_AND_CLEAR(texUnitBuffer_);
     // reset shaders here because the GL context is bound here (in case no cache is used)
     shader_.reset();
-    vertexArray_ = nullptr;
-    vertexBuffer_ = nullptr;
-    texUnitBuffer_ = nullptr;
-    shader_ = nullptr;
     DeepLayerBase::cleanup();
 }
 
@@ -122,19 +110,19 @@ void Shallow2DeepLayer::cleanup() {
 std::vector<BufferSpec> Shallow2DeepLayer::getRequiredInputBuffers() const {
     std::vector<BufferSpec> result;
     int channel = 0;
-    int rem = inputChannels_;
-    if (rem < PIXEL_PACKING) {
+    if (inputChannels_ < PIXEL_PACKING) {
         // for input textures, we support textures with less than 4 channels (might be from upload)
         auto format = BufferSpec::formatByChannels(inputChannels_, TEXTURE_TYPE_DEFAULT);
-        result.push_back(BufferSpec(channel++, 0, width_+2*inputPadding_, height_+2*inputPadding_,
-                                    format.first, format.second, TEXTURE_TYPE_DEFAULT,
-                                    BufferSpec::FUNCTION_SOURCE));
+        result.emplace_back(channel++, 0, width_+2*inputPadding_, height_+2*inputPadding_,
+                            format.first, format.second, TEXTURE_TYPE_DEFAULT,
+                            BufferSpec::FUNCTION_SOURCE, inputChannels_);
     } else {
+        int rem = inputChannels_;
         while (rem > 0) {
-            result.push_back(BufferSpec(channel++, 0,
-                                        width_ + 2*inputPadding_, height_ + 2*inputPadding_,
-                                        TEXTURE_IFORMAT_4,TEXTURE_FORMAT_4,TEXTURE_TYPE_DEFAULT,
-                                        BufferSpec::FUNCTION_SOURCE));
+            result.emplace_back(channel++, 0,
+                                width_ + 2*inputPadding_, height_ + 2*inputPadding_,
+                                TEXTURE_IFORMAT_4,TEXTURE_FORMAT_4,TEXTURE_TYPE_DEFAULT,
+                                BufferSpec::FUNCTION_SOURCE);
             rem -= PIXEL_PACKING;
         }
     }
@@ -148,7 +136,9 @@ std::vector<BufferSpec> Shallow2DeepLayer::getRequiredInputBuffers() const {
 std::vector<BufferSpec> Shallow2DeepLayer::getRequiredOutputBuffers() const {
     std::vector<BufferSpec> result;
     // NOTE (mw) function type is not really correct here
-    result.push_back(BufferSpec(0,0,viewport_[0],viewport_[1],TEXTURE_IFORMAT_4,TEXTURE_FORMAT_4,TEXTURE_TYPE_DEFAULT,BufferSpec::FUNCTION_DEST));
+    result.emplace_back(0, 0, viewport_[0], viewport_[1],
+                        TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
+                        BufferSpec::FUNCTION_DEST);
     return result;
 }
 
@@ -206,7 +196,7 @@ void Shallow2DeepLayer::setupNetworkPolygons(VAO *vao) {
     }
     texUnitBuffer_ = new VBO(context_);
     vao->enableArray(1);
-    texUnitBuffer_->setBufferData(attrs1,tiler_->numOutputTiles()*4*sizeof(int),GL_STATIC_DRAW);
+    texUnitBuffer_->setBufferData(attrs1, (int)(tiler_->numOutputTiles() * 4 * sizeof(int)), GL_STATIC_DRAW);
     texUnitBuffer_->bind();
     vao->setVertexAttributeBuffer(1,1,GL_INT,0,0);
     delete [] attrs1;
@@ -217,14 +207,14 @@ void Shallow2DeepLayer::setupNetworkPolygons(VAO *vao) {
     indexBuffer_ = new IBO(context_);
     for (int i=0;i<tiler_->numOutputTiles();i++) {
         int offset=i*4;
-        indices[i*6+0]=offset+0;
-        indices[i*6+1]=offset+1;
-        indices[i*6+2]=offset+2;
-        indices[i*6+3]=offset+0;
-        indices[i*6+4]=offset+2;
-        indices[i*6+5]=offset+3;
+        indices[i*6+0]= (GLshort)(offset+0);
+        indices[i*6+1]= (GLshort)(offset+1);
+        indices[i*6+2]= (GLshort)(offset+2);
+        indices[i*6+3]= (GLshort)(offset+0);
+        indices[i*6+4]= (GLshort)(offset+2);
+        indices[i*6+5]= (GLshort)(offset+3);
     }
-    indexBuffer_->setBufferData(indices,6*tiler_->numOutputTiles()*sizeof(GLshort),GL_STATIC_DRAW);
+    indexBuffer_->setBufferData(indices, (int)(6 * tiler_->numOutputTiles() * sizeof(GLshort)), GL_STATIC_DRAW);
     indexBuffer_->bind();
     delete [] indices;
 }
@@ -235,7 +225,7 @@ void Shallow2DeepLayer::setupNetworkPolygons(VAO *vao) {
  */
 void Shallow2DeepLayer::setupShaders() {
     char preproc[1024] = {0};
-    handleActivationPreproc(flags_, preproc, sizeof(preproc)-1);
+    preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-1);
     shader_ = compileShaderPair("shaders/shallow2deep.vert","shaders/shallow2deep.frag",preproc,typeid(this));
     try {
         shader_->bindAttributeLocation("attributes0",0);
@@ -254,8 +244,6 @@ void Shallow2DeepLayer::setupShaders() {
 }
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

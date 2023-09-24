@@ -14,14 +14,11 @@
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
+#include "../common/miscdefs.h"
 #include "poolinglayer.h"
-#include "../gl/glexception.h"
-#include "../gl/glinfo.h"
-#include "../common/logging.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
+namespace fyusion::fyusenet::gpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -33,7 +30,7 @@ namespace gpu {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 PoolingLayer::PoolingLayer(const PoolLayerBuilder & builder, int layerNumber):GPULayerBase((const GPULayerBuilder &)builder, layerNumber) {
     if (flags_ & LayerFlags::RESIDUAL_INPUT) THROW_EXCEPTION_ARGS(FynException,"This layer does not support residual input");
@@ -49,7 +46,6 @@ PoolingLayer::PoolingLayer(const PoolLayerBuilder & builder, int layerNumber):GP
     indexBuffer_ = nullptr;
     vertexArray_ = nullptr;
     currentShader_ = nullptr;
-    for (int i = 0; i < FBO::MAX_DRAWBUFFERS; i++) shaders_[i] = nullptr;
 }
 
 
@@ -58,14 +54,11 @@ PoolingLayer::PoolingLayer(const PoolLayerBuilder & builder, int layerNumber):GP
  */
 void PoolingLayer::cleanup() {
     currentShader_ = nullptr;
-    if (vertexBuffer_) delete vertexBuffer_;
-    if (indexBuffer_) delete indexBuffer_;
-    if (vertexArray_) delete vertexArray_;
+    FNET_DEL_AND_CLEAR(vertexBuffer_);
+    FNET_DEL_AND_CLEAR(indexBuffer_);
+    FNET_DEL_AND_CLEAR(vertexArray_);
     // reset shaders here because the GL context is bound here (in case no cache is used)
-    for (int i=0;i<FBO::MAX_DRAWBUFFERS;i++) shaders_[i].reset();
-    vertexBuffer_ = nullptr;
-    indexBuffer_ = nullptr;
-    vertexArray_ = nullptr;
+    for (auto & shader : shaders_) shader.reset();
     GPULayerBase::cleanup();
 }
 
@@ -91,19 +84,19 @@ void PoolingLayer::setup() {
 std::vector<BufferSpec> PoolingLayer::getRequiredInputBuffers() const {
     std::vector<BufferSpec> result;
     int channel = 0;
-    int rem = inputChannels_;
-    if (rem < PIXEL_PACKING) {
+    if (inputChannels_ < PIXEL_PACKING) {
         // for input textures, we support textures with less than 4 channels (might be from upload)
         auto format = BufferSpec::formatByChannels(inputChannels_, TEXTURE_TYPE_DEFAULT);
-        result.push_back(BufferSpec(channel++, 0, width_+2*inputPadding_, height_+2*inputPadding_,
-                                    format.first, format.second, TEXTURE_TYPE_DEFAULT,
-                                    BufferSpec::POOLING_SOURCE));
+        result.emplace_back(channel++, 0, width_+2*inputPadding_, height_+2*inputPadding_,
+                            format.first, format.second, TEXTURE_TYPE_DEFAULT,
+                            BufferSpec::FUNCTION_SOURCE, inputChannels_);
     } else {
+        int rem = inputChannels_;
         while (rem > 0) {
-            result.push_back(BufferSpec(channel++, 0,
-                                        width_ + 2 * inputPadding_, height_ + 2 * inputPadding_,
-                                        TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                        BufferSpec::POOLING_SOURCE));
+            result.emplace_back(channel++, 0,
+                                width_ + 2 * inputPadding_, height_ + 2 * inputPadding_,
+                                TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
+                                BufferSpec::FUNCTION_SOURCE);
             rem -= PIXEL_PACKING;
         }
     }
@@ -119,10 +112,10 @@ std::vector<BufferSpec> PoolingLayer::getRequiredOutputBuffers() const {
     int channel = 0;
     int rem = outputChannels_;
     while (rem > 0) {
-        result.push_back(BufferSpec(channel++, 0,
-                                    viewport_[0], viewport_[1],
-                                    TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
-                                    BufferSpec::POOLING_DEST));
+        result.emplace_back(channel++, 0,
+                            viewport_[0], viewport_[1],
+                            TEXTURE_IFORMAT_4, TEXTURE_FORMAT_4, TEXTURE_TYPE_DEFAULT,
+                            BufferSpec::FUNCTION_DEST);
         rem -= PIXEL_PACKING;
     }
     return result;
@@ -132,13 +125,13 @@ std::vector<BufferSpec> PoolingLayer::getRequiredOutputBuffers() const {
 /**
  * @copydoc LayerBase::forward
  */
-void PoolingLayer::forward(uint64_t sequence) {
+void PoolingLayer::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
 #ifdef DEBUG
     if (!valid_) THROW_EXCEPTION_ARGS(FynException, "Trying to invoke forward() on invalid layer");
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]", err, __FILE__, __LINE__, getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -202,20 +195,23 @@ void PoolingLayer::forward(uint64_t sequence) {
  * @see compileShader, initShader
  */
 void PoolingLayer::setupShaders() {
+#if defined(WIN32) || defined(WIN64)
+        using ssize_t = int64_t;
+#endif
     char preproc[1024] = {0}, extra[128];
     for (int i = 1; i <= maxRenderTargets_; i++) {
         snprintf(preproc, sizeof(preproc), "#define NUM_LANES %d\n", i);
-        ssize_t mc = (ssize_t)handlePreprocFlags(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
+        ssize_t mc = (ssize_t)preprocessor_.generatePreprocessorPreamble(flags_, preproc, sizeof(preproc)-strlen(preproc)-1);
         assert(mc > 0);
         // NOTE (mw) this assumes that the poolsize is isotropic !
         snprintf(extra, sizeof(extra),"#define POOL_SIZE %d\n", poolSize_[0]);
         strncat(preproc, extra, mc);
-        mc -= strlen(extra);
+        mc -= (ssize_t)strlen(extra);
         assert(mc > 0);
         // NOTE (mw) this assumes that the downsampling is isotropic !
         snprintf(extra, sizeof(extra), "#define DOWNSAMPLE %d\n", downsample_[0]);
         strncat(preproc, extra, mc);
-        mc -= strlen(extra);
+        mc -= (ssize_t)strlen(extra);
         assert(mc > 0);
         shaders_[i - 1] = compileShader(preproc);
         shaderStates_[i - 1] = initShader(shaders_[i - 1], i);
@@ -236,12 +232,12 @@ void PoolingLayer::setupShaders() {
  * @see setupIBO
  */
 void PoolingLayer::setupVBO(VAO *vao) {
-    int vertsize = 4;
+    const int vertsize = 4;
     float tmp[vertsize * 4];
-    float posleft = -1.0f + ((float) (2 * outputPadding_) / (float) viewport_[0]);
-    float posright = 1.0f - ((float) (2 * outputPadding_) / (float) viewport_[0]);
-    float postop = -1.0f + ((float) (2 * outputPadding_) / (float) viewport_[1]);
-    float posbottom = 1.0f - ((float) (2 * outputPadding_) / (float) viewport_[1]);
+    float posleft  = -1.0f + ((float)(2*outputPadding_) / (float)viewport_[0]);
+    float posright =  1.0f - ((float)(2*outputPadding_) / (float)viewport_[0]);
+    float postop   = -1.0f + ((float)(2*outputPadding_) / (float)viewport_[1]);
+    float posbottom = 1.0f - ((float)(2*outputPadding_) / (float)viewport_[1]);
     float tleft = ((float) inputPadding_ / (float) (width_ + 2 * inputPadding_));
     float ttop = ((float) inputPadding_ / (float) (height_ + 2 * inputPadding_));
     float thspan = ((float) width_) / (float) (width_ + 2 * inputPadding_);
@@ -270,7 +266,7 @@ void PoolingLayer::setupVBO(VAO *vao) {
     tmp[3 * vertsize + 3] = ttop;
     vertexBuffer_ = new VBO(context_);
     vao->enableArray(0);
-    vertexBuffer_->setBufferData(tmp, vertsize * 4 * sizeof(float), GL_STATIC_DRAW);
+    vertexBuffer_->setBufferData(tmp, (int)(vertsize * 4 * sizeof(float)), GL_STATIC_DRAW);
     vertexBuffer_->bind();
     vao->setVertexAttributeBuffer(0, vertsize, GL_FLOAT, GL_FALSE, 0, 0);
 }
@@ -345,8 +341,6 @@ void PoolingLayer::updateFBOs() {
 }
 
 
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu namespace
 
 // vim: set expandtab ts=4 sw=4:

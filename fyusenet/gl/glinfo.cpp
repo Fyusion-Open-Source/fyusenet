@@ -11,6 +11,7 @@
 
 #include <cstring>
 #include <string>
+#include <algorithm>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
@@ -19,14 +20,28 @@
 #include "glinfo.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
-namespace fyusion {
-namespace opengl {
+
+namespace fyusion::opengl {
+
 
 GLInfo GLInfo::instance_;
 bool GLInfo::initialized_ = false;
 
 //-------------------------------------- Local Definitions -----------------------------------------
 
+#if defined(WIN32) || defined(WIN64)
+static bool string_match(const char * haystack, const char *needle) {
+    std::string a(haystack);
+    std::string b(needle);
+    std::transform(a.begin(), a.end(), a.begin(), ::tolower);
+    std::transform(b.begin(), b.end(), b.begin(), ::tolower);
+    return a.find(b) != std::string::npos;
+}
+#else
+static bool string_match(const char *haystack, const char *needle) {
+    return (strcasestr(haystack, needle) != nullptr);
+}
+#endif
 
 /*##################################################################################################
 #                                   P U B L I C  F U N C T I O N S                                 #
@@ -92,6 +107,12 @@ void GLInfo::queryExtensions() {
     const GLubyte *oomph = glGetString(GL_EXTENSIONS);
     if (oomph) {
         extensions_ = std::string((const char *)glGetString(GL_EXTENSIONS));
+    } else {
+        GLint extcnt = 0;
+        glGetIntegerv(GL_NUM_EXTENSIONS, &extcnt);
+        for (int i = 0; i < extcnt; i++) {
+            extensions_.append((const char *) glGetStringi(GL_EXTENSIONS, i)).append(" ");
+        }
     }
 }
 
@@ -188,10 +209,10 @@ void GLInfo::queryChipset() {
     if (strcasestr((const char *)vendor,"Qualcomm") || strcasestr((const char *)renderer,"Adreno")) type_ = QUALCOMM_ADRENO;
     if (strcasestr((const char *)vendor,"Imagination") || strcasestr((const char *)renderer,"PowerVR")) type_ = POWERVR;
 #else
-    if (strcasestr((const char *)vendor,"NVIDIA") || strcasestr((const char *)renderer,"NVIDIA")) type_ = NVIDIA;
-    if (strcasestr((const char *)vendor,"AMD") || strcasestr((const char *)renderer,"AMD")) type_ = AMD;
-    if (strcasestr((const char *)vendor,"ATI") || strcasestr((const char *)renderer,"ATI")) type_ = AMD;
-    if (strcasestr((const char *)vendor,"Intel") || strcasestr((const char *)renderer,"Intel")) type_ = INTEL;
+    if (string_match((const char *)vendor,"NVIDIA") || string_match((const char *)renderer,"NVIDIA")) type_ = NVIDIA;
+    if (string_match((const char *)vendor,"AMD") || string_match((const char *)renderer,"AMD")) type_ = AMD;
+    if (string_match((const char *)vendor,"ATI") || string_match((const char *)renderer,"ATI")) type_ = AMD;
+    if (string_match((const char *)vendor,"Intel") || string_match((const char *)renderer,"Intel")) type_ = INTEL;
 #endif
     renderer_ = std::string((const char *)renderer);
 }
@@ -413,6 +434,17 @@ int GLInfo::getMaximumTextureSize() {
 }
 
 /**
+ * @brief Get maximum depth for a 2D texture array on this system
+ *
+ * @return Maximum depth for a 2D texture array
+ */
+int GLInfo::getMaximumTexArrayDepth() {
+    int res = 0;
+    glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &res);
+    return res;
+}
+
+/**
  * @brief Get maximum number of varying vectors that can be passed from vertex to fragment shader
  *
  * @return Max. number of varying vectors (vec4)
@@ -577,7 +609,7 @@ void GLInfo::printInfo() {
 }
 
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
+
 
 // vim: set expandtab ts=4 sw=4:

@@ -10,8 +10,6 @@
 //--------------------------------------- System Headers -------------------------------------------
 
 #include <cstring>
-#include <cassert>
-#include <memory>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
@@ -19,18 +17,12 @@
 #include "../../gl/glinfo.h"
 #include "../../gl/vertexshader.h"
 #include "../../gl/fragmentshader.h"
-#include "../../gl/shaderprogram.h"
-#include "../../gl/glexception.h"
-#include "../../common/logging.h"
-#include "../../common/performance.h"
 #include "../transconvweightarray3x3xNxM.h"
 #include "transconvlayer3x3_vanilla.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+
+namespace fyusion::fyusenet::gpu::vanilla {
 
 //-------------------------------------- Local Definitions -----------------------------------------
 
@@ -41,7 +33,7 @@ namespace vanilla {
 
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&,int)
  */
 TransConvLayer3x3::TransConvLayer3x3(const ConvLayerBuilder& builder, int layerNumber):TransConvLayerBase(builder, layerNumber) {
 }
@@ -49,14 +41,22 @@ TransConvLayer3x3::TransConvLayer3x3(const ConvLayerBuilder& builder, int layerN
 
 
 /**
- * @copydoc ConvLayerInterface::loadWeightsAndBiases
+ * @copydoc ConvLayerBase::loadParameters
  */
-void TransConvLayer3x3::loadWeightsAndBiases(const float *biasAndWeights, size_t offset) {
+void TransConvLayer3x3::loadParameters(const ParameterProvider *weights) {
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
-    weights_ = new TransConvWeightArray3x3xNxM(upsample_,inputChannels_,outputChannels_,maxRenderTargets_);
-    weights_->extractBiasData(biasAndWeights,offset);
-    weights_->extractWeightData(biasAndWeights,offset);
-    if (flags_ & LayerFlags::POST_BATCHNORM) weights_->extractBatchnormData(biasAndWeights,offset);
+    weights_ = new TransConvWeightArray3x3xNxM(upsample_, inputChannels_, outputChannels_, maxRenderTargets_);
+    weights->map(getName() + std::string(".bias"), getNumber(), 1).with([&](const std::any & data) {
+        weights_->extractBiasData(std::any_cast<const float *>(data));
+    });
+    weights->map(getName() + std::string(".weights"), getNumber(), 0).with([&](const std::any & data) {
+        weights_->extractWeightData(std::any_cast<const float *>(data));
+    });
+    if (flags_ & LayerFlags::POST_BATCHNORM) {
+        weights->map(getName() + std::string(".bn"), getNumber(), 2).with([&](const std::any & data) {
+            weights_->extractBatchnormData(std::any_cast<const float *>(data));
+        });
+    }
 }
 
 
@@ -70,7 +70,7 @@ void TransConvLayer3x3::loadWeightsAndBiases(const float *biasAndWeights, size_t
  *
  * This function compiles a set of shaders that are specific to the number of render targets and
  * to the stratum index on which they are used. The shader setup here is quite specific to a 3x3
- * transposed convolution with an upsampling factor of 2 .
+ * transposed convolution with an upsampling factor of 2.
  */
 void TransConvLayer3x3::setupShaders() {
     char preproc[768] = {0};
@@ -104,9 +104,6 @@ void TransConvLayer3x3::setupShaders() {
 }
 
 
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:

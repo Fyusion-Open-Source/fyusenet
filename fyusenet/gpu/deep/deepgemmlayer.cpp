@@ -28,10 +28,7 @@
 
 //-------------------------------------- Global Variables ------------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace deep {
+namespace fyusion::fyusenet::gpu::deep {
 
 //-------------------------------------- Local Definitions -----------------------------------------
 
@@ -63,13 +60,13 @@ void DeepGEMMLayer::cleanup() {
 /**
  * @copydoc LayerBase::forward
  */
-void DeepGEMMLayer::forward(uint64_t sequence) {
+void DeepGEMMLayer::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -77,8 +74,8 @@ void DeepGEMMLayer::forward(uint64_t sequence) {
     if (tiler_->numInputTiles() <= 1) glDisable(GL_BLEND);
     else {
         glEnable(GL_BLEND);
-        glBlendEquationSeparate(GL_FUNC_ADD,GL_FUNC_ADD);
-        glBlendFuncSeparate(GL_ONE,GL_ONE,GL_ONE,GL_ONE);
+        glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+        glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ONE, GL_ONE);
     }
     glViewport(0, 0, viewport_[0], viewport_[1]);
     vertexArray_->bind();
@@ -103,26 +100,26 @@ void DeepGEMMLayer::forward(uint64_t sequence) {
         int instances = tiler_->numInputTiles();
         int points = tiler_->numOutputTiles();
         shader_->bind(shaderState_.get());
-        shader_->setUniformValue("numInputTiles",tiler_->numInputTiles());
+        shader_->setUniformValue("numInputTiles", tiler_->numInputTiles());
         glDrawArrays(GL_POINTS, 0, points);
         shader_->unbind((instances > 1) ? true : false);
         if (instances > 1) {
             noBiasShader_->bind(noBiasShaderState_.get());
-            noBiasShader_->setUniformValue("numInputTiles",tiler_->numInputTiles());
+            noBiasShader_->setUniformValue("numInputTiles", tiler_->numInputTiles());
             glDrawArraysInstanced(GL_POINTS, 0, points, instances-1);
             noBiasShader_->unbind();
         }
     } else {
-        int instances = tiler_->numInputTiles()*kernel_;
+        int instances = tiler_->numInputTiles() * kernel_;
         int tris = tiler_->numOutputTiles();
         shader_->bind(shaderState_.get());
-        shader_->setUniformValue("numInputTiles",tiler_->numInputTiles());
-        glDrawElements(GL_TRIANGLES,tris*6,GL_UNSIGNED_SHORT,(const GLvoid *)0);
+        shader_->setUniformValue("numInputTiles", tiler_->numInputTiles());
+        glDrawElements(GL_TRIANGLES, tris*6, GL_UNSIGNED_SHORT, (const GLvoid *)0);
         shader_->unbind((instances > 1) ? true : false);
         if (instances > 1) {
             noBiasShader_->bind(noBiasShaderState_.get());
-            noBiasShader_->setUniformValue("numInputTiles",tiler_->numInputTiles());
-            glDrawElementsInstanced(GL_TRIANGLES,tris*6,GL_UNSIGNED_SHORT,(const GLvoid *)0,instances-1);
+            noBiasShader_->setUniformValue("numInputTiles", tiler_->numInputTiles());
+            glDrawElementsInstanced(GL_TRIANGLES, tris*6, GL_UNSIGNED_SHORT, (const GLvoid *)0,instances-1);
             noBiasShader_->unbind();
         }
     }
@@ -160,9 +157,9 @@ void DeepGEMMLayer::setupNetworkPolygons(VAO *vao) {
         }
         vertexBuffer_ = new VBO(context_);
         vao->enableArray(0);
-        vertexBuffer_->setBufferData(attrs0,tiler_->numOutputTiles()*4*sizeof(float),GL_STATIC_DRAW);
+        vertexBuffer_->setBufferData(attrs0, tiler_->numOutputTiles()*4*sizeof(float),GL_STATIC_DRAW);
         vertexBuffer_->bind();
-        vao->setVertexAttributeBuffer(0,4,GL_FLOAT,GL_FALSE,0,0);
+        vao->setVertexAttributeBuffer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
         delete [] attrs0;
         //---------------------------------------------
         // Now indices for the bias texture and the row
@@ -260,19 +257,16 @@ void DeepGEMMLayer::compileConvolutionShaders(const char *preproc) {
 unistateptr DeepGEMMLayer::initShader(programptr shader) {
     unistateptr state = UniformState::makeShared(shader);
     if (!GLInfo::hasBinding()) {
-        state->setUniformValue("inputLayer0",0);
-        state->setUniformValue("residualLayer0",1,true);
-        state->setUniformValue("inputDisplacements",DISP_TEXTURE);
-        state->setUniformValue("inputCoeffs",WEIGHT_TEXTURE);
-        state->setUniformValue("biasTexture",BIAS_TEXTURE,true);
+        state->setUniformValue("inputLayer0", 0);
+        state->setUniformValue("residualLayer0", 1, true);
+        state->setUniformValue("inputDisplacements", DISP_TEXTURE);
+        state->setUniformValue("inputCoeffs", WEIGHT_TEXTURE);
+        state->setUniformValue("biasTexture", BIAS_TEXTURE, true);
     }
     return state;
 }
 
 
-} // deep namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::gpu::deep namespace
 
 // vim: set expandtab ts=4 sw=4:

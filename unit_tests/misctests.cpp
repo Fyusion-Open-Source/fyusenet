@@ -8,10 +8,8 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <cstdint>
 #include <cmath>
 #include <fstream>
-#include <atomic>
 #include <memory>
 #include <thread>
 
@@ -51,13 +49,13 @@ class MiscLayerTest: public ::testing::Test, public TestContextManager, public L
     MiscLayerTest() : TestContextManager() {
     }
 
-    void SetUp() {
+    void SetUp() override {
         // TODO (mw) only set up contexts once
         setupGLContext(4);
         fyusion::fyusenet::GfxContextManager::instance()->setupPBOPools(4, 4);
     }
 
-    void TearDown() {
+    void TearDown() override {
         LayerTestBase::cleanup();
         tearDownGLContext();
     }
@@ -154,9 +152,9 @@ TEST_P(ArgMaxTest, ArgMaxTestDeep) {
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     int deviations = 0;
     int stride = param.width;
@@ -184,22 +182,33 @@ TEST_P(ArgMaxTest, ArgMaxTestDeep) {
 
 
 TEST_P(BatchNormTest, BNTestShallow) {
+    class TestProvider : public ParameterProvider {
+     public:
+        TestProvider(const float *data) : wrapper_(data) {}
+        DataBlob get(const std::string &name, int layerNo, int subIndex=0) const override {
+            EXPECT_EQ(subIndex, 0);
+            return DataBlob((DataWrapper *)&wrapper_);
+        }
+     private:
+        DefaultDataWrapper<float> wrapper_;
+    };
     auto param = GetParam();
     std::unique_ptr<float[]> scalebias(generateScaleAndBias(param.channels));
     std::unique_ptr<float[]> input(generateRandomData(param.channels, param.width, param.height, -10.f, 10.f));
     ASSERT_NE(scalebias, nullptr);
     ASSERT_NE(input, nullptr);
+    TestProvider provider(scalebias.get());
     std::unique_ptr<float[]> ref(referenceNorm(input.get(), scalebias.get(), param));
     gpu::GPULayerBuilder bld("bnorm");
     bld.type(LayerType::BATCHNORM).context(context()).shape(param.channels, param.height, param.width, param.channels);
     gpu::BatchNormLayer layer(bld, 1);
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
-    layer.loadScaleAndBias(scalebias.get(), 0);
+    layer.loadParameters(&provider);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     const float * refptr = ref.get();
     const float * resptr = result.get();
@@ -210,22 +219,33 @@ TEST_P(BatchNormTest, BNTestShallow) {
 
 
 TEST_P(BatchNormTest, BNTestDeep) {
+    class TestProvider : public ParameterProvider {
+     public:
+        TestProvider(const float *data) : wrapper_(data) {}
+        DataBlob get(const std::string &name, int layerNo, int subIndex=0) const override {
+            EXPECT_EQ(subIndex, 0);
+            return DataBlob((DataWrapper *)&wrapper_);
+        }
+     private:
+        DefaultDataWrapper<float> wrapper_;
+    };
     auto param = GetParam();
     std::unique_ptr<float[]> scalebias(generateScaleAndBias(param.channels));
     std::unique_ptr<float[]> input(generateRandomData(param.channels, param.width, param.height, -10.f, 10.f));
     ASSERT_NE(scalebias, nullptr);
     ASSERT_NE(input, nullptr);
+    TestProvider provider(scalebias.get());
     std::unique_ptr<float[]> ref(referenceNorm(input.get(), scalebias.get(), param));
     gpu::GPULayerBuilder bld("bnorm");
     bld.type(LayerType::BATCHNORM).context(context()).shape(param.channels, param.height, param.width, param.channels).deep();
     gpu::deep::DeepBatchNormLayer layer(bld, 1);
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
-    layer.loadScaleAndBias(scalebias.get(), 0);
+    layer.loadParameters(&provider);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[param.channels * param.width * param.height]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     const float * refptr = ref.get();
     const float * resptr = result.get();
@@ -248,15 +268,16 @@ TEST_F(GEMMTest, DeepGEMM) {
         }
     }
     gpu::GPULayerBuilder bld("GEMM");
-    bld.type(LayerType::BATCHNORM).context(context()).shape(outchannels, 1, 1, inchannels).deep();
+    bld.type(LayerType::GEMM).context(context()).shape(outchannels, 1, 1, inchannels).deep();
     gpu::deep::DeepGEMMLayer layer(bld, 1);
     std::vector<const float *> inputs{input.get()};
     generateTextures(&layer, inputs, nullptr);
-    layer.loadWeightsAndBiases(weights.get(), 0);
+    SingleWeightProvider wsrc(weights.get() + outchannels, weights.get());
+    layer.loadParameters(&wsrc);
     layer.setup();
-    layer.forward(1);
+    layer.forward(1, nullptr);
     std::unique_ptr<float[]> result(new float[outchannels]);
-    layer.copyResult(result.get());
+    layer.copyResult(result.get(), false);
     layer.cleanup();
     const float * resptr = result.get();
     for (int i=0; i < outchannels; i++) {

@@ -2,6 +2,10 @@ file(GLOB COMMON_SOURCES CONFIGURE_DEPENDS *.cpp *.h)
 
 add_library(common ${COMMON_SOURCES})
 
+if (WIN32)
+    add_dependencies(common glew)
+endif()
+
 #----------------------------------------------------------------------------
 # Installation files
 #----------------------------------------------------------------------------

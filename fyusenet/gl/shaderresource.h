@@ -15,9 +15,12 @@
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
+#include "shaderprogram.h"
+#include "shaderexception.h"
+#include "../gpu/gfxcontextlink.h"
 
-namespace fyusion {
-namespace opengl {
+namespace fyusion::opengl {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 /**
@@ -26,8 +29,8 @@ namespace opengl {
  * The shader resource system is a simple compile-time resource manager that collects all shader
  * sources of the project and renders them accessible by a virtual file name.
  *
- * Sbader sources themselves are wrapped by ShaderResource objects internally. The interface
- * to the shaders in the repository always exports them as null-terminated strings however.
+ * Shader sources themselves are wrapped by ShaderResource objects internally. The interface
+ * to the shaders in the repository always exports them as null-terminated strings.
  *
  * @see ShaderResource
  */
@@ -39,7 +42,10 @@ class ShaderRepository {
     // ------------------------------------------------------------------------
     static const char * getShader(const char *resourceName);
 
- private:
+    static programptr compileShaderPair(const char *vertexName, const char *fragmentName,
+                                        const char *preprocDefs, const std::type_info& typeInfo,
+                                        const fyusenet::GfxContextLink& context);
+private:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
@@ -70,8 +76,7 @@ class ShaderResource {
 };
 
 
-} // opengl namespace
-} // fyusion namespace
+} // fyusion::opengl namespace
 
 
 // vim: set expandtab ts=4 sw=4:

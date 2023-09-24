@@ -47,14 +47,14 @@ class DeepConvLayer1x1 : public DeepConvLayerBase {
     // ------------------------------------------------------------------------
     // Public methods
     // ------------------------------------------------------------------------
-    virtual void forward(uint64_t sequence) override;
-    virtual void cleanup() override;
+    void forward(uint64_t sequenceNo, StateToken * state) override;
+    void cleanup() override;
 
  protected:
     // ------------------------------------------------------------------------
     // Non-public methods
     // ------------------------------------------------------------------------
-    virtual void compileConvolutionShaders(const char *preproc) override;
+    void compileConvolutionShaders(const char *preproc) override;
     unistateptr initShader(programptr shader);
 
     // ------------------------------------------------------------------------

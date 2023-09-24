@@ -2,6 +2,10 @@ file(GLOB BASE_SOURCES CONFIGURE_DEPENDS *.cpp *.h)
 
 add_library(base ${BASE_SOURCES})
 
+if (WIN32)
+    add_dependencies(base glew)
+endif()
+
 #----------------------------------------------------------------------------
 # Installation files
 #----------------------------------------------------------------------------

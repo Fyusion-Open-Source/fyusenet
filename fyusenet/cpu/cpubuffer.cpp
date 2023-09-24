@@ -13,22 +13,17 @@
 #include <cassert>
 #include <cstring>
 #include <vector>
-#include <limits>
-#include <inttypes.h>
-
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
 #include "cpubuffer.h"
-#include "../gl/gl_sys.h"
+#include "../common/miscdefs.h"
 #include "../gl/pbo.h"
 #include "../gpu/deep/deeptiler.h"
 #include "../base/layerbase.h"
-#include "../common/logging.h"
 
-namespace fyusion {
-namespace fyusenet {
-namespace cpu {
+namespace fyusion::fyusenet::cpu {
+
 //-------------------------------------- Global Variables ------------------------------------------
 
 
@@ -44,7 +39,7 @@ namespace cpu {
  *
  * @param shape Shape descriptor to construct a buffer for
  */
-CPUBuffer::CPUBuffer(const CPUBufferShape& shape) : shape_(shape) {
+CPUBuffer::CPUBuffer(const BufferShape& shape) : shape_(shape) {
     if (shape.bytes() > 0) {
         memory_ = malloc(shape.bytes());
         if (!memory_) {
@@ -60,8 +55,7 @@ CPUBuffer::CPUBuffer(const CPUBufferShape& shape) : shape_(shape) {
  * @brief Destructor
  */
 CPUBuffer::~CPUBuffer() {
-    delete tiler_;
-    tiler_ = nullptr;
+    FNET_DEL_AND_CLEAR(tiler_);
     mapped_.lock();
     if (memory_) free(memory_);
     memory_ = nullptr;
@@ -91,12 +85,12 @@ size_t CPUBuffer::bytes() const {
  * this function copies the data from the memory-mapped area to "normal" CPU memory.
  */
 CPUBuffer * CPUBuffer::copyTo(CPUBuffer * tgt) const {
-    if (!tgt) tgt = shape_.createBuffer();
+    if (!tgt) tgt = shape_.createCPUBuffer();
     else {
         if (shape_ != tgt->shape_) THROW_EXCEPTION_ARGS(FynException,"Cannot copy buffer to incompatible target buffer");
     }
-    const uint8_t * srcdata = map<uint8_t>();
-    uint8_t * tgtdata = tgt->map<uint8_t>();
+    const auto * srcdata = map<uint8_t>();
+    auto * tgtdata = tgt->map<uint8_t>();
     assert(srcdata);
     assert(tgtdata);
     memcpy(tgtdata, srcdata, shape_.bytes());
@@ -120,33 +114,33 @@ CPUBuffer * CPUBuffer::copyTo(CPUBuffer * tgt) const {
  */
 CPUBuffer * CPUBuffer::toChannelWise(CPUBuffer *tgt) const {
     if (!tgt) {
-        tgt = shape_.createBuffer(CPUBufferShape::order::CHANNELWISE);
+        tgt = shape_.createCPUBuffer(BufferShape::order::CHANNELWISE);
     }
     else {
-        auto shape = shape_.asOrder(CPUBufferShape::order::CHANNELWISE);
+        auto shape = shape_.asOrder(BufferShape::order::CHANNELWISE);
         if (!tgt->shape_.sameSize(shape) || !tgt->shape_.sameType(shape) ||
-            tgt->shape_.dataOrder() != CPUBufferShape::order::CHANNELWISE) {
+            tgt->shape_.dataOrder() != BufferShape::order::CHANNELWISE) {
             THROW_EXCEPTION_ARGS(FynException,"Mismatching shapes");
         }
     }
-    if ((shape_.dataOrder_ == CPUBufferShape::order::CHANNELWISE) ||
+    if ((shape_.dataOrder_ == BufferShape::order::CHANNELWISE) ||
         ((shape_.width_ == 1) && (shape_.height_ == 1))) {
-        const uint8_t * srcdata = map<uint8_t>();
-        uint8_t * tgtdata = tgt->map<uint8_t>();
+        auto * srcdata = map<uint8_t>();
+        auto * tgtdata = tgt->map<uint8_t>();
         assert(srcdata);
         assert(tgtdata);
         memcpy(tgtdata, srcdata, bytes());
         unmap();
         tgt->unmap();
         return tgt;
-    } else if (shape_.dataOrder_ == CPUBufferShape::order::GPU_DEEP) {
+    } else if (shape_.dataOrder_ == BufferShape::order::GPU_DEEP) {
         const float * srcdata = map<float>();
         float * tgtdata = tgt->map<float>();
         deepToChannelWise<float>(srcdata, tgtdata);
         unmap();
         tgt->unmap();
         return tgt;
-    } else if (shape_.dataOrder_ == CPUBufferShape::order::GPU_SHALLOW) {
+    } else if (shape_.dataOrder_ == BufferShape::order::GPU_SHALLOW) {
         const float * srcdata = map<float>();
         float * tgtdata = tgt->map<float>();
         shallowToChannelWise<float>(srcdata, tgtdata);
@@ -171,18 +165,18 @@ CPUBuffer * CPUBuffer::toChannelWise(CPUBuffer *tgt) const {
  *          shallow-tensor ordered CPU buffers
  */
 CPUBuffer * CPUBuffer::toGPUShallow(CPUBuffer *tgt) const {
-    if (shape_.dataOrder_ != CPUBufferShape::order::GPU_SHALLOW) {
+    if (shape_.dataOrder_ != BufferShape::order::GPU_SHALLOW) {
         // TODO (mw) implement missing conversions
         THROW_EXCEPTION_ARGS(FynException,"Not supported yet");
     }
-    if (!tgt) tgt = shape_.createBuffer(CPUBufferShape::order::GPU_SHALLOW);
+    if (!tgt) tgt = shape_.createCPUBuffer(BufferShape::order::GPU_SHALLOW);
     else {
         if (!tgt->shape().sameOrder(shape_)) {
             THROW_EXCEPTION_ARGS(FynException,"Data order of target buffer is not compatible");
         }
     }
-    const uint8_t * srcdata = map<uint8_t>();
-    uint8_t * tgtdata = tgt->map<uint8_t>();
+    const auto * srcdata = map<uint8_t>();
+    auto * tgtdata = tgt->map<uint8_t>();
     assert(srcdata);
     assert(tgtdata);
     memcpy(tgtdata, srcdata, bytes());
@@ -204,14 +198,14 @@ CPUBuffer * CPUBuffer::toGPUShallow(CPUBuffer *tgt) const {
  *          ordered CPU buffers
  */
 CPUBuffer * CPUBuffer::toGPUDeep(CPUBuffer *tgt) const {
-    if (!tgt) tgt = shape_.createBuffer(CPUBufferShape::order::GPU_DEEP);
+    if (!tgt) tgt = shape_.createCPUBuffer(BufferShape::order::GPU_DEEP);
     else {
         // TODO (mw) complete the implementation here
         THROW_EXCEPTION_ARGS(FynException, "Incomplete implementation");
     }
-    if (shape_.dataOrder_ == CPUBufferShape::order::GPU_DEEP) {
-        const uint8_t * srcdata = map<uint8_t>();
-        uint8_t * tgtdata = tgt->map<uint8_t>();
+    if (shape_.dataOrder_ == BufferShape::order::GPU_DEEP) {
+        const auto * srcdata = map<uint8_t>();
+        auto * tgtdata = tgt->map<uint8_t>();
         assert(srcdata);
         assert(tgtdata);
         memcpy(tgtdata, srcdata, bytes());
@@ -240,11 +234,11 @@ template<typename T>
 void CPUBuffer::write(const char *fileName) const {
 #ifdef DEBUG
 #ifndef FYUSENET_USE_WEBGL
-    FILE *out = fopen(fileName,"w");
+    FILE *out = fopen(fileName,"wb");
     if (!out) THROW_EXCEPTION_ARGS(FynException,"Cannot open file %s for writing", fileName);
 #endif
     switch (shape_.dataOrder_) {
-        case CPUBufferShape::order::CHANNELWISE:
+        case BufferShape::order::CHANNELWISE:
 #ifndef FYUSENET_USE_WEBGL
             fwrite(map<uint8_t>(),1,shape_.bytes(),out);
 #else
@@ -252,8 +246,8 @@ void CPUBuffer::write(const char *fileName) const {
 #endif
             unmap();
             break;
-        case CPUBufferShape::order::GPU_SHALLOW: {
-            T * tmp = (T *)malloc(shape_.bytes(CPUBufferShape::order::CHANNELWISE));
+        case BufferShape::order::GPU_SHALLOW: {
+            T * tmp = (T *)malloc(shape_.bytes(BufferShape::order::CHANNELWISE));
             if (!tmp) {
                 FNLOGE("Cannot allocate tmp buffer");
                 throw std::bad_alloc();
@@ -262,15 +256,15 @@ void CPUBuffer::write(const char *fileName) const {
             shallowToChannelWise<T>(src, tmp);
             unmap();
 #ifndef FYUSENET_USE_WEBGL
-            fwrite(tmp,1,shape_.bytes(CPUBufferShape::order::CHANNELWISE), out);
+            fwrite(tmp, 1, shape_.bytes(BufferShape::order::CHANNELWISE), out);
 #else
-            EM_ASM({window.download($0, $1, $2);}, tmp, shape_.bytes(CPUBufferShape::order::CHANNELWISE), fileName);
+            EM_ASM({window.download($0, $1, $2);}, tmp, shape_.bytes(BufferShape::order::CHANNELWISE), fileName);
 #endif
             free(tmp);
-            break;
         }
-        case CPUBufferShape::order::GPU_DEEP: {
-            T * tmp = (T *)malloc(shape_.bytes(CPUBufferShape::order::CHANNELWISE));
+        break;
+        case BufferShape::order::GPU_DEEP: {
+            T * tmp = (T *)malloc(shape_.bytes(BufferShape::order::CHANNELWISE));
             if (!tmp) {
                 FNLOGE("Cannot allocate tmp buffer");
                 throw std::bad_alloc();
@@ -279,13 +273,26 @@ void CPUBuffer::write(const char *fileName) const {
             deepToChannelWise<T>(src, tmp);
             unmap();
 #ifndef FYUSENET_USE_WEBGL
-            fwrite(tmp,1,shape_.bytes(CPUBufferShape::order::CHANNELWISE), out);
+            fwrite(tmp, 1, shape_.bytes(BufferShape::order::CHANNELWISE), out);
 #else
-            EM_ASM({window.download($0, $1, $2);}, tmp, shape_.bytes(CPUBufferShape::order::CHANNELWISE), fileName);
+            EM_ASM({window.download($0, $1, $2);}, tmp, shape_.bytes(BufferShape::order::CHANNELWISE), fileName);
 #endif
             free(tmp);
-            break;
         }
+        break;
+        case BufferShape::order::GPU_SEQUENCE: {
+            // NOTE (mw) for sequences we do not convert to channel-wise, but rather write out as is
+            const T * src = map<T>();
+#ifndef FYUSENET_USE_WEBGL
+            fwrite(src, 1, shape_.bytes(), out);
+#else
+            EM_ASM({window.download($0, $1, $2);}, src, shape_.bytes(), fileName);
+#endif
+            unmap();
+        }
+        break;
+        default:
+            THROW_EXCEPTION_ARGS(FynException, "Unsupported data order");
     }
 #ifndef FYUSENET_USE_WEBGL
     fclose(out);
@@ -309,40 +316,39 @@ void CPUBuffer::write(const char *fileName) const {
  * @param sequenceNo Sequence number to assign to this buffer (which should be the sequence number
  *                   of the content currently in the %PBO)
  *
- * @retval true if read operation was succesful
+ * @param bytes (Optional) number of bytes to read from the PBO, if supplied with zero, it will
+ *              read the full PBO contents
+ *
+ * @retval true if read operation was successful
  * @retval false otherwise
  *
  * This function reads the content of the supplied \p pbo into this buffer instance.
  *
  * @warning This function currently only supports \c FLOAT32 data types
  */
-bool CPUBuffer::readFromPBO(opengl::PBO * pbo, CPUBufferShape::type type, uint64_t sequenceNo) {
-    // TODO (mw) incorporate type parameter, by performing type conversions
-    assert(type == CPUBufferShape::type::FLOAT32);
+bool CPUBuffer::readFromPBO(opengl::PBO * pbo, BufferShape::type type, uint64_t sequenceNo, size_t bytes) {
     if (!memory_) return false;
-#ifdef DEBUG
-    glGetError();
-#endif
+    CLEAR_GFXERR_DEBUG
     pbo->bind(GL_PIXEL_PACK_BUFFER);
-    uint8_t * tgt = map<uint8_t>();
+    auto * tgt = map<uint8_t>();
     if (!tgt) THROW_EXCEPTION_ARGS(FynException,"Oops, trying to copy to an already mapped buffer");
-    size_t cap = bytes();
+    size_t cap = this->bytes();
     void * src = pbo->mapReadBuffer();
     if (!src) {
         unmap();
         THROW_EXCEPTION_ARGS(FynException,"Cannot read data from PBO");
     }
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err) {
         FNLOGE("Cannot map PBO buffer, err=0x%x src=%p",err,src);
-        if (src) pbo->unmapReadBuffer();
+        pbo->unmapReadBuffer();
         pbo->unbind(GL_PIXEL_PACK_BUFFER);
         unmap();
         return false;
     }
 #endif
-    size_t sz = pbo->capacity();
+    size_t sz = (bytes == 0) ? pbo->capacity() : bytes;
     if (sz > cap) {
         pbo->unmapReadBuffer();
         pbo->unbind(GL_PIXEL_PACK_BUFFER);
@@ -356,48 +362,6 @@ bool CPUBuffer::readFromPBO(opengl::PBO * pbo, CPUBufferShape::type type, uint64
     sequenceNo_ = sequenceNo;
     return true;
 }
-
-
-/**
- * @brief Translate data type of CPU buffers to OpenGL data type (not texture format)
- *
- * @param type CPU buffer data type
- *
- * @return OpenGL data type that maps to the supplied type
- *
- * @see https://www.khronos.org/opengl/wiki/Image_Format
- */
-GLuint CPUBuffer::typeToGLType(CPUBufferShape::type type) {
-    // TODO (mw) use LUT instead of lengthy switch/case
-    GLuint gltype = 0;
-    switch (type) {
-        case CPUBufferShape::FLOAT32:
-            gltype = GL_FLOAT;
-            break;
-        case CPUBufferShape::UINT32:
-            gltype = GL_UNSIGNED_INT;
-            break;
-        case CPUBufferShape::INT32:
-            gltype = GL_INT;
-            break;
-        case CPUBufferShape::UINT16:
-            gltype = GL_UNSIGNED_SHORT;
-            break;
-        case CPUBufferShape::INT16:
-            gltype = GL_SHORT;
-            break;
-        case CPUBufferShape::UINT8:
-            gltype = GL_UNSIGNED_BYTE;
-            break;
-        case CPUBufferShape::INT8:
-            gltype = GL_BYTE;
-            break;
-        default:
-            THROW_EXCEPTION_ARGS(FynException,"Illegal data type supplied");
-    }
-    return gltype;
-}
-
 
 
 
@@ -506,8 +470,6 @@ template void CPUBuffer::shallowToChannelWise<int8_t>(const int8_t * src,int8_t 
 #endif
 
 
-} // cpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet::cpu namespace
 
 // vim: set expandtab ts=4 sw=4:

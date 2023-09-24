@@ -11,9 +11,9 @@
 
 //--------------------------------------- System Headers -------------------------------------------
 
-#include <cassert>
 #include <cstdio>
 #include <iostream>
+#include <thread>
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
@@ -24,9 +24,6 @@
 #ifdef FYUSENET_USE_GLFW
 #include <fyusenet/gl/glcontext.h>
 #endif
-
-#include <fyusenet/common/performance.h>
-
 
 //-------------------------------------- Global Variables ------------------------------------------
 
@@ -54,34 +51,18 @@ static float * readImage(const std::string& imageFile, int & width, int & height
 }
 
 
-static float * loadWeights(const std::string& fileName, size_t & numFloats) {
-    FILE * in = fopen(fileName.c_str(),"rb");
-    if (!in) {
-        std::cerr<<"Cannot open weight file "<<fileName<<" for reading\n";
-        return nullptr;
-    }
-    fseek(in, 0, SEEK_END);
-    size_t filesize = ftell(in);
-    assert((filesize % sizeof(float)) == 0);
-    fseek(in, 0, SEEK_SET);
-    numFloats = filesize/sizeof(float);
-    float * weights = new float[filesize/sizeof(float)];
-    fread(weights, 1, filesize, in);
-    fclose(in);
-    return weights;
-}
-
 int main(int argc, char **argv) {
-    cxxopts::Options options(argv[0],"Sample style-transfer network");
+    using namespace std::chrono_literals;
+    cxxopts::Options options(argv[0],"Sample ResNet-50 network");
     options.add_options()("h,help","Get program help")
-                         ("k,kernel", "Kernel size for the convolution layers, either 3 for 3x3 or 9 for 9x9", cxxopts::value<int>()->default_value("3"))
                          ("c,classes", "File name to textfile with the class label names, one label per line (optional)", cxxopts::value<std::string>())
                          ("w,weights", "Use supplied filename as weight file (mandatory)", cxxopts::value<std::string>())
+                         ("r,runs", "Perform multiple runs on the same dataset", cxxopts::value<int>())
+                         ("m,memory", "Slow down to make it possible to get some memory benchmarks", cxxopts::value<bool>())
 #ifdef DEBUG
                          ("l,log", "Log layer outputs to supplied directory", cxxopts::value<std::string>())
 #endif
-                         ("input", "Input JPEG file", cxxopts::value<std::string>())
-                         ("output", "Output JPEG file", cxxopts::value<std::string>());
+                         ("input", "Input JPEG file", cxxopts::value<std::string>());
     options.parse_positional({"input"});
     auto opts = options.parse(argc, argv);
 
@@ -91,16 +72,6 @@ int main(int argc, char **argv) {
     }
 
     // -------------------------------------------------------
-    // Read JPEG image that is to be processed
-    // -------------------------------------------------------
-    int width, height;
-    float * rgb = readImage(opts["input"].as<std::string>(), width, height);
-    if (!rgb) return 1;
-    if ((width != 224) || (height != 224)) {
-        std::cerr<<"Input image must be 224x224 pixels\n";
-        return 1;
-    }
-    // -------------------------------------------------------
     // Setup GL context and thread/PBO pool. If we use GLFW,
     // set mouse-button callbacks and wait for an initial
     // MB press, followed by a couple of empty render calls
@@ -108,7 +79,6 @@ int main(int argc, char **argv) {
     auto glmgr = fyusion::fyusenet::GfxContextManager::instance();
     if (!glmgr) {
         std::cerr<<"Cannot setup GL context\n";
-        delete [] rgb;
         return 1;
     }
     fyusion::fyusenet::GfxContextLink ctx = glmgr->createMainContext();
@@ -116,6 +86,20 @@ int main(int argc, char **argv) {
     fyusion::opengl::AsyncPool::setMaxGLThreads(4);
 #endif
     glmgr->setupPBOPools(2, 2);
+    // -------------------------------------------------------
+    // Read JPEG image that is to be processed
+    // -------------------------------------------------------
+    int width, height;
+    /*
+    GLuint tex = readImageToTexture(opts["input"].as<std::string>(), width, height);
+    if (!tex) return 1;
+    */
+    float * rgb = readImage(opts["input"].as<std::string>(), width, height);
+    if (!rgb) return 1;
+    if ((width != 224) || (height != 224)) {
+        std::cerr<<"Input image must be 224x224 pixels\n";
+        return 1;
+    }
 
     // NOTE (mw) this is ugly
 #ifdef FYUSENET_USE_GLFW
@@ -128,30 +112,38 @@ int main(int argc, char **argv) {
     while (!buttonup) {
         glfwWaitEventsTimeout(0.1);
     }
-    for (int i=0; i<6; i++) {
+    for (int i=0; i<4; i++) {
         glctx->sync();
     }
 #endif
     // -------------------------------------------------------
     // Instantiate network
     // -------------------------------------------------------
-    ResNet50 * net = new ResNet50();
+    auto * net = new ResNet50(true, true);
+    auto * params = new ResNet50Provider(opts["weights"].as<std::string>());
     // -------------------------------------------------------
     // Load weights, setup and run network...
     // -------------------------------------------------------
-    size_t weightfloats;
-    float * weights = loadWeights(opts["weights"].as<std::string>(), weightfloats);
-    if (!weights) {
-        delete [] rgb;
-        return 1;
-    }
-    net->loadWeightsAndBiases(weights, weightfloats);
+    net->setParameters(params);
     net->setup();
     net->setInputBuffer(rgb);
-    tstamp start = fy_get_stamp();
-    auto state = net->forward();
-    tstamp stop = fy_get_stamp();
-    assert(state.status == fyusion::fyusenet::NeuralNetwork::state::EXEC_DONE);
+    if (opts.count("log") > 0) {
+        net->enableLog(opts["log"].as<std::string>());
+    }
+    net->forward();
+#ifdef FYUSENET_USE_GLFW
+    static bool buttondown = false;
+    glctx->sync();
+    auto mousecbout = [](GLFWwindow *win, int bt, int action, int mods) {
+        if (action == GLFW_PRESS) {
+            buttondown = true;
+        }
+    };
+    glfwSetMouseButtonCallback(glctx->window(), mousecbout);
+    while (!buttondown) {
+        glfwWaitEventsTimeout(0.1);
+    }
+#endif
     // -------------------------------------------------------
     // Determine most likely class
     // -------------------------------------------------------
@@ -200,31 +192,11 @@ int main(int argc, char **argv) {
     } else {
         std::cout<<"Could not match any class to the input\n";
     }
-    std::cout<<"Inference took "<<fy_elapsed_millis(start, stop)<<"ms (including texture upload and download)\n";
-    // -------------------------------------------------------
-    // If we use GLFW, wait for another MB click before
-    // terminating
-    // -------------------------------------------------------
-#ifdef FYUSENET_USE_GLFW
-    static bool buttondown = false;
-    glctx->sync();
-    auto mousecbout = [](GLFWwindow *win, int bt, int action, int mods) {
-        if (action == GLFW_PRESS) {
-            buttondown = true;
-        }
-    };
-    glfwSetMouseButtonCallback(glctx->window(), mousecbout);
-    while (!buttondown) {
-        glfwWaitEventsTimeout(0.1);
-    }
-#endif
-
     // -------------------------------------------------------
     // Cleanup
     // -------------------------------------------------------
     net->cleanup();
     delete net;
-    delete [] rgb;
     ctx.reset();
     glmgr->tearDown();
     return 0;

@@ -16,8 +16,8 @@
 
 //-------------------------------------- Project  Headers ------------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
+namespace fyusion::fyusenet {
+
 //------------------------------------- Public Declarations ----------------------------------------
 
 using layerflags = uint32_t;
@@ -44,8 +44,10 @@ namespace LayerFlags {
 // TODO (mw) implement in shader activation
     constexpr static layerflags PRE_SIGMOID = 256;         //!< This layer is subject to a sigmoid activation on \e reading of the input data (not implemented yet)
     constexpr static layerflags PRE_TANH = 512;            //!< This layer is subject to a tanh activation on \e reading of the input data (not implemented yet)
-    constexpr static layerflags ACT_MASK = (PRE_RELU | PRE_CLIP | PRE_SIGMOID | PRE_TANH | POST_RELU);
-    constexpr static layerflags PRE_ACT_MASK = (PRE_RELU | PRE_CLIP | PRE_SIGMOID | PRE_TANH);
+    constexpr static layerflags PRE_SILU = 1024;           //!< This layer is subject to a SiLU activation on \e reading of the input data
+    constexpr static layerflags PRE_GELU = 2048;           //!< This layer is subject to a GeLU activation on \e reading of the input data
+    constexpr static layerflags ACT_MASK = (PRE_RELU | PRE_CLIP | PRE_SIGMOID | PRE_TANH | POST_RELU | PRE_SILU | PRE_GELU);
+    constexpr static layerflags PRE_ACT_MASK = (PRE_RELU | PRE_CLIP | PRE_SIGMOID | PRE_TANH | PRE_SILU | PRE_GELU);
 }
 
 
@@ -55,7 +57,7 @@ namespace LayerFlags {
  * @note These are currently used inside the builder only. The initial version of FyuseNet had all the
  *       activations as part of their flags. The inwards facing part (the layer code) still has those
  *       in the flags. Those will be separated out in the near future, so do not use any of those
- *       flags externally.
+ *       flags externally, use this enum instead.
  */
 enum class ActType : uint8_t {
     NONE = 0,               //!< Empty/no activation function
@@ -63,7 +65,9 @@ enum class ActType : uint8_t {
     LEAKY_RELU,             //!< ReLU with leak
     CLIP,                   //!< Clipping
     SIGMOID,                //!< Sigmoid (not supported yet)
-    TANH                    //!< TanH (not supported yet)
+    TANH,                   //!< TanH (not supported yet)
+    SILU,                   //!< SiLU
+    GELU                    //!< GeLU
 };
 
 
@@ -89,6 +93,14 @@ enum class NormType : uint8_t {
 enum class ScalingType : uint8_t {
     NEAREST = 0,            //!< Use nearest neighbor "interpolation" for scaling
     LINEAR                  //!< Use bilinear interpolation for scaling
+};
+
+/**
+ * @brief Enumerator for positional encoding types
+ */
+enum class PosEncType : uint8_t {
+    NONE = 0,               //!< Placeholder for no positional encoding
+    ROTARY                  //!< Use "rotary encoding" as positional encoding
 };
 
 /**
@@ -129,6 +141,16 @@ enum class CastTarget : uint8_t {
     CT_FLOAT32              //!< Cast to 32-bit float
 };
 
+
+/**
+ * @brief Type of scoring for a single token in sequence learning
+ */
+enum class ScoringType : uint8_t {
+    GREEDY = 0,             //!< Greedy scoring
+    TOP_K,                  //!< Top-k scoring
+    TOP_P                   //!< Top-p scoring
+};
+
 /**
  * @brief Enumerator for the various layer types implemented by this engine
  */
@@ -150,6 +172,8 @@ enum class LayerType : uint16_t {
     CLIP,                   //!< Clip layer, may be internally implemented by a different layer-type (e.g. scaling)
     TANH,                   //!< tanh function layer
     SIGMOID,                //!< Sigmoid layer
+    SILU,                   //!< SiLU layer, may be internally implemented by a different layer-type (e.g. scaling)
+    GELU,                   //!< GeLU layer, may be internally implemented by a different layer-type (e.g. scaling)
     REDUCE,                 //!< Reduction (dot-product) layer
     TRANSPOSE,              //!< Spatial transposition (image width/height) layer
     IMGEXTRACT,             //!< ImgExtract / Flatten
@@ -163,7 +187,12 @@ enum class LayerType : uint16_t {
     RESIDUAL,               //!< Residual pseudo-layer (used internally, don't bother for now)
     OESCONV,                //!< Conversion layer that converts OES textures to "normal" textures (EGL / Android only)
     BATCHNORM,              //!< Explicit batchnorm layer
-    GEMM,                   //!< Generalized matrix/matrix multiplication, implemented as MV -> 1x1 conv here since we cannot batch anyway
+    RMSNORM,                //!< RMS-Normalization layer type
+    GEMM,                   //!< Generalized matrix/matrix multiplication, implemented as MV -> 1x1 conv here since we cannot batch anyway, very similar to LINEAR
+    LINEAR,                 //!< Linear layer, essentially performs a matrix/matrix multiplication w/ optional bias
+    ATTENTION,              //!< (Dot product) attention layer type
+    EMBEDDING,              //!< Embedding layer
+    TOKENSCORING,           //!< Token-scoring layer for sequence learning
     CUSTOM,                 //!< Custom layer
     LAST_SUPPORTED,         //!< Last supported layer type (+1)
     ILLEGAL = 1000          //!< Placeholder for illegal layer types
@@ -181,6 +210,39 @@ enum class compute_device : uint8_t {
 };
 
 
+/**
+ * Enumerator for quantization types for usage in layers that can make use of quantized weights.
+ *
+ * @note No (integer) quantization is performed on the compute buffer data (neither in nor out) as of now
+ */
+enum class qt_type : uint8_t {
+    QT_NONE = 0,            //!< No quantization at all
+    QT_MIXED_FLOAT,         //!< Mixed precision floating-point quantization (n-bits int for weights, unspecified/system-default precision floating-point for compute buffers)
+    QT_MIXED_FLOAT16,       //!< Mixed precision floating-point quantization (n-bit int for weights, 16-bit floating-point for compute buffers)
+    QT_MIXED_FLOAT32,       //!< Mixed precision floating-point quantization (n-bit int for weights, 32-bit floating-point for compute buffers)
+    QT_FIXED_INT,           //!< For future expansion
+    QT_FIXED_INT4,          //!< For future expansion
+    QT_FIXED_INT8           //!< For future expansion
+};
+
+
+/**
+ * Data types to be used for parameter data, especially for layers that can make use of quantized weights.
+ *
+ * @note In many cases, even when supplying 32-bit float data, the engine will make use of 16-bit
+ *       float on the compute device itself, unless explicitly telling the layer otherwise or
+ *       enable the \c HIGH_PRECISION compiler flag. (yes, I know I should have designed this more
+ *       transparent, it is a mess in general that I hope to fix in the future).
+ */
+enum class param_type : uint8_t {
+    WGT_FLOAT = 0,            //!< Data is in default (32-bit) floating-point format
+    WGT_FLOAT32 = 0,          //!< Explicit float 32 (same as default)
+    WGT_FLOAT16,              //!< Data is in 16-bit floating-point format
+    WGT_INT8,                 //!< Data is in 8-bit quantized format (not supported yet)
+    WGT_INT4,                 //!< Data is in 4-bit quantized format
+    WGT_DEFAULT               //!< Placeholder for default/undefined or "don't care" data types
+};
+
 namespace gpu {
     /**
      * @brief Specific to GPU devices, defines the channel packing factor for each pixel
@@ -191,7 +253,6 @@ namespace gpu {
     static constexpr int PIXEL_PACKING = 4;
 }
 
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet namespace
 
 // vim: set expandtab ts=4 sw=4:

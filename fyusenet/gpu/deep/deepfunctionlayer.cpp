@@ -39,7 +39,7 @@ namespace deep {
 ##################################################################################################*/
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DeepFunctionLayer::DeepFunctionLayer(const GPULayerBuilder & builder, int layerNumber) :
     DeepLayerBase(builder, layerNumber) {
@@ -77,20 +77,20 @@ void DeepFunctionLayer::setup() {
 /**
  * @copydoc LayerBase::forward
  */
-void DeepFunctionLayer::forward(uint64_t sequence) {
+void DeepFunctionLayer::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glViewport(0,0,viewport_[0],viewport_[1]);
+    glViewport(0, 0, viewport_[0], viewport_[1]);
     framebuffers_.at(0)->bind();
     framebuffers_.at(0)->setWriteMask();
     glClear(GL_COLOR_BUFFER_BIT);         // this is to instruct the tile-engine that we don't need the old tile-content
@@ -165,9 +165,9 @@ void DeepFunctionLayer::setupNetworkPolygons(VAO *vao) {
     }
     vertexBuffer_ = new VBO(context_);
     vao->enableArray(0);
-    vertexBuffer_->setBufferData(attrs0, tiler_->numOutputTiles()*4*4*sizeof(float), GL_STATIC_DRAW);
+    vertexBuffer_->setBufferData(attrs0, (int)(tiler_->numOutputTiles() * 4 * 4 *sizeof(float)), GL_STATIC_DRAW);
     vertexBuffer_->bind();
-    vao->setVertexAttributeBuffer(0,4,GL_FLOAT,GL_FALSE,0,0);
+    vao->setVertexAttributeBuffer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
     delete [] attrs0;
     //---------------------------------------------
     // IBO part
@@ -176,14 +176,14 @@ void DeepFunctionLayer::setupNetworkPolygons(VAO *vao) {
     indexBuffer_ = new IBO(context_);
     for (int i=0; i<tiler_->numOutputTiles(); i++) {
         int offset=i*4;
-        indices[i*6+0] = offset+0;
-        indices[i*6+1] = offset+1;
-        indices[i*6+2] = offset+2;
-        indices[i*6+3] = offset+0;
-        indices[i*6+4] = offset+2;
-        indices[i*6+5] = offset+3;
+        indices[i*6+0] = (GLshort)(offset+0);
+        indices[i*6+1] = (GLshort)(offset+1);
+        indices[i*6+2] = (GLshort)(offset+2);
+        indices[i*6+3] = (GLshort)(offset+0);
+        indices[i*6+4] = (GLshort)(offset+2);
+        indices[i*6+5] = (GLshort)(offset+3);
     }
-    indexBuffer_->setBufferData(indices, 6*tiler_->numOutputTiles()*sizeof(GLshort), GL_STATIC_DRAW);
+    indexBuffer_->setBufferData(indices, (int)(6 * tiler_->numOutputTiles() * sizeof(GLshort)), GL_STATIC_DRAW);
     indexBuffer_->bind();
     delete [] indices;
 }

@@ -32,6 +32,19 @@ namespace fyusenet {
  */
 class GfxContextTracker {
  public:
+
+    GfxContextTracker() = default;
+    virtual ~GfxContextTracker() = default;
+
+    /**
+     * @brief Constructor with existing context link
+     *
+     * @param ctx Reference to context link to set into this object
+     */
+    explicit GfxContextTracker(const GfxContextLink& ctx) {
+        context_ = ctx;
+    }
+
     /**
      * @brief Set context to track
      *
@@ -46,7 +59,7 @@ class GfxContextTracker {
      *
      * @return GfxContextLink that is tracked by this instance
      */
-    const GfxContextLink & context() const {
+    [[nodiscard]] const GfxContextLink & context() const {
         return context_;
     }
  protected:
@@ -56,7 +69,7 @@ class GfxContextTracker {
      * @throws opengl::GLException if assertion fails
      */
     void assertContext() const {
-        if (!context_.isCurrent()) THROW_EXCEPTION_ARGS(opengl::GLException, "Invalid or mismatching GL context");
+        if ((context_ == GfxContextLink::EMPTY) || (!context_.isCurrent())) THROW_EXCEPTION_ARGS(opengl::GLException, "Invalid or mismatching GL context");
     }
 
     GfxContextLink context_ = GfxContextLink::EMPTY;        //!< Context that is tracked

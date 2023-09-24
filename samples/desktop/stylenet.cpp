@@ -63,22 +63,6 @@ static void writeImage(const float *rgba, int width, int height, const std::stri
     delete [] rgb;
 }
 
-static float * loadWeights(const std::string& fileName, size_t & numFloats) {
-    FILE * in = fopen(fileName.c_str(),"rb");
-    if (!in) {
-        std::cerr<<"Cannot open weight file "<<fileName<<" for reading\n";
-        return nullptr;
-    }
-    fseek(in, 0, SEEK_END);
-    size_t filesize = ftell(in);
-    assert((filesize % sizeof(float)) == 0);
-    fseek(in, 0, SEEK_SET);
-    numFloats = filesize/sizeof(float);
-    float * weights = new float[filesize/sizeof(float)];
-    fread(weights, 1, filesize, in);
-    fclose(in);
-    return weights;
-}
 
 int main(int argc, char **argv) {
     cxxopts::Options options(argv[0],"Sample style-transfer network");
@@ -129,7 +113,7 @@ int main(int argc, char **argv) {
     // NOTE (mw) this is ugly
 #ifdef FYUSENET_USE_GLFW
     static bool buttonup = false;
-    const fyusion::opengl::GLContext * glctx = dynamic_cast<const fyusion::opengl::GLContext *>(ctx.interface());
+    auto * glctx = dynamic_cast<const fyusion::opengl::GLContext *>(ctx.interface());
     auto mousecb = [](GLFWwindow *win, int bt, int action, int mods) {
         if (action == GLFW_PRESS) buttonup = true;
     };
@@ -137,7 +121,7 @@ int main(int argc, char **argv) {
     while (!buttonup) {
         glfwWaitEventsTimeout(0.1);
     }
-    for (int i=0; i<6; i++) {
+    for (int i=0; i<4; i++) {
         glctx->sync();
     }
 #endif
@@ -145,12 +129,15 @@ int main(int argc, char **argv) {
     // Instantiate network
     // -------------------------------------------------------
     StyleNetBase * net = nullptr;
+    StyleNetProvider * params = nullptr;
     switch (opts["kernel"].as<int>()) {
         case 3:
             net = new StyleNet3x3(width, height, true, true, ctx);
+            params = new StyleNet3x3Provider(opts["weights"].as<std::string>());
             break;
         case 9:
             net = new StyleNet9x9(width, height, true, true, ctx);
+            params = new StyleNet9x9Provider(opts["weights"].as<std::string>());
             break;
         default:
             std::cerr<<"Kernel size "<<opts["kernel"].as<int>()<<" not supported.\n";
@@ -162,13 +149,7 @@ int main(int argc, char **argv) {
     // -------------------------------------------------------
     // Load weights, setup and run network...
     // -------------------------------------------------------
-    size_t weightfloats;
-    float * weights = loadWeights(opts["weights"].as<std::string>(), weightfloats);
-    if (!weights) {
-        delete [] rgb;
-        return 1;
-    }
-    net->loadWeightsAndBiases(weights, weightfloats);
+    net->setParameters(params);
     net->setup();
 #ifdef DEBUG
     if (opts.count("log")) ((StyleNetBase *)net)->enableDebugOutput(opts["log"].as<std::string>());

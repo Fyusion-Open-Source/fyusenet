@@ -18,20 +18,12 @@
 #include "../../common/fynexception.h"
 #include "../../gl/glexception.h"
 #include "../../gl/vertexshader.h"
-#include "../../gl/fragmentshader.h"
-#include "../../gl/shaderprogram.h"
-#include "../../gl/glinfo.h"
 #include "../convweightarray_dw_KxKxNxM.h"
-#include "../../common/logging.h"
-#include "../../common/performance.h"
 #include "convlayer_dw_3x3_vanilla.h"
 
 //-------------------------------------- Global Variables ------------------------------------------
 
-namespace fyusion {
-namespace fyusenet {
-namespace gpu {
-namespace vanilla {
+namespace fyusion::fyusenet::gpu::vanilla {
 
 //-------------------------------------- Local Definitions -----------------------------------------
 
@@ -42,7 +34,7 @@ namespace vanilla {
 
 
 /**
- * @copydoc GPULayerBase::GPULayerBase
+ * @copydoc GPULayerBase::GPULayerBase(const GPULayerBuilder&, int)
  */
 DepthwiseConvLayer3x3::DepthwiseConvLayer3x3(const ConvLayerBuilder & builder, int layerNumber) : ConvLayerNxN(builder, layerNumber) {
     assert(builder.kernel_ == 3);
@@ -72,34 +64,35 @@ DepthwiseConvLayer3x3::DepthwiseConvLayer3x3(const ConvLayerBuilder & builder, i
 
 
 /**
- * @copydoc GPULayerBase::~GPULayerBase
+ * @copydoc ConvLayerBase::loadParameters
  */
-DepthwiseConvLayer3x3::~DepthwiseConvLayer3x3() {
-}
-
-
-/**
- * @copydoc ConvLayerInterface::loadWeightsAndBiases
- */
-void DepthwiseConvLayer3x3::loadWeightsAndBiases(const float *biasAndWeights, size_t offset) {
+void DepthwiseConvLayer3x3::loadParameters(const ParameterProvider *weights) {
     std::lock_guard<std::recursive_mutex> lck(processingLock_);
     weights_ = new DepthwiseConvWeightArrayKxKxNxM(kernel_, inputChannels_, channelMultiplier_, maxRenderTargets_, maxInputTextures_);
-    weights_->extractBiasData(biasAndWeights,offset);
-    weights_->extractWeightData(biasAndWeights,offset + outputChannels_);
-    if (flags_ & LayerFlags::POST_BATCHNORM) weights_->extractBatchnormData(biasAndWeights,offset);
+    weights->map(getName() + std::string(".bias"), getNumber(), 1).with([&](const std::any & data) {
+        weights_->extractBiasData(std::any_cast<const float *>(data));
+    });
+    weights->map(getName() + std::string(".weights"), getNumber(), 0).with([&](const std::any & data) {
+        weights_->extractWeightData(std::any_cast<const float *>(data));
+    });
+    if (flags_ & LayerFlags::POST_BATCHNORM) {
+        weights->map(getName() + std::string(".bn"), getNumber(), 2).with([&](const std::any & data) {
+            weights_->extractBatchnormData(std::any_cast<const float *>(data));
+        });
+    }
 }
 
 
 /**
  * @copydoc LayerBase::forward
  */
-void DepthwiseConvLayer3x3::forward(uint64_t sequence) {
+void DepthwiseConvLayer3x3::forward(uint64_t sequenceNo, StateToken * state) {
+    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (!valid_) THROW_EXCEPTION_ARGS(FynException,"Trying to invoke forward() on invalid layer");
 #ifdef DEBUG
-    int err = glGetError();
+    GLenum err = glGetError();
     if (err != GL_NO_ERROR) FNLOGD("HINT: glerror on render entry: 0x%x (%s:%d)[%s]",err,__FILE__,__LINE__,getName().c_str());
 #endif
-    std::lock_guard<std::recursive_mutex> lck(processingLock_);
     if (outputChanged_) updateFBOs();
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -144,7 +137,7 @@ void DepthwiseConvLayer3x3::forward(uint64_t sequence) {
             if (outputPadding_ > 0) {
                 shader->setMappedUniformVec4Array(BIAS,weights_->getPackageBias(outfield),weights_->numRenderTargets(outfield));
             }
-            glDrawElements(GL_TRIANGLES,6,GL_UNSIGNED_SHORT,(const GLvoid *)0);
+            glDrawElements(GL_TRIANGLES,6,GL_UNSIGNED_SHORT,(const GLvoid *)nullptr);
             if (outputPadding_ > 0) {
                 shader->setMappedUniformVec4Array(BIAS,zeroBias_,weights_->numRenderTargets(outfield));
             }
@@ -217,20 +210,23 @@ void DepthwiseConvLayer3x3::compileConvolutionShaders(const char *preproc) {
  * @return Shared pointer to compiled shader program
  */
 programptr DepthwiseConvLayer3x3::compileSingleShader(int outputLanes, int inputLanes, const char *preproc) {
+#if defined(WIN32) || defined(WIN64)
+        using ssize_t = int64_t;
+#endif
     char finalpreproc[1024+512]={0}, extra[128];
     strncpy(finalpreproc, preproc, sizeof(finalpreproc)-1);
-    ssize_t mc = sizeof(finalpreproc)-strlen(finalpreproc)-1;
-    snprintf(extra,sizeof(extra),"#define NUM_LANES %d\n",outputLanes);
+    ssize_t mc = (ssize_t)(sizeof(finalpreproc) - strlen(finalpreproc) - 1);
+    snprintf(extra, sizeof(extra), "#define NUM_LANES %d\n",outputLanes);
     strncat(finalpreproc, extra, mc);
-    mc -= strlen(extra);
+    mc -= (ssize_t)strlen(extra);
     assert(mc > 0);
     snprintf(extra,sizeof(extra),"#define NUM_INPUT_LANES %d\n",inputLanes);
     strncat(finalpreproc, extra, mc);
-    mc -= strlen(extra);
+    mc -= (ssize_t)strlen(extra);
     assert(mc > 0);
     snprintf(extra,sizeof(extra),"#define CHANNEL_MULTIPLIER %d\n",channelMultiplier_);
     strncat(finalpreproc, extra, mc);
-    mc -= strlen(extra);
+    mc -= (ssize_t)strlen(extra);
     assert(mc > 0);
     programptr shader = compileShaderPair("shaders/vanilla/convdefault.vert","shaders/vanilla/conv_dw_3x3.frag",finalpreproc,typeid(this));
     try {
@@ -275,10 +271,6 @@ void DepthwiseConvLayer3x3::setupNetworkPolygons(VAO *vao, int kernel) {
 }
 
 
-
-} // vanilla namespace
-} // gpu namespace
-} // fyusenet namespace
-} // fyusion namespace
+} // fyusion::fyusenet:gpu::vanilla namespace
 
 // vim: set expandtab ts=4 sw=4:
