@@ -9,7 +9,7 @@ original target of this library were Android-based smartphones.
 FyuseNet is not a replacement for [PyTorch](https://pytorch.org) or [Tensorflow](https://tensorflow.org), it is 
 limited to perform inference only and cannot be used to actually _train_ neural networks. It can be compared 
 to vendor-specific systems like [TensorRT](https://developer.nvidia.com/tensorrt) from NVIDIA. It adds the
-benefit that it can actually run on a wider variety of GPUs, as it tries to be vendor-agnostic. This appraoch
+benefit that it can actually run on a wider variety of GPUs, as it tries to be vendor-agnostic. This approach
 however bears the drawback that it does not have the same set of capabilities and will also perform slower than
 a vendor-specific solution.
 
@@ -281,7 +281,7 @@ folder. To run the sample application simply copy the files in that directory to
 that directory, for example: `python -m http.server <port>` and point the browser to the `stylenet.html` file.
 
 
-## Building Documentation
+### Building Documentation
 The documentation build is fairly easy and only requires [doxygen](https://www.doxygen.nl/) to be installed. In any of the build
 configurations above, simply supplying `-DBUILD_DOCS=ON` to the `cmake` command also flags the documentation to be build.
 The HTML output of the documentation will be stored in a folder named `docs` in the top-level source directory.
