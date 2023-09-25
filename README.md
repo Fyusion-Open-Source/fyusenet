@@ -210,7 +210,7 @@ This should build a static library of FyuseNet as well as a sample application w
 folder. Refer to the [README](samples/README.md) file in the samples folder on information about running the samples.
 </details>
 
-## Building Documentation
+### Building Documentation
 <details><summary>Click to expand</summary>
 
 The documentation build is fairly easy and only requires [doxygen](https://www.doxygen.nl/) to be installed. In any of the build
@@ -293,7 +293,7 @@ GPUs (ARM, Qualcomm, etc).
 FyuseNet is not a replacement for [PyTorch](https://pytorch.org) or [Tensorflow](https://tensorflow.org), it is 
 limited to perform inference only and cannot be used to actually _train_ neural networks. It can be compared 
 to vendor-specific systems like [TensorRT](https://developer.nvidia.com/tensorrt) from NVIDIA. It adds the
-benefit that it can actually run on a wider variety of GPUs, as it tries to be vendor-agnostic. This appraoch
+benefit that it can actually run on a wider variety of GPUs, as it tries to be vendor-agnostic. This approach
 however bears the drawback that it does not have the same set of capabilities and will also perform slower than
 a vendor-specific solution.
 </details>
