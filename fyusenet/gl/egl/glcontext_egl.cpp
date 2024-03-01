@@ -210,12 +210,12 @@ void GLContext::init() {
         display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, eglDevices[i], 0);
         if (display != EGL_NO_DISPLAY) {
             if (const char *vendor = eglQueryDeviceStringEXT(eglDevices[i], EGL_VENDOR); vendor) {
-                printf("vendor: %s\n", vendor);
-            } else printf("no vendor\n");
+                // TODO (mw) filter by vendor
+            }
 #ifdef EGL_RENDERER_EXT
             if (const char *render = eglQueryDeviceStringEXT(eglDevices[i], EGL_RENDERER_EXT); render) {
-                printf("render: %s\n", render);
-            } else printf("no render\n");
+                // TODO (mw) filter by renderer
+            }
 #endif
             // --------------------------------------------------------------
             // If we found a display, try to use it, break out of the loop on
