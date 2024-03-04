@@ -197,33 +197,37 @@ void GLContext::init() {
     EGLDeviceEXT eglDevices[MAX_DEVICES];
     EGLint numdevs;
     // TODO (mw) check if this works under Android
-    if (!initEGLExtensions()) {
-        THROW_EXCEPTION_ARGS(GLException,"Cannot initialize EGL extensions");
-    }
-    eglQueryDevicesEXT(MAX_DEVICES, eglDevices, &numdevs);
     EGLDisplay display = EGL_NO_DISPLAY;
-    // ------------------------------------------------------------------
-    // Iterate through EGL backends, assuming that the "fastest" ones
-    // are first in the list...
-    // ------------------------------------------------------------------
-    for (EGLint i = 0; i < numdevs ; i++) {
-        display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, eglDevices[i], 0);
-        if (display != EGL_NO_DISPLAY) {
-            if (const char *vendor = eglQueryDeviceStringEXT(eglDevices[i], EGL_VENDOR); vendor) {
-                // TODO (mw) filter by vendor
-            }
+    if (!initEGLExtensions()) {
+        display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        if (!eglInitialize(display_, &major, &minor)) {
+            THROW_EXCEPTION_ARGS(GLException, "Cannot initialize EGL subsystem");
+        }
+    } else {
+        // ------------------------------------------------------------------
+        // Iterate through EGL backends, assuming that the "fastest" ones
+        // are first in the list...
+        // ------------------------------------------------------------------
+        eglQueryDevicesEXT(MAX_DEVICES, eglDevices, &numdevs);
+        for (EGLint i = 0; i < numdevs ; i++) {
+            display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, eglDevices[i], 0);
+            if (display != EGL_NO_DISPLAY) {
+                if (const char *vendor = eglQueryDeviceStringEXT(eglDevices[i], EGL_VENDOR); vendor) {
+                    // TODO (mw) filter by vendor
+                }
 #ifdef EGL_RENDERER_EXT
-            if (const char *render = eglQueryDeviceStringEXT(eglDevices[i], EGL_RENDERER_EXT); render) {
-                // TODO (mw) filter by renderer
-            }
+                if (const char *render = eglQueryDeviceStringEXT(eglDevices[i], EGL_RENDERER_EXT); render) {
+                    // TODO (mw) filter by renderer
+                }
 #endif
-            // --------------------------------------------------------------
-            // If we found a display, try to use it, break out of the loop on
-            // success
-            // --------------------------------------------------------------
-            if (eglInitialize(display, &major, &minor)) {
-                display_ = display;
-                break;
+                // --------------------------------------------------------------
+                // If we found a display, try to use it, break out of the loop on
+                // success
+                // --------------------------------------------------------------
+                if (eglInitialize(display, &major, &minor)) {
+                    display_ = display;
+                    break;
+                }
             }
         }
     }
